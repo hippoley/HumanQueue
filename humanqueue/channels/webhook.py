@@ -26,6 +26,23 @@ def _bounded_context(context: dict[str, Any]) -> dict[str, Any]:
             if handle.get(k) is not None
         }
 
+    session_context = context.get("session_context")
+    if isinstance(session_context, dict):
+        out["session_context"] = {
+            key: str(session_context[key])[:800]
+            for key in (
+                "provider",
+                "session_id",
+                "status",
+                "cwd",
+                "model",
+                "turn_id",
+                "latest_user_prompt",
+                "latest_assistant_message",
+            )
+            if session_context.get(key) is not None
+        }
+
     tool_name = context.get("tool_name")
     if tool_name:
         out["tool_name"] = str(tool_name)[:120]
