@@ -3,160 +3,114 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from .adapters import ADAPTERS
+from .demo import seed_wow
 from .humanize import to_attention_request
-from .models import (
-    AttentionRequestCreate,
-    BatchResolve,
-    BudgetPolicy,
-    ClaimIn,
-    HumanAsk,
-    ImportEnvelope,
-    ResolveIn,
-)
-from .resume import deliver
+from .models import AttentionRequestCreate, BatchResolveRequest, BudgetPolicy, ClaimRequest, HumanAsk, ImportEnvelope, ResolveRequest
+from .protocol import uri_for_kind
+from .resume import resume
 from .store import Store
 
-DB_PATH = os.environ.get("HUMAN_QUEUE_DB", "./data/human-queue.db")
+APP_DIR = Path(__file__).resolve().parent
+WEB_DIR = APP_DIR / "web"
+DEFAULT_DB = Path.home() / ".human-queue" / "human-queue.db"
+DB_PATH = os.environ.get("HUMAN_QUEUE_DB", os.environ.get("ATTENTION_DB", str(DEFAULT_DB)))
 store = Store(DB_PATH)
 
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    yield
-
-
-app = FastAPI(title="human://", version="0.3.0", description="One queue for everything that needs a human.", lifespan=lifespan)
-
+app = FastAPI(title="human://",version="0.3.0",description="One queue for everything that needs a human.")
+app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 @app.get("/")
-def home():
-    return FileResponse(Path(__file__).parent / "web" / "index.html")
-
+def home(): return FileResponse(WEB_DIR / "index.html")
 
 @app.get("/health")
-def health():
-    return {"ok": True, "service": "human://", "version": "0.3.0"}
-
+def health(): return {"ok": True, "name": "human://", "version": "0.3.0"}
 
 @app.post("/v1/human", status_code=201)
-def human(ask: HumanAsk):
-    item = store.create(to_attention_request(ask))
-    return {"human_uri": ask.uri, "request": item}
-
+def human_interrupt(ask: HumanAsk):
+    try: item = store.create(to_attention_request(ask))
+    except ValueError as exc: raise HTTPException(422, str(exc)) from exc
+    return {"human_uri": uri_for_kind(item.kind), "request": item}
 
 @app.post("/v1/requests", status_code=201)
-def create(req: AttentionRequestCreate):
-    return store.create(req)
-
+def create_request(req: AttentionRequestCreate): return store.create(req)
 
 @app.post("/v1/import", status_code=201)
-def import_request(env: ImportEnvelope):
-    adapter = ADAPTERS.get(env.adapter)
-    if not adapter:
-        raise HTTPException(400, f"unknown adapter: {env.adapter}")
-    return store.create(adapter(env.payload))
-
+def import_request(env: ImportEnvelope): return store.create(ADAPTERS[env.adapter](env.payload))
 
 @app.get("/v1/queue")
-def queue(status: str | None = Query(None)):
-    return {"items": store.queue(status=status)}
-
+def get_queue(status: str = "pending", limit: int = 100, include_deferred: bool = False): return {"items": store.queue(status=status, limit=limit, include_deferred=include_deferred)}
 
 @app.get("/v1/batches")
-def batches():
-    return {"batches": store.batches()}
-
-
-@app.get("/v1/requests/{request_id}")
-def get_request(request_id: str):
-    item = store.get(request_id)
-    if not item:
-        raise HTTPException(404, "not found")
-    return {"request": item, "events": store.events(request_id)}
-
-
-@app.post("/v1/requests/{request_id}/claim")
-def claim(request_id: str, data: ClaimIn):
-    item = store.claim(request_id, data.actor)
-    if not item:
-        raise HTTPException(404, "not found")
-    return item
-
-
-@app.post("/v1/requests/{request_id}/resolve")
-async def resolve(request_id: str, data: ResolveIn):
-    item, finalized = store.resolve(request_id, data.actor, data.model_dump(exclude={"actor"}))
-    if not item:
-        raise HTTPException(404, "not found")
-    delivery = {"delivered": False, "reason": "awaiting_quorum"}
-    if finalized:
-        delivery = await deliver(item, item.resolution or data.model_dump(exclude={"actor"}))
-    return {"request": item, "finalized": finalized, "resume": delivery}
-
+def get_batches(): return {"batches": store.batches()}
 
 @app.post("/v1/batches/{batch_key}/resolve")
-async def resolve_batch(batch_key: str, data: BatchResolve):
-    items = store.batch_items(batch_key)
-    if not items:
-        raise HTTPException(404, "batch not found")
-    results = []
-    resolution = {"action": data.action, "values": data.values, "comment": data.comment}
-    for candidate in items:
-        item, finalized = store.resolve(candidate.id, data.actor, resolution)
-        delivery = {"delivered": False, "reason": "awaiting_quorum"}
-        if finalized:
-            delivery = await deliver(item, item.resolution or resolution)
-        results.append({"request": item, "finalized": finalized, "resume": delivery})
-    return {"batch_key": batch_key, "processed": len(results), "results": results}
+async def resolve_batch(batch_key: str, decision: BatchResolveRequest):
+    try: items = store.resolve_batch(batch_key, decision.actor, decision.action, decision.comment)
+    except PermissionError as e: raise HTTPException(403, str(e))
+    deliveries=[]
+    for item in items:
+        if item.status.value == "resolved": deliveries.append({"id":item.id,"resume":await resume(item,item.resolution or {})})
+    return {"items":items,"deliveries":deliveries}
 
-
-@app.get("/v1/budgets")
-def budgets():
-    return {"budgets": store.budgets()}
-
+@app.get("/v1/budgets/{group}")
+def get_budget(group: str): return store.get_budget(group)
 
 @app.put("/v1/budgets/{group}")
-def set_budget(group: str, policy: BudgetPolicy):
-    if group != policy.group:
-        policy = policy.model_copy(update={"group": group})
-    store.set_budget(policy)
-    return policy
-
+def put_budget(group: str, policy: BudgetPolicy): policy.group=group; return store.set_budget(policy)
 
 @app.get("/v1/metrics")
-def metrics():
-    return store.metrics()
-
+def metrics(): return store.metrics()
 
 @app.get("/v1/delegation-frontier")
-def frontier(min_samples: int = 4):
-    return {"candidates": store.frontier(min_samples=min_samples)}
-
+def delegation_frontier(min_samples: int = 5, min_agreement: float = 0.9): return {"suggestions":store.frontier(min_samples=min_samples,min_agreement=min_agreement)}
 
 @app.get("/v1/policy-sandbox/{policy_key}")
-def policy_sandbox(policy_key: str, action: str | None = None):
-    result = store.policy_sandbox(policy_key, proposed_action=action)
-    if not result:
-        raise HTTPException(404, "no human decision history for policy key")
-    return result
+def policy_sandbox(policy_key: str, action: str | None = None): return store.policy_sandbox(policy_key, proposed_action=action)
 
+@app.get("/v1/requests/{rid}")
+def get_request(rid: str):
+    req=store.get(rid)
+    if not req: raise HTTPException(404,"request not found")
+    return {"request":req,"human_uri":uri_for_kind(req.kind),"events":store.events(rid)}
+
+@app.post("/v1/requests/{rid}/claim")
+def claim_request(rid: str, claim: ClaimRequest):
+    try: req=store.claim(rid,claim.actor)
+    except PermissionError as e: raise HTTPException(403,str(e))
+    if not req: raise HTTPException(404,"request not found")
+    return req
+
+@app.post("/v1/requests/{rid}/resolve")
+async def resolve_request(rid: str, decision: ResolveRequest):
+    existing=store.get(rid)
+    if not existing: raise HTTPException(404,"request not found")
+    resolution=decision.model_dump(mode="json")
+    try: req,finalized=store.resolve(rid,decision.actor,resolution)
+    except PermissionError as e: raise HTTPException(403,str(e))
+    delivery={"delivered":False,"reason":"waiting_for_quorum"}
+    if finalized: delivery=await resume(req,req.resolution or resolution)
+    return {"request":req,"finalized":finalized,"resume":delivery}
 
 @app.get("/v1/events/stream")
-async def events_stream():
-    async def gen():
-        last = ""
-        while True:
-            snapshot = json.dumps(store.stream_snapshot(), sort_keys=True, default=str)
-            if snapshot != last:
-                yield f"data: {snapshot}\n\n"
-                last = snapshot
+async def event_stream(request: Request):
+    async def generate():
+        last=store.latest_event_seq(); yield f"event: ready\\ndata: {json.dumps({'seq':last})}\\n\\n"; ticks=0
+        while not await request.is_disconnected():
+            seq=store.latest_event_seq()
+            if seq != last:
+                last=seq; yield f"event: changed\\ndata: {json.dumps({'seq':seq})}\\n\\n"
+            ticks += 1
+            if ticks % 15 == 0: yield ": heartbeat\\n\\n"
             await asyncio.sleep(1)
-    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return StreamingResponse(generate(),media_type="text/event-stream",headers={"Cache-Control":"no-cache"})
+
+@app.post("/v1/demo/seed")
+def demo_seed(reset: bool = False):
+    ids=seed_wow(store,reset=reset); return {"seeded":len(ids),"ids":ids}
