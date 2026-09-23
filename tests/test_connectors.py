@@ -199,3 +199,49 @@ def test_cursor_shell_permission_falls_back_to_native_ask(monkeypatch):
         "command": "rm -rf build",
     })
     assert result["permission"] == "ask"
+
+
+def test_webhook_channel_signature(monkeypatch):
+    from humanqueue.channels import webhook
+
+    monkeypatch.setattr(
+        webhook,
+        "channel_configs",
+        lambda: {
+            "ops": {
+                "type": "webhook",
+                "secret": "hqc_test_secret",
+                "url": "https://example.invalid/hook",
+                "enabled": True,
+            }
+        },
+    )
+    body = b'{"action":"approve","actor":"alice"}'
+    signature = webhook._sign("hqc_test_secret", body)
+    assert webhook.verify_resolution("ops", body, signature)
+    assert not webhook.verify_resolution("ops", body, "sha256=bad")
+
+
+def test_webhook_channel_bounds_context():
+    from humanqueue.channels.webhook import _bounded_context
+
+    context = {
+        "why_now": "needs review",
+        "native_handle": {
+            "provider": "codex",
+            "session_id": "thr_1",
+            "turn_id": "turn_1",
+            "transcript_locator": "/private/full/transcript.jsonl",
+            "extra": {"secret": "should-not-project"},
+        },
+        "tool_input": {
+            "command": "git push",
+            "secret_token": "do-not-send",
+        },
+        "unrelated_private_blob": "do-not-send",
+    }
+    projected = _bounded_context(context)
+    assert projected["native_handle"]["session_id"] == "thr_1"
+    assert "transcript_locator" not in projected["native_handle"]
+    assert projected["tool_input"] == {"command": "git push"}
+    assert "unrelated_private_blob" not in projected
