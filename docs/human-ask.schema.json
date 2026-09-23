@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "ActionOption": {
+      "properties": {
+        "id": {"title":"Id","type":"string"},
+        "label": {"title":"Label","type":"string"},
+        "style": {"default":"default","enum":["default","safe","danger"],"title":"Style","type":"string"}
+      },
+      "required":["id","label"],"title":"ActionOption","type":"object"
+    },
+    "ResumeTarget": {
+      "properties": {
+        "mode": {"default":"none","enum":["webhook","none"],"title":"Mode","type":"string"},
+        "url": {"anyOf":[{"format":"uri","maxLength":2083,"minLength":1,"type":"string"},{"type":"null"}],"default":null,"title":"Url"},
+        "secret": {"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Secret"}
+      },"title":"ResumeTarget","type":"object"
+    }
+  },
+  "description":"Small protocol-facing envelope for human:// interrupts.",
+  "properties": {
+    "uri": {"description":"human://approve, human://review, human://clarify, human://auth, human://choose, human://edit or human://claim","title":"Uri","type":"string"},
+    "source": {"title":"Source","type":"string"},
+    "ref": {"title":"Ref","type":"string"},
+    "title": {"title":"Title","type":"string"},
+    "summary": {"default":"","title":"Summary","type":"string"},
+    "why_now": {"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Why Now"},
+    "context": {"additionalProperties":true,"title":"Context","type":"object"},
+    "options": {"items":{"$ref":"#/$defs/ActionOption"},"title":"Options","type":"array"},
+    "fields_schema": {"anyOf":[{"additionalProperties":true,"type":"object"},{"type":"null"}],"default":null,"title":"Fields Schema"},
+    "urgency": {"default":0.5,"maximum":1,"minimum":0,"title":"Urgency","type":"number"},
+    "unblock": {"default":0.7,"maximum":1,"minimum":0,"title":"Unblock","type":"number"},
+    "risk": {"default":0.5,"maximum":1,"minimum":0,"title":"Risk","type":"number"},
+    "risk_if_delayed": {"default":0.2,"maximum":1,"minimum":0,"title":"Risk If Delayed","type":"number"},
+    "blast_radius": {"default":0.2,"maximum":1,"minimum":0,"title":"Blast Radius","type":"number"},
+    "seconds": {"default":20,"maximum":86400,"minimum":1,"title":"Seconds","type":"integer"},
+    "downstream": {"default":1,"maximum":100000,"minimum":0,"title":"Downstream","type":"integer"},
+    "idempotency_key": {"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Idempotency Key"},
+    "batch_key": {"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Batch Key"},
+    "supersession_key": {"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Supersession Key"},
+    "policy_key": {"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Policy Key"},
+    "attention_group": {"default":"default","title":"Attention Group","type":"string"},
+    "resume": {"$ref":"#/$defs/ResumeTarget"}
+  },
+  "required":["uri","source","ref","title"],
+  "title":"HumanAsk","type":"object","$id":"urn:human-queue:human-ask:v0.3"
+}
