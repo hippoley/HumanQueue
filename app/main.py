@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .adapters import ADAPTERS\nfrom .auth import require_gateway_token
@@ -29,7 +29,14 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 @app.middleware("http")
 async def gateway_auth(request: Request, call_next):
     if request.url.path.startswith("/v1/"):
-        require_gateway_token(request)
+        try:
+            require_gateway_token(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers or {},
+            )
     return await call_next(request)
 
 @app.get("/")
