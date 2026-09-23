@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import threading
 import webbrowser
@@ -9,11 +10,16 @@ from pathlib import Path
 import httpx
 import uvicorn
 
-from .config import CONFIG_PATH, db_path, ensure_config, gateway_url, load_config, save_config, generate_token
+from .config import CONFIG_PATH, db_path, ensure_config, gateway_token, gateway_url, load_config, save_config, generate_token
 
 
 def _open_later(url: str) -> None:
     threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+
+
+def _auth_headers() -> dict[str, str]:
+    token = gateway_token()
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def onboard(args: argparse.Namespace) -> None:
@@ -29,6 +35,7 @@ def onboard(args: argparse.Namespace) -> None:
     print("\n  Next:")
     print("    humanq gateway run")
     print("    humanq dashboard")
+    print("    humanq connect codex")
     print("\n  Agent endpoint:")
     print(f"    {gateway_url()}/v1/human\n")
 
@@ -127,6 +134,70 @@ def seed(args: argparse.Namespace) -> None:
     print(f"Seeded {len(ids)} visible machine→human interrupts into {cfg['db']}")
 
 
+def connect(args: argparse.Namespace) -> None:
+    ensure_config()
+    if args.provider == "codex":
+        from .connectors.codex import install_codex_hooks
+        result = install_codex_hooks()
+        print("human:// connected to Codex")
+        print(f" hooks      {result['hooks_path']}")
+        print(f" detected   {'yes' if result['codex_detected'] else 'not on PATH'}")
+        print(" events     PermissionRequest + session/prompt/stop observers")
+        print(" roundtrip  native allow/deny")
+        print("\nCodex requires review of new non-managed hooks.")
+        print("Open Codex and run /hooks once to trust the Human Queue hook definition.")
+        return
+    raise SystemExit(f"unsupported connector: {args.provider}")
+
+
+def disconnect(args: argparse.Namespace) -> None:
+    if args.provider == "codex":
+        from .connectors.codex import uninstall_codex_hooks
+        result = uninstall_codex_hooks()
+        print(json.dumps(result, indent=2))
+        return
+    raise SystemExit(f"unsupported connector: {args.provider}")
+
+
+def connector_hook(args: argparse.Namespace) -> None:
+    if args.mode.startswith("codex-"):
+        from .connectors.codex import hook_main
+        raise SystemExit(hook_main(args.mode))
+    raise SystemExit(f"unknown hook mode: {args.mode}")
+
+
+def sessions(args: argparse.Namespace) -> None:
+    try:
+        r = httpx.get(
+            gateway_url() + "/v1/connectors/sessions",
+            params={"limit": args.limit},
+            headers=_auth_headers(),
+            timeout=3,
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        print(f"Cannot read connector sessions from {gateway_url()}: {exc}")
+        raise SystemExit(1)
+    rows = r.json().get("sessions", [])
+    if args.json:
+        print(json.dumps(rows, indent=2, ensure_ascii=False))
+        return
+    if not rows:
+        print("No connected agent sessions observed yet.")
+        return
+    for row in rows:
+        print(
+            f"{row['provider']:<10} {row['status']:<7} "
+            f"{row['session_id']:<28} {row.get('last_turn_id') or '-':<18} "
+            f"{row.get('cwd') or '-'}"
+        )
+
+
+def mcp_serve(_: argparse.Namespace) -> None:
+    from .mcp_server import run_stdio
+    raise SystemExit(run_stdio())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="humanq", description="Self-hosted human:// gateway.")
     sub = parser.add_subparsers(dest="command")
@@ -151,6 +222,30 @@ def main() -> None:
     p_dashboard = sub.add_parser("dashboard", help="open the local Human Queue UI")
     p_dashboard.add_argument("--no-open", action="store_true")
     p_dashboard.set_defaults(func=dashboard)
+
+    p_connect = sub.add_parser("connect", help="install an editor/agent connector")
+    p_connect.add_argument("provider", choices=["codex"])
+    p_connect.set_defaults(func=connect)
+
+    p_disconnect = sub.add_parser("disconnect", help="remove an editor/agent connector")
+    p_disconnect.add_argument("provider", choices=["codex"])
+    p_disconnect.set_defaults(func=disconnect)
+
+    p_sessions = sub.add_parser("sessions", help="show sessions observed from connected agents")
+    p_sessions.add_argument("--limit", type=int, default=30)
+    p_sessions.add_argument("--json", action="store_true")
+    p_sessions.set_defaults(func=sessions)
+
+    p_connector = sub.add_parser("connector", help=argparse.SUPPRESS)
+    cs = p_connector.add_subparsers(dest="connector_command")
+    p_hook = cs.add_parser("hook", help=argparse.SUPPRESS)
+    p_hook.add_argument("mode")
+    p_hook.set_defaults(func=connector_hook)
+
+    p_mcp = sub.add_parser("mcp", help="run the human.ask MCP bridge")
+    ms = p_mcp.add_subparsers(dest="mcp_command")
+    p_mcp_serve = ms.add_parser("serve", help="run MCP server over stdio")
+    p_mcp_serve.set_defaults(func=mcp_serve)
 
     p_doctor = sub.add_parser("doctor", help="validate local configuration")
     p_doctor.set_defaults(func=doctor)
