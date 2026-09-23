@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 — connector runtime
+
+- Added `NativeHandle` and bounded `ContextCapsule` connector primitives.
+- Added persistent connector session/event registry and live Agent Sessions dashboard.
+- Added real Codex hook connector: session observation plus native `PermissionRequest` allow/deny return.
+- Added real Cursor hook connector: session observation plus conservative high-risk shell permission return.
+- Added `humanq connect/disconnect codex|cursor` and `humanq sessions`.
+- Added stdio MCP `human_ask` bridge so semantic clarification/review/choice returns to the same MCP tool call.
+- Added generic signed webhook channel projection with independent `hqc_...` secrets and bounded context.
+- Added signed third-party channel decision callback that resolves the Gateway request and resumes the native source.
+- Added fail-safe native fallback when Human Queue is unavailable instead of silently authorizing.
+- Expanded CI coverage to 25 passing tests before final v0.5 documentation updates.
+
+
 ## 0.4.0 — self-hosted Human Gateway
 
 - Added `humanq onboard` to create local state and a private `hq_...` gateway token.
