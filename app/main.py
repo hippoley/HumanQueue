@@ -25,7 +25,8 @@ from .models import (
 from .protocol import uri_for_kind
 from .resume import resume
 from .store import Store
-from humanqueue.channels.webhook import publish_request, verify_resolution\nfrom humanqueue.config import db_path, gateway_token
+from humanqueue.channels.webhook import publish_request, verify_resolution
+from humanqueue.config import db_path, gateway_token
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
