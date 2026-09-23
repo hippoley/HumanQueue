@@ -432,10 +432,10 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 25 passed
+# 32 passed
 ```
 
-The current suite covers queue semantics, gateway authentication, Codex and Cursor native decision round-trips, connector session tracking, MCP initialize/list/call behavior, signed bounded channel projection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
+The current suite covers queue semantics, gateway authentication, Codex and Cursor native decision round-trips, connector session tracking and dialogue enrichment, MCP initialize/list/call behavior, signed webhook projection, Telegram callback authorization, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
 
 ---
 
