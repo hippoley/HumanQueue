@@ -65,3 +65,31 @@ def gateway_url() -> str:
 
 def db_path() -> str:
     return os.environ.get("HUMAN_QUEUE_DB") or load_config().get("db") or str(DB_PATH)
+
+
+def channel_configs() -> dict[str, dict[str, Any]]:
+    return dict(load_config().get("channels") or {})
+
+
+def save_channel(name: str, config: dict[str, Any]) -> dict[str, Any]:
+    cfg = load_config() or ensure_config()
+    channels = dict(cfg.get("channels") or {})
+    channels[name] = config
+    cfg["channels"] = channels
+    save_config(cfg)
+    return config
+
+
+def remove_channel(name: str) -> bool:
+    cfg = load_config()
+    channels = dict(cfg.get("channels") or {})
+    if name not in channels:
+        return False
+    channels.pop(name, None)
+    cfg["channels"] = channels
+    save_config(cfg)
+    return True
+
+
+def generate_channel_secret() -> str:
+    return "hqc_" + secrets.token_urlsafe(24)
