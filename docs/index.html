@@ -134,7 +134,7 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
   <button class="tab active" data-view="now">Needs you now</button>
   <button class="tab" data-view="batches">Batches <span id="batchCount"></span></button>
   <button class="tab" data-view="policies">Policies waiting to exist</button>
-  <button class="tab" data-view="timeline">Decision timeline</button>
+  <button class="tab" data-view="timeline">Decision timeline</button>\n  <button class="tab" data-view="deploy">Deploy yours</button>
   <span class="badge">No login · all interactions are local demo state</span>
 </nav>
 
@@ -178,7 +178,51 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
 
 <main id="view-batches" class="view hidden"><div id="batches" class="cards"></div></main>
 <main id="view-policies" class="view hidden"><div id="policies" class="cards"></div></main>
-<main id="view-timeline" class="view hidden"><div id="timeline" class="timeline"></div></main>
+<main id="view-timeline" class="view hidden"><div id="timeline" class="timeline"></div></main>\n<main id="view-deploy" class="view hidden">
+  <div class="cards">
+    <article class="card">
+      <div class="eyebrow">01 · install</div>
+      <h3>Your machine becomes the Human Gateway</h3>
+      <div class="small">No hosted account required. State and audit history can remain on your hardware.</div>
+      <div class="code">curl -fsSL https://raw.githubusercontent.com/hippoley/human-queue/main/scripts/install.sh | bash
+
+humanq gateway run</div>
+    </article>
+    <article class="card">
+      <div class="eyebrow">02 · onboard</div>
+      <h3>One private gateway token</h3>
+      <div class="small">First run creates ~/.human-queue/config.json and human-queue.db, then gives you an hq_… token.</div>
+      <div class="code">humanq onboard
+humanq dashboard
+humanq doctor
+humanq gateway status</div>
+    </article>
+    <article class="card">
+      <div class="eyebrow">03 · connect</div>
+      <h3>Point any machine at your queue</h3>
+      <div class="small">Codex, Claude, CI, MCP, n8n or your own app only need HTTP + Bearer token.</div>
+      <div class="code">curl http://127.0.0.1:7482/v1/human \
+  -H "Authorization: Bearer hq_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "uri":"human://approve",
+    "source":"my-agent",
+    "ref":"run-42",
+    "title":"Continue?"
+  }'</div>
+    </article>
+  </div>
+  <section class="pipeline">
+    <div class="pipelineTop"><h3>Self-host mental model</h3><div class="label">hosted service optional</div></div>
+    <div class="flow">
+      <span class="node">your agents</span><span class="arrow">→</span>
+      <span class="node hot">your Human Gateway</span><span class="arrow">→</span>
+      <span class="node">your browser</span><span class="arrow">→</span>
+      <span class="node">resume</span>
+    </div>
+    <div class="eventline">State: ~/.human-queue/ · Auth: hq_ gateway token · Default bind: 127.0.0.1:7482 · Docker: bash scripts/docker/setup.sh</div>
+  </section>
+</main>
 
 <div class="footer">
   <span>Every repeated human interruption is a candidate for a better policy.</span>
