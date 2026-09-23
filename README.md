@@ -75,8 +75,7 @@ humanq sessions
 humanq mcp serve
 
 # project requests into your own third-party channel
-humanq channel add webhook ops https://your-channel.example/human
-humanq channel list
+humanq channel add webhook ops https://your-channel.example/human\n\n# no public inbound port required\nhumanq channel add telegram phone --bot-token "$BOT_TOKEN" --chat-id "$CHAT_ID"\nhumanq channel run phone\n\nhumanq channel list
 ```
 
 Prefer containers?
@@ -285,7 +284,7 @@ These are different from normalization adapters: they observe a real editor sess
 | **Codex** | Native hooks: session, turn, prompt, final response, transcript locator | Native `PermissionRequest` allow/deny | Real connector |
 | **Cursor** | Native hooks: session, prompt, final response, transcript locator | Native `beforeShellExecution` permission | High-risk shell gate only |
 | **MCP** | Tool arguments supplied by the calling agent | `human_ask` tool result returns to the same MCP call | Real stdio bridge |
-| **Generic webhook channel** | Receives bounded ContextCapsule | Signed action callback resolves the Gateway request | Real channel projection |
+| **Generic webhook channel** | Receives bounded ContextCapsule | Signed action callback resolves the Gateway request | Real channel projection |\n| **Telegram** | Receives bounded dialogue + decision buttons | Long-poll callback resolves local Gateway | Real outbound-only channel |
 | Claude Code / OpenCode | — | — | Not implemented yet |
 
 ```bash
@@ -299,6 +298,22 @@ A connector stores a bounded `ContextCapsule` in the Gateway. Full editor transc
 If a native editor connector cannot reach Human Queue or times out, it falls back to the editor's native approval path rather than silently allowing the action.
 
 See [Connector runtime](docs/connectors.md).
+
+### Telegram: approve from your phone
+
+Telegram is the first concrete third-party channel built on the projection model. It uses Bot API long polling, so a self-hosted Gateway can stay behind NAT/firewall without exposing an inbound HTTP endpoint.
+
+```bash
+export HUMAN_QUEUE_TELEGRAM_BOT_TOKEN="..."
+export HUMAN_QUEUE_TELEGRAM_CHAT_ID="..."
+
+humanq channel add telegram phone
+humanq channel run phone
+```
+
+New Human Queue requests are sent to that chat with inline decision buttons. The worker accepts callbacks only from the configured chat, resolves the canonical Gateway request, clears the buttons after a successful decision, and the native editor connector resumes the original waiting workflow.
+
+The Telegram bot token stays in the local `~/.human-queue/config.json` file; `humanq channel list --json` redacts it.
 
 ### Normalization adapters
 
