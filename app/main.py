@@ -247,6 +247,8 @@ async def resolve_request(rid: str, decision: ResolveRequest):
     existing = store.get(rid)
     if not existing:
         raise HTTPException(404, "request not found")
+    if existing.status.value in {"resolved", "cancelled", "expired", "superseded"}:
+        raise HTTPException(409, f"request is already {existing.status.value}")
 
     resolution = decision.model_dump(mode="json")
     try:
