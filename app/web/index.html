@@ -39,7 +39,7 @@ button,input{font:inherit}.app{max-width:1440px;margin:0 auto;padding:22px 26px 
   <nav class="nav">
     <button class="tab active" data-view="now">Needs you now</button>
     <button class="tab" data-view="batches">Batches</button>
-    <button class="tab" data-view="policies">Policies waiting to exist</button>
+    <button class="tab" data-view="policies">Policies waiting to exist</button>\n    <button class="tab" data-view="sessions">Agent sessions</button>
   </nav>
 
   <main id="view-now" class="view grid">
@@ -54,7 +54,7 @@ button,input{font:inherit}.app{max-width:1440px;margin:0 auto;padding:22px 26px 
   </main>
 
   <main id="view-batches" class="view hidden"><div id="batchGrid" class="batch-grid"></div></main>
-  <main id="view-policies" class="view hidden"><div id="policyGrid" class="policy-grid"></div></main>
+  <main id="view-policies" class="view hidden"><div id="policyGrid" class="policy-grid"></div></main>\n  <main id="view-sessions" class="view hidden"><div id="sessionGrid" class="batch-grid"></div></main>
 
   <div class="footer"><span>Every repeated human interruption is a candidate for a better policy.</span><span class="kbd">human://approve · review · clarify · auth · choose · edit · claim</span></div>
 </div>
@@ -67,7 +67,7 @@ if(location.hash.startsWith("#token=")){
   history.replaceState(null,"",location.pathname+location.search);
 }
 
-let items=[], selected=null;
+let items=[], selected=null, connectorSessions=[];
 const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const uriOf=k=>({approval:'human://approve',review:'human://review',input:'human://clarify',authenticate:'human://auth',choice:'human://choose',edit:'human://edit',claim:'human://claim'}[k]||'human://review');
 const fmtTime=s=>s>=60?`${Math.round(s/60)}m`:`${s}s`;
@@ -85,13 +85,13 @@ async function j(url,opts={}){
 
 async function load(){
   try{
-    const [q,m,b,f]=await Promise.all([j('/v1/queue?limit=100'),j('/v1/metrics'),j('/v1/batches'),j('/v1/delegation-frontier?min_samples=5&min_agreement=.9')]);
+    const [q,m,b,f,sessions]=await Promise.all([j('/v1/queue?limit=100'),j('/v1/metrics'),j('/v1/batches'),j('/v1/delegation-frontier?min_samples=5&min_agreement=.9'),j('/v1/connectors/sessions?limit=50')]);
     items=q.items||[];
     if(!selected || !items.find(x=>x.id===selected.id)) selected=items[0]||null;
     $('#blocking').textContent=items.length;
     $('#queueCount').textContent=`${items.length} waiting`;
     const d=m.last_24h||{}; $('#avoided').textContent=d.interruptions_avoided||0; $('#humanTime').textContent=fmtTime(d.estimated_human_attention_seconds||0);
-    renderNow(); renderBatches(b.batches||[]); await renderPolicies(f.suggestions||[]);
+    connectorSessions=sessions.sessions||[]; renderNow(); renderBatches(b.batches||[]); await renderPolicies(f.suggestions||[]); renderSessions();
   }catch(e){$('#liveText').textContent='reconnecting…'}
 }
 function renderNow(){
@@ -133,6 +133,41 @@ async function renderPolicies(suggestions){
   const cards=[];
   for(const s of suggestions){const p=await j(`/v1/policy-sandbox/${encodeURIComponent(s.policy_key)}`);cards.push(`<article class="policy-card"><div class="eyebrow">shadow replay only · never auto-enabled</div><h3>${esc(p.policy_key)}</h3><div class="big">${Math.round((p.agreement||0)*100)}%</div><div class="small">would match ${p.matching_human_decisions}/${p.samples} historical human decisions · ${p.conflicts} conflict${p.conflicts===1?'':'s'}</div><div class="policy-bar"><span style="width:${Math.round((p.agreement||0)*100)}%"></span></div><div class="small">Potentially removes ${p.matching_human_decisions} repeated interruptions and ${fmtTime(p.attention_seconds_replayed||0)} of observed attention from this replay.</div><div class="codehint">proposed: ${esc(p.proposed_action)}\nmode: shadow_only\nenabled: false</div></article>`)}
   $('#policyGrid').innerHTML=cards.join('');
+}
+function renderSessions(){
+  const el=$('#sessionGrid');
+  if(!connectorSessions.length){
+    el.innerHTML='<div class="empty">No editor sessions observed yet.<br><br><span class="codehint">humanq connect codex</span></div>';
+    return;
+  }
+  el.innerHTML=connectorSessions.map(s=>`<article class="batch-card">
+    <div class="eyebrow">${esc(s.provider)} · ${esc(s.status)}</div>
+    <h3>${esc(s.session_id)}</h3>
+    <div class="small">${esc(s.cwd||'unknown workspace')}</div>
+    <div class="signals">
+      <span class="pill">turn: ${esc(s.last_turn_id||'—')}</span>
+      <span class="pill">model: ${esc(s.model||'—')}</span>
+    </div>
+    ${s.last_user_prompt?`<div class="why"><strong>User:</strong> ${esc(s.last_user_prompt)}</div>`:''}
+    ${s.last_assistant_message?`<div class="summary"><strong>Agent:</strong> ${esc(s.last_assistant_message)}</div>`:''}
+    <div class="actions"><button class="btn" onclick="openSession('${encodeURIComponent(s.provider)}','${encodeURIComponent(s.session_id)}')">Open context</button></div>
+  </article>`).join('');
+}
+async function openSession(provider,sessionId){
+  const s=await j(`/v1/connectors/sessions/${provider}/${sessionId}?event_limit=20`);
+  const events=(s.events||[]).map(e=>`<div class="next-card"><div class="next-top"><span class="next-uri">${esc(e.event_name)}</span><span class="next-score">${esc(e.turn_id||'')}</span></div><div class="meta">${esc(e.created_at)}</div></div>`).join('');
+  $('#sessionGrid').innerHTML=`<article class="panel" style="grid-column:1/-1">
+    <div class="panel-hd"><div class="label">${esc(s.provider)} / ${esc(s.session_id)}</div><button class="btn" onclick="renderSessions()">Back</button></div>
+    <div class="focus-body">
+      <div class="source">${esc(s.cwd||'')}</div>
+      <h2 style="font-size:32px">${esc(s.last_user_prompt||'Observed agent session')}</h2>
+      <div class="summary">${esc(s.last_assistant_message||'No assistant message captured yet.')}</div>
+      <div class="signals"><span class="pill">turn: ${esc(s.last_turn_id||'—')}</span><span class="pill">transcript pointer: ${esc(s.transcript_path?'available':'none')}</span></div>
+      <div class="why"><strong>Privacy:</strong> Human Queue stores this bounded capsule. The transcript path is only a locator; the full transcript is not copied into the queue by default.</div>
+      <div class="codehint">${esc(s.transcript_path||'no transcript locator')}</div>
+      <div style="margin-top:18px">${events||'<div class="empty">No events.</div>'}</div>
+    </div>
+  </article>`;
 }
 $$('.tab').forEach(t=>t.addEventListener('click',()=>{$$('.tab').forEach(x=>x.classList.toggle('active',x===t));$$('.view').forEach(v=>v.classList.add('hidden'));$(`#view-${t.dataset.view}`).classList.remove('hidden')}));
 if(gatewayToken){
