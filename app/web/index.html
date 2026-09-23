@@ -59,13 +59,29 @@ button,input{font:inherit}.app{max-width:1440px;margin:0 auto;padding:22px 26px 
   <div class="footer"><span>Every repeated human interruption is a candidate for a better policy.</span><span class="kbd">human://approve · review · clarify · auth · choose · edit · claim</span></div>
 </div>
 <script>
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const $=s=>document.querySelector(s), $=s=>[...document.querySelectorAll(s)];
+let gatewayToken=sessionStorage.getItem("humanq-token")||"";
+if(location.hash.startsWith("#token=")){
+  gatewayToken=decodeURIComponent(location.hash.slice(7));
+  sessionStorage.setItem("humanq-token",gatewayToken);
+  history.replaceState(null,"",location.pathname+location.search);
+}
+
 let items=[], selected=null;
 const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const uriOf=k=>({approval:'human://approve',review:'human://review',input:'human://clarify',authenticate:'human://auth',choice:'human://choose',edit:'human://edit',claim:'human://claim'}[k]||'human://review');
 const fmtTime=s=>s>=60?`${Math.round(s/60)}m`:`${s}s`;
 const riskLabel=r=>r>=.9?'high consequence':r>=.65?'meaningful risk':'low risk';
-async function j(url,opts){let r=await fetch(url,opts); if(!r.ok) throw new Error(await r.text()); return r.json()}
+async function j(url,opts={}){
+  opts.headers={...(opts.headers||{}),...(gatewayToken?{authorization:"Bearer "+gatewayToken}:{})};
+  let r=await fetch(url,opts);
+  if(r.status===401){
+    const t=prompt("Human Queue gateway token");
+    if(t){gatewayToken=t.trim();sessionStorage.setItem("humanq-token",gatewayToken);return j(url,opts)}
+  }
+  if(!r.ok) throw new Error(await r.text());
+  return r.json()
+}
 
 async function load(){
   try{
