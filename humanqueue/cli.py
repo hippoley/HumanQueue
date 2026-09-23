@@ -219,31 +219,63 @@ def mcp_serve(_: argparse.Namespace) -> None:
 
 def channel_add(args: argparse.Namespace) -> None:
     ensure_config()
-    if args.type != "webhook":
-        raise SystemExit(f"unsupported channel type: {args.type}")
-    secret = args.secret or generate_channel_secret()
-    save_channel(args.name, {
-        "type": "webhook",
-        "url": args.url,
-        "secret": secret,
-        "enabled": True,
-    })
-    print(f"channel {args.name} added")
-    print(" type    webhook")
-    print(f" url     {args.url}")
-    print(f" secret  {secret}")
-    print("\nThe receiver should verify X-Human-Channel-Signature.")
-    print("Send signed button actions back to:")
-    print(f"  {gateway_url()}/channels/{args.name}/resolve/<request_id>")
+
+    if args.type == "webhook":
+        url = args.target
+        if not url:
+            raise SystemExit("webhook channel requires a target URL")
+        secret = args.secret or generate_channel_secret()
+        save_channel(args.name, {
+            "type": "webhook",
+            "url": url,
+            "secret": secret,
+            "enabled": True,
+        })
+        print(f"channel {args.name} added")
+        print(" type    webhook")
+        print(f" url     {url}")
+        print(f" secret  {secret}")
+        print("\nThe receiver should verify X-Human-Channel-Signature.")
+        print("Send signed button actions back to:")
+        print(f"  {gateway_url()}/channels/{args.name}/resolve/<request_id>")
+        return
+
+    if args.type == "telegram":
+        bot_token = args.bot_token or os.environ.get("HUMAN_QUEUE_TELEGRAM_BOT_TOKEN")
+        chat_id = args.chat_id or os.environ.get("HUMAN_QUEUE_TELEGRAM_CHAT_ID")
+        if not bot_token or not chat_id:
+            raise SystemExit(
+                "telegram channel requires --bot-token and --chat-id "
+                "(or HUMAN_QUEUE_TELEGRAM_BOT_TOKEN / HUMAN_QUEUE_TELEGRAM_CHAT_ID)"
+            )
+        save_channel(args.name, {
+            "type": "telegram",
+            "bot_token": bot_token,
+            "chat_id": str(chat_id),
+            "enabled": True,
+        })
+        print(f"channel {args.name} added")
+        print(" type    telegram")
+        print(f" chat    {chat_id}")
+        print(" token   stored privately in ~/.human-queue/config.json")
+        print("\nStart the outbound-only long-poll worker:")
+        print(f"  humanq channel run {args.name}")
+        return
+
+    raise SystemExit(f"unsupported channel type: {args.type}")
 
 
 def channel_list(args: argparse.Namespace) -> None:
     configs = channel_configs()
     if args.json:
-        safe = {
-            name: {**cfg, "secret": "***" if cfg.get("secret") else None}
-            for name, cfg in configs.items()
-        }
+        safe = {}
+        for name, cfg in configs.items():
+            item = dict(cfg)
+            if item.get("secret"):
+                item["secret"] = "***"
+            if item.get("bot_token"):
+                item["bot_token"] = "***"
+            safe[name] = item
         print(json.dumps(safe, indent=2))
         return
     if not configs:
@@ -251,7 +283,20 @@ def channel_list(args: argparse.Namespace) -> None:
         return
     for name, cfg in configs.items():
         state = "enabled" if cfg.get("enabled", True) else "disabled"
-        print(f"{name:<18} {cfg.get('type','?'):<10} {cfg.get('url','-')}  {state}")
+        destination = cfg.get("url") or (
+            f"chat:{cfg.get('chat_id')}" if cfg.get("type") == "telegram" else "-"
+        )
+        print(f"{name:<18} {cfg.get('type','?'):<10} {destination}  {state}")
+
+
+def channel_run(args: argparse.Namespace) -> None:
+    cfg = channel_configs().get(args.name)
+    if not cfg:
+        raise SystemExit(f"channel not found: {args.name}")
+    if cfg.get("type") == "telegram":
+        from .channels.telegram import run_long_poll
+        raise SystemExit(run_long_poll(args.name))
+    raise SystemExit(f"channel type {cfg.get('type')} does not need a local worker")
 
 
 def channel_remove(args: argparse.Namespace) -> None:
@@ -300,14 +345,19 @@ def main() -> None:
     p_channel = sub.add_parser("channel", help="project Human Queue into a third-party channel")
     chs = p_channel.add_subparsers(dest="channel_command")
     p_channel_add = chs.add_parser("add", help="add a third-party channel")
-    p_channel_add.add_argument("type", choices=["webhook"])
+    p_channel_add.add_argument("type", choices=["webhook", "telegram"])
     p_channel_add.add_argument("name")
-    p_channel_add.add_argument("url")
+    p_channel_add.add_argument("target", nargs="?", help="webhook URL")
     p_channel_add.add_argument("--secret")
+    p_channel_add.add_argument("--bot-token")
+    p_channel_add.add_argument("--chat-id")
     p_channel_add.set_defaults(func=channel_add)
     p_channel_list = chs.add_parser("list", help="list configured channels")
     p_channel_list.add_argument("--json", action="store_true")
     p_channel_list.set_defaults(func=channel_list)
+    p_channel_run = chs.add_parser("run", help="run a local channel worker")
+    p_channel_run.add_argument("name")
+    p_channel_run.set_defaults(func=channel_run)
     p_channel_remove = chs.add_parser("remove", help="remove a configured channel")
     p_channel_remove.add_argument("name")
     p_channel_remove.set_defaults(func=channel_remove)
