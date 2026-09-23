@@ -1,12 +1,22 @@
 export class HumanQueue {
-  constructor(baseUrl = process.env.HUMAN_QUEUE_URL || 'http://127.0.0.1:7482') {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+  constructor({baseUrl, token} = {}) {
+    const envUrl = typeof process !== 'undefined' ? process.env?.HUMAN_QUEUE_URL : undefined;
+    const envToken = typeof process !== 'undefined' ? process.env?.HUMAN_QUEUE_TOKEN : undefined;
+    this.baseUrl = (baseUrl || envUrl || 'http://127.0.0.1:7482').replace(/\/$/, '');
+    this.token = token || envToken || '';
+  }
+
+  headers(extra = {}) {
+    return {
+      ...extra,
+      ...(this.token ? {authorization: `Bearer ${this.token}`} : {}),
+    };
   }
 
   async ask(uri, input) {
     const response = await fetch(`${this.baseUrl}/v1/human`, {
       method: 'POST',
-      headers: {'content-type': 'application/json'},
+      headers: this.headers({'content-type': 'application/json'}),
       body: JSON.stringify({uri, ...input}),
     });
     if (!response.ok) throw new Error(`human:// request failed: ${response.status} ${await response.text()}`);
@@ -16,7 +26,9 @@ export class HumanQueue {
   async wait(requestId, {pollMs = 1000, timeoutMs = 0} = {}) {
     const started = Date.now();
     while (true) {
-      const response = await fetch(`${this.baseUrl}/v1/requests/${requestId}`);
+      const response = await fetch(`${this.baseUrl}/v1/requests/${requestId}`, {
+        headers: this.headers(),
+      });
       if (!response.ok) throw new Error(`human:// wait failed: ${response.status}`);
       const {request} = await response.json();
       if (request.status === 'resolved') return request.resolution || {};
