@@ -14,3 +14,6 @@ jobs:
       - run: pytest -q
       - run: humanq --help
       - run: humanq onboard --help
+      - run: humanq connect --help
+      - run: humanq mcp --help
+      - run: humanq channel --help
