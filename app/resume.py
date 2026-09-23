@@ -12,8 +12,15 @@ from .models import AttentionRequest
 
 def signed_payload(req: AttentionRequest, resolution: dict[str, Any]) -> tuple[bytes, str | None]:
     body = json.dumps(
-        {"request_id": req.id, "source": req.source, "source_ref": req.source_ref, "resolution": resolution},
-        separators=(",", ":"), sort_keys=True, default=str,
+        {
+            "event": "attention.resolved",
+            "request_id": req.id,
+            "source": req.source,
+            "source_ref": req.source_ref,
+            "resolution": resolution,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
     ).encode()
     if not req.resume.secret:
         return body, None
@@ -21,7 +28,7 @@ def signed_payload(req: AttentionRequest, resolution: dict[str, Any]) -> tuple[b
     return body, f"sha256={sig}"
 
 
-async def deliver(req: AttentionRequest, resolution: dict[str, Any]) -> dict[str, Any]:
+async def resume(req: AttentionRequest, resolution: dict[str, Any]) -> dict[str, Any]:
     if req.resume.mode != "webhook" or not req.resume.url:
         return {"delivered": False, "reason": "no_resume_target"}
     body, signature = signed_payload(req, resolution)
