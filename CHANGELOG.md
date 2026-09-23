@@ -11,7 +11,7 @@
 - Added generic signed webhook channel projection with independent `hqc_...` secrets and bounded context.
 - Added signed third-party channel decision callback that resolves the Gateway request and resumes the native source.
 - Added fail-safe native fallback when Human Queue is unavailable instead of silently authorizing.
-- Expanded CI coverage to 25 passing tests before final v0.5 documentation updates.
+- Added Telegram long-poll approval channel with chat authorization and inline decision buttons.\n- Added bounded dialogue enrichment so projected approvals include the latest user/agent turn without copying full transcripts.\n- Added duplicate-resolution protection so a stale/repeated button cannot resume the same workflow twice.\n- Expanded CI coverage to 32 passing tests.
 
 
 ## 0.4.0 — self-hosted Human Gateway
