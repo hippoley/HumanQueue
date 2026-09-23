@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 import uvicorn
 
-from .config import CONFIG_PATH, db_path, ensure_config, gateway_token, gateway_url, load_config, save_config, generate_token
+from .config import CONFIG_PATH, channel_configs, db_path, ensure_config, gateway_token, gateway_url, generate_channel_secret, load_config, remove_channel, save_channel, save_config, generate_token
 
 
 def _open_later(url: str) -> None:
@@ -216,6 +216,49 @@ def mcp_serve(_: argparse.Namespace) -> None:
     raise SystemExit(run_stdio())
 
 
+
+def channel_add(args: argparse.Namespace) -> None:
+    ensure_config()
+    if args.type != "webhook":
+        raise SystemExit(f"unsupported channel type: {args.type}")
+    secret = args.secret or generate_channel_secret()
+    save_channel(args.name, {
+        "type": "webhook",
+        "url": args.url,
+        "secret": secret,
+        "enabled": True,
+    })
+    print(f"channel {args.name} added")
+    print(" type    webhook")
+    print(f" url     {args.url}")
+    print(f" secret  {secret}")
+    print("\nThe receiver should verify X-Human-Channel-Signature.")
+    print("Send signed button actions back to:")
+    print(f"  {gateway_url()}/channels/{args.name}/resolve/<request_id>")
+
+
+def channel_list(args: argparse.Namespace) -> None:
+    configs = channel_configs()
+    if args.json:
+        safe = {
+            name: {**cfg, "secret": "***" if cfg.get("secret") else None}
+            for name, cfg in configs.items()
+        }
+        print(json.dumps(safe, indent=2))
+        return
+    if not configs:
+        print("No third-party channels configured.")
+        return
+    for name, cfg in configs.items():
+        state = "enabled" if cfg.get("enabled", True) else "disabled"
+        print(f"{name:<18} {cfg.get('type','?'):<10} {cfg.get('url','-')}  {state}")
+
+
+def channel_remove(args: argparse.Namespace) -> None:
+    removed = remove_channel(args.name)
+    print("removed" if removed else "not found")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="humanq", description="Self-hosted human:// gateway.")
     sub = parser.add_subparsers(dest="command")
@@ -253,6 +296,21 @@ def main() -> None:
     p_sessions.add_argument("--limit", type=int, default=30)
     p_sessions.add_argument("--json", action="store_true")
     p_sessions.set_defaults(func=sessions)
+
+    p_channel = sub.add_parser("channel", help="project Human Queue into a third-party channel")
+    chs = p_channel.add_subparsers(dest="channel_command")
+    p_channel_add = chs.add_parser("add", help="add a third-party channel")
+    p_channel_add.add_argument("type", choices=["webhook"])
+    p_channel_add.add_argument("name")
+    p_channel_add.add_argument("url")
+    p_channel_add.add_argument("--secret")
+    p_channel_add.set_defaults(func=channel_add)
+    p_channel_list = chs.add_parser("list", help="list configured channels")
+    p_channel_list.add_argument("--json", action="store_true")
+    p_channel_list.set_defaults(func=channel_list)
+    p_channel_remove = chs.add_parser("remove", help="remove a configured channel")
+    p_channel_remove.add_argument("name")
+    p_channel_remove.set_defaults(func=channel_remove)
 
     p_connector = sub.add_parser("connector", help=argparse.SUPPRESS)
     cs = p_connector.add_subparsers(dest="connector_command")
