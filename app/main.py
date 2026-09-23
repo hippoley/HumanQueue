@@ -2,29 +2,42 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .adapters import ADAPTERS\nfrom .auth import require_gateway_token
+from .adapters import ADAPTERS
+from .auth import require_gateway_token
 from .demo import seed_wow
 from .humanize import to_attention_request
-from .models import AttentionRequestCreate, BatchResolveRequest, BudgetPolicy, ClaimRequest, HumanAsk, ImportEnvelope, ResolveRequest
+from .models import (
+    AttentionRequestCreate,
+    BatchResolveRequest,
+    BudgetPolicy,
+    ClaimRequest,
+    HumanAsk,
+    ImportEnvelope,
+    ResolveRequest,
+)
 from .protocol import uri_for_kind
 from .resume import resume
-from .store import Store\nfrom humanqueue.config import db_path, gateway_token
+from .store import Store
+from humanqueue.config import db_path, gateway_token
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
-DEFAULT_DB = Path.home() / ".human-queue" / "human-queue.db"
-DB_PATH = os.environ.get("HUMAN_QUEUE_DB", os.environ.get("ATTENTION_DB", str(DEFAULT_DB)))
+DB_PATH = db_path()
 store = Store(DB_PATH)
 
-app = FastAPI(title="human://",version="0.4.0",description="One queue for everything that needs a human.")
+app = FastAPI(
+    title="human://",
+    version="0.4.0",
+    description="One queue for everything that needs a human.",
+)
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
 
 @app.middleware("http")
 async def gateway_auth(request: Request, call_next):
@@ -39,91 +52,169 @@ async def gateway_auth(request: Request, call_next):
             )
     return await call_next(request)
 
+
 @app.get("/")
-def home(): return FileResponse(WEB_DIR / "index.html")
+def home():
+    return FileResponse(WEB_DIR / "index.html")
+
 
 @app.get("/health")
-def health(): return {"ok": True, "name": "human://", "version": "0.3.0"}
+def health():
+    return {"ok": True, "name": "human://", "version": "0.4.0"}
+
+
+@app.get("/gateway")
+def gateway_info():
+    return {
+        "name": "human://",
+        "version": "0.4.0",
+        "auth_required": bool(gateway_token()),
+        "self_hosted": True,
+    }
+
 
 @app.post("/v1/human", status_code=201)
 def human_interrupt(ask: HumanAsk):
-    try: item = store.create(to_attention_request(ask))
-    except ValueError as exc: raise HTTPException(422, str(exc)) from exc
+    try:
+        item = store.create(to_attention_request(ask))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return {"human_uri": uri_for_kind(item.kind), "request": item}
 
+
 @app.post("/v1/requests", status_code=201)
-def create_request(req: AttentionRequestCreate): return store.create(req)
+def create_request(req: AttentionRequestCreate):
+    return store.create(req)
+
 
 @app.post("/v1/import", status_code=201)
-def import_request(env: ImportEnvelope): return store.create(ADAPTERS[env.adapter](env.payload))
+def import_request(env: ImportEnvelope):
+    return store.create(ADAPTERS[env.adapter](env.payload))
+
 
 @app.get("/v1/queue")
-def get_queue(status: str = "pending", limit: int = 100, include_deferred: bool = False): return {"items": store.queue(status=status, limit=limit, include_deferred=include_deferred)}
+def get_queue(status: str = "pending", limit: int = 100, include_deferred: bool = False):
+    return {"items": store.queue(status=status, limit=limit, include_deferred=include_deferred)}
+
 
 @app.get("/v1/batches")
-def get_batches(): return {"batches": store.batches()}
+def get_batches():
+    return {"batches": store.batches()}
+
 
 @app.post("/v1/batches/{batch_key}/resolve")
 async def resolve_batch(batch_key: str, decision: BatchResolveRequest):
-    try: items = store.resolve_batch(batch_key, decision.actor, decision.action, decision.comment)
-    except PermissionError as e: raise HTTPException(403, str(e))
-    deliveries=[]
+    try:
+        items = store.resolve_batch(batch_key, decision.actor, decision.action, decision.comment)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+    deliveries = []
     for item in items:
-        if item.status.value == "resolved": deliveries.append({"id":item.id,"resume":await resume(item,item.resolution or {})})
-    return {"items":items,"deliveries":deliveries}
+        if item.status.value == "resolved":
+            deliveries.append({
+                "id": item.id,
+                "resume": await resume(item, item.resolution or {}),
+            })
+    return {"items": items, "deliveries": deliveries}
+
 
 @app.get("/v1/budgets/{group}")
-def get_budget(group: str): return store.get_budget(group)
+def get_budget(group: str):
+    return store.get_budget(group)
+
 
 @app.put("/v1/budgets/{group}")
-def put_budget(group: str, policy: BudgetPolicy): policy.group=group; return store.set_budget(policy)
+def put_budget(group: str, policy: BudgetPolicy):
+    policy.group = group
+    return store.set_budget(policy)
+
 
 @app.get("/v1/metrics")
-def metrics(): return store.metrics()
+def metrics():
+    return store.metrics()
+
 
 @app.get("/v1/delegation-frontier")
-def delegation_frontier(min_samples: int = 5, min_agreement: float = 0.9): return {"suggestions":store.frontier(min_samples=min_samples,min_agreement=min_agreement)}
+def delegation_frontier(min_samples: int = 5, min_agreement: float = 0.9):
+    return {
+        "suggestions": store.frontier(
+            min_samples=min_samples,
+            min_agreement=min_agreement,
+        )
+    }
+
 
 @app.get("/v1/policy-sandbox/{policy_key}")
-def policy_sandbox(policy_key: str, action: str | None = None): return store.policy_sandbox(policy_key, proposed_action=action)
+def policy_sandbox(policy_key: str, action: str | None = None):
+    return store.policy_sandbox(policy_key, proposed_action=action)
+
 
 @app.get("/v1/requests/{rid}")
 def get_request(rid: str):
-    req=store.get(rid)
-    if not req: raise HTTPException(404,"request not found")
-    return {"request":req,"human_uri":uri_for_kind(req.kind),"events":store.events(rid)}
+    req = store.get(rid)
+    if not req:
+        raise HTTPException(404, "request not found")
+    return {
+        "request": req,
+        "human_uri": uri_for_kind(req.kind),
+        "events": store.events(rid),
+    }
+
 
 @app.post("/v1/requests/{rid}/claim")
 def claim_request(rid: str, claim: ClaimRequest):
-    try: req=store.claim(rid,claim.actor)
-    except PermissionError as e: raise HTTPException(403,str(e))
-    if not req: raise HTTPException(404,"request not found")
+    try:
+        req = store.claim(rid, claim.actor)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    if not req:
+        raise HTTPException(404, "request not found")
     return req
+
 
 @app.post("/v1/requests/{rid}/resolve")
 async def resolve_request(rid: str, decision: ResolveRequest):
-    existing=store.get(rid)
-    if not existing: raise HTTPException(404,"request not found")
-    resolution=decision.model_dump(mode="json")
-    try: req,finalized=store.resolve(rid,decision.actor,resolution)
-    except PermissionError as e: raise HTTPException(403,str(e))
-    delivery={"delivered":False,"reason":"waiting_for_quorum"}
-    if finalized: delivery=await resume(req,req.resolution or resolution)
-    return {"request":req,"finalized":finalized,"resume":delivery}
+    existing = store.get(rid)
+    if not existing:
+        raise HTTPException(404, "request not found")
+
+    resolution = decision.model_dump(mode="json")
+    try:
+        req, finalized = store.resolve(rid, decision.actor, resolution)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+    delivery = {"delivered": False, "reason": "waiting_for_quorum"}
+    if finalized:
+        delivery = await resume(req, req.resolution or resolution)
+    return {"request": req, "finalized": finalized, "resume": delivery}
+
 
 @app.get("/v1/events/stream")
 async def event_stream(request: Request):
     async def generate():
-        last=store.latest_event_seq(); yield f"event: ready\\ndata: {json.dumps({'seq':last})}\\n\\n"; ticks=0
+        last = store.latest_event_seq()
+        yield f"event: ready\ndata: {json.dumps({'seq': last})}\n\n"
+        ticks = 0
         while not await request.is_disconnected():
-            seq=store.latest_event_seq()
+            seq = store.latest_event_seq()
             if seq != last:
-                last=seq; yield f"event: changed\\ndata: {json.dumps({'seq':seq})}\\n\\n"
+                last = seq
+                yield f"event: changed\ndata: {json.dumps({'seq': seq})}\n\n"
             ticks += 1
-            if ticks % 15 == 0: yield ": heartbeat\\n\\n"
+            if ticks % 15 == 0:
+                yield ": heartbeat\n\n"
             await asyncio.sleep(1)
-    return StreamingResponse(generate(),media_type="text/event-stream",headers={"Cache-Control":"no-cache"})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
 
 @app.post("/v1/demo/seed")
 def demo_seed(reset: bool = False):
-    ids=seed_wow(store,reset=reset); return {"seeded":len(ids),"ids":ids}
+    ids = seed_wow(store, reset=reset)
+    return {"seeded": len(ids), "ids": ids}
