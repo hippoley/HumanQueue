@@ -6,4 +6,4 @@ COPY . .
 ENV HUMAN_QUEUE_DB=/data/human-queue.db
 VOLUME ["/data"]
 EXPOSE 7482
-CMD ["python","-m","humanqueue","serve","--host","0.0.0.0","--port","7482"]
+CMD ["python","-m","humanqueue","gateway","run","--host","0.0.0.0","--port","7482"]
