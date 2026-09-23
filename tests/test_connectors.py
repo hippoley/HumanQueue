@@ -158,3 +158,44 @@ def test_mcp_human_ask_returns_structured_decision(monkeypatch):
         },
     })
     assert response["result"]["structuredContent"]["status"] == "resolved"
+
+
+def test_cursor_shell_permission_round_trip_allow(monkeypatch):
+    from humanqueue.connectors import cursor
+
+    class FakeHumanQueue:
+        def ask(self, *args, **kwargs):
+            assert args[0] == "human://approve"
+            assert kwargs["source"] == "cursor"
+            return {"action": "approve"}
+
+    monkeypatch.setattr(cursor, "HumanQueue", FakeHumanQueue)
+    monkeypatch.setattr(cursor, "observe_event", lambda event: None)
+
+    result = cursor.shell_permission({
+        "conversation_id": "conv_1",
+        "generation_id": "gen_1",
+        "hook_event_name": "beforeShellExecution",
+        "command": "git push origin main",
+        "cwd": "/repo",
+    })
+    assert result["permission"] == "allow"
+
+
+def test_cursor_shell_permission_falls_back_to_native_ask(monkeypatch):
+    from humanqueue.connectors import cursor
+
+    class FakeHumanQueue:
+        def ask(self, *args, **kwargs):
+            raise TimeoutError("no human response")
+
+    monkeypatch.setattr(cursor, "HumanQueue", FakeHumanQueue)
+    monkeypatch.setattr(cursor, "observe_event", lambda event: None)
+
+    result = cursor.shell_permission({
+        "conversation_id": "conv_1",
+        "generation_id": "gen_1",
+        "hook_event_name": "beforeShellExecution",
+        "command": "rm -rf build",
+    })
+    assert result["permission"] == "ask"
