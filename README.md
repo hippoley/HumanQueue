@@ -20,13 +20,71 @@ Your app   ─┘    human://edit
 
 **Not another agent dashboard. Not another approval product.**
 
+## Run your own Human Gateway
+
+Human Queue is **self-host first**. Hosted infrastructure is optional.
+
+macOS / Linux / WSL:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hippoley/human-queue/main/scripts/install.sh | bash
+humanq gateway run
+```
+
+Then open your own queue:
+
+```bash
+humanq dashboard
+```
+
+First-run onboarding creates a private gateway token and persistent state under `~/.human-queue/`:
+
+```text
+~/.human-queue/
+├── config.json
+└── human-queue.db
+```
+
+Connect any agent or workflow to **your** gateway:
+
+```bash
+curl http://127.0.0.1:7482/v1/human \
+  -H "Authorization: Bearer hq_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"uri":"human://approve","source":"my-agent","ref":"run-42","title":"Deploy to production?"}'
+```
+
+The request appears immediately in your local dashboard. Your decision can be polled by the caller or sent back through a signed resume webhook.
+
+Useful local commands:
+
+```bash
+humanq onboard
+humanq gateway run
+humanq gateway status
+humanq dashboard
+humanq doctor
+humanq token rotate
+```
+
+Prefer containers?
+
+```bash
+git clone https://github.com/hippoley/human-queue.git
+cd human-queue
+bash scripts/docker/setup.sh
+```
+
+See [Self-hosting](docs/self-host.md) for Docker and remote/VPS deployment.
+
+
 The unit of work is simply:
 
 > software cannot safely or correctly continue until a human contributes something small.
 
 ---
 
-## See it in 60 seconds
+## Try the seeded demo in 60 seconds
 
 ```bash
 git clone https://github.com/hippoley/human-queue.git
