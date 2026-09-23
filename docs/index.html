@@ -3,48 +3,346 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#f3f0e9">
-<title>human:// — one queue for everything that needs a human</title>
+<meta name="theme-color" content="#f4f1eb">
+<title>human:// — interactive human queue</title>
 <style>
-:root{--bg:#f3f0e9;--ink:#11110f;--muted:#706c64;--line:#d9d3c8;--card:#fbfaf6;--acid:#d0ff4f;--signal:#ff5a36;--deep:#171815;--ok:#17704a;--soft:#ebe6dc}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:1450px;margin:auto;padding:20px 26px 42px}button{font:inherit}.top{display:flex;align-items:center;justify-content:space-between;padding:2px 0 18px;border-bottom:1px solid var(--line)}.brand{font:800 25px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.065em}.brand span{background:var(--acid);border-radius:6px;padding:4px 8px}.topright{display:flex;align-items:center;gap:12px}.live{display:flex;gap:8px;align-items:center;text-transform:uppercase;font:650 11px/1 ui-monospace,monospace;letter-spacing:.1em;color:var(--muted)}.dot{width:8px;height:8px;background:#32ae69;border-radius:50%;box-shadow:0 0 0 5px rgba(50,174,105,.12)}.reset{border:1px solid var(--line);border-radius:999px;background:transparent;padding:8px 11px;cursor:pointer;color:var(--muted)}.hero{display:grid;grid-template-columns:1.42fr .58fr;gap:28px;padding:39px 0 28px;border-bottom:1px solid var(--line)}.eyebrow{font:700 11px/1 ui-monospace,monospace;color:var(--signal);text-transform:uppercase;letter-spacing:.14em}.hero h1{font-size:clamp(52px,7vw,106px);line-height:.86;letter-spacing:-.078em;margin:13px 0 20px;max-width:950px}.hero p{margin:0;max-width:760px;color:var(--muted);font-size:18px;line-height:1.5}.hero strong{color:var(--ink)}.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:end}.stat{min-height:122px;border-radius:15px;padding:18px;background:var(--deep);color:#fff;display:flex;flex-direction:column;justify-content:space-between}.stat.acid{background:var(--acid);color:var(--ink)}.stat .k{text-transform:uppercase;letter-spacing:.12em;font:650 10px/1 ui-monospace,monospace;opacity:.62}.stat .v{font-size:41px;font-weight:800;letter-spacing:-.055em}.stat .s{font-size:11px;line-height:1.3;opacity:.67}.nav{display:flex;gap:7px;align-items:center;padding:17px 0}.tab{border:1px solid var(--line);background:transparent;border-radius:999px;padding:8px 12px;cursor:pointer;color:var(--muted)}.tab.active{background:var(--ink);border-color:var(--ink);color:white}.badge{margin-left:auto;font:650 10px/1 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.grid{display:grid;grid-template-columns:minmax(0,1.36fr) minmax(330px,.64fr);gap:17px}.panel{background:var(--card);border:1px solid var(--line);border-radius:19px;overflow:hidden}.focus{min-height:520px}.hd{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line)}.label{text-transform:uppercase;letter-spacing:.12em;font:650 10px/1 ui-monospace,monospace;color:var(--muted)}.rank{font:700 11px/1 ui-monospace,monospace;background:var(--soft);border-radius:8px;padding:7px 9px}.body{padding:27px}.uri{font:750 13px/1 ui-monospace,monospace;color:var(--signal)}.source{margin-top:13px;text-transform:uppercase;letter-spacing:.095em;font:650 11px/1 ui-monospace,monospace;color:var(--muted)}h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}.summary{color:var(--muted);font-size:17px;line-height:1.55}.why{margin:22px 0;background:var(--soft);border-left:4px solid var(--signal);padding:13px 15px;border-radius:0 10px 10px 0;color:#49463f}.pills{display:flex;flex-wrap:wrap;gap:8px}.pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 10px;font-size:12px}.pill.danger{background:#fff0ec;border-color:#f1b2a3;color:#8d2f1c}.pill.good{background:#eff8f2;border-color:#badbc6;color:var(--ok)}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:24px}.btn{border:1px solid var(--ink);border-radius:10px;background:white;padding:12px 16px;font-weight:750;cursor:pointer;transition:.12s}.btn:hover{transform:translateY(-1px);box-shadow:0 5px 15px rgba(0,0,0,.08)}.btn.primary{background:var(--ink);color:white}.btn.danger{border-color:#c84932;color:#a43120;background:#fff5f2}.code{margin-top:22px;background:var(--deep);color:#eef1e8;border-radius:12px;padding:14px;font:12px/1.52 ui-monospace,monospace;white-space:pre-wrap}.item{padding:17px 18px;border-bottom:1px solid var(--line);cursor:pointer;transition:.12s}.item:hover,.item.active{background:#f0ece3}.itemtop{display:flex;justify-content:space-between;gap:12px}.itemuri{font:700 11px/1 ui-monospace,monospace;color:var(--signal)}.score{font:700 11px/1 ui-monospace,monospace;color:var(--muted)}.item h3{font-size:17px;line-height:1.18;letter-spacing:-.025em;margin:8px 0 6px}.meta{font-size:12px;color:var(--muted)}.empty{text-align:center;padding:60px 24px;color:var(--muted)}.check{font-size:50px;color:var(--ok);margin-bottom:8px}.hidden{display:none!important}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:19px}.card h3{font-size:21px;margin:8px 0}.big{font-size:45px;font-weight:850;letter-spacing:-.055em}.small{font-size:12px;line-height:1.5;color:var(--muted)}.bar{height:9px;border-radius:99px;background:var(--soft);overflow:hidden;margin:13px 0}.bar span{display:block;height:100%;background:var(--acid)}.architecture{margin-top:18px;background:var(--deep);color:#fff;border-radius:18px;padding:23px}.architecture h3{margin:0 0 13px;font-size:24px}.flow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font:650 12px/1.4 ui-monospace,monospace}.node{border:1px solid #44473f;padding:9px 11px;border-radius:8px}.arrow{color:var(--acid)}.footer{display:flex;justify-content:space-between;gap:20px;color:var(--muted);font-size:12px;padding:22px 0 0}.toast{position:fixed;right:22px;bottom:22px;background:var(--deep);color:white;border-radius:12px;padding:13px 16px;box-shadow:0 10px 35px rgba(0,0,0,.18);opacity:0;transform:translateY(10px);pointer-events:none;transition:.2s}.toast.show{opacity:1;transform:none}@media(max-width:900px){.wrap{padding:15px}.hero,.grid{grid-template-columns:1fr}.hero h1{font-size:59px}.stats{grid-template-columns:1fr 1fr}.body{padding:21px}h2{font-size:35px}.footer{flex-direction:column}.badge{display:none}}
+:root{
+  --bg:#f4f1eb;--ink:#11110f;--muted:#6e6a62;--line:#d8d2c7;--card:#fbfaf6;
+  --acid:#ceff4d;--signal:#ff5b38;--deep:#171815;--ok:#19724b;--soft:#ebe6dc;
+  --warn:#8a5a00;--blue:#3165d4
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.wrap{max-width:1480px;margin:0 auto;padding:18px 24px 42px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:4px 0 17px;border-bottom:1px solid var(--line)}
+.brand{font:800 25px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.065em}
+.brand span{background:var(--acid);border-radius:6px;padding:4px 8px}
+.topright{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.live{display:flex;gap:8px;align-items:center;text-transform:uppercase;font:650 10px/1 ui-monospace,monospace;letter-spacing:.1em;color:var(--muted)}
+.dot{width:8px;height:8px;background:#32ae69;border-radius:50%;box-shadow:0 0 0 5px rgba(50,174,105,.12)}
+.ghost{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 12px;color:var(--muted)}
+.primaryTop{border:1px solid var(--ink);background:var(--ink);color:white;border-radius:999px;padding:9px 13px;font-weight:700}
+.hero{display:grid;grid-template-columns:1.38fr .62fr;gap:28px;padding:38px 0 28px;border-bottom:1px solid var(--line)}
+.eyebrow{font:700 11px/1 ui-monospace,monospace;color:var(--signal);text-transform:uppercase;letter-spacing:.14em}
+.hero h1{font-size:clamp(50px,7vw,104px);line-height:.86;letter-spacing:-.078em;margin:13px 0 20px;max-width:970px}
+.hero p{margin:0;max-width:790px;color:var(--muted);font-size:18px;line-height:1.5}
+.hero strong{color:var(--ink)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:end}
+.stat{min-height:122px;border-radius:15px;padding:18px;background:var(--deep);color:#fff;display:flex;flex-direction:column;justify-content:space-between}
+.stat.acid{background:var(--acid);color:var(--ink)}
+.stat .k{text-transform:uppercase;letter-spacing:.12em;font:650 10px/1 ui-monospace,monospace;opacity:.62}
+.stat .v{font-size:41px;font-weight:800;letter-spacing:-.055em}
+.stat .s{font-size:11px;line-height:1.35;opacity:.67}
+.nav{display:flex;gap:7px;align-items:center;padding:17px 0;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 13px;color:var(--muted)}
+.tab.active{background:var(--ink);border-color:var(--ink);color:white}
+.badge{margin-left:auto;font:650 10px/1 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.grid{display:grid;grid-template-columns:minmax(0,1.36fr) minmax(330px,.64fr);gap:17px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:19px;overflow:hidden}
+.focus{min-height:555px}
+.hd{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line)}
+.label{text-transform:uppercase;letter-spacing:.12em;font:650 10px/1 ui-monospace,monospace;color:var(--muted)}
+.rank{font:700 11px/1 ui-monospace,monospace;background:var(--soft);border-radius:8px;padding:7px 9px}
+.body{padding:27px}
+.uri{font:750 13px/1 ui-monospace,monospace;color:var(--signal)}
+.source{margin-top:13px;text-transform:uppercase;letter-spacing:.095em;font:650 11px/1 ui-monospace,monospace;color:var(--muted)}
+h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
+.summary{color:var(--muted);font-size:17px;line-height:1.55}
+.why{margin:22px 0;background:var(--soft);border-left:4px solid var(--signal);padding:13px 15px;border-radius:0 10px 10px 0;color:#49463f}
+.pills{display:flex;flex-wrap:wrap;gap:8px}
+.pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 10px;font-size:12px}
+.pill.danger{background:#fff0ec;border-color:#f1b2a3;color:#8d2f1c}
+.pill.good{background:#eff8f2;border-color:#badbc6;color:var(--ok)}
+.pill.blue{background:#eff4ff;border-color:#c4d3f7;color:#31599e}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:24px}
+.btn{border:1px solid var(--ink);border-radius:10px;background:white;padding:12px 16px;font-weight:750;transition:.12s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 5px 15px rgba(0,0,0,.08)}
+.btn.primary{background:var(--ink);color:white}
+.btn.danger{border-color:#c84932;color:#a43120;background:#fff5f2}
+.btn.soft{border-color:var(--line);color:var(--muted);background:var(--soft)}
+.formrow{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:16px}
+.formrow input,.injectGrid select,.injectGrid input{border:1px solid var(--line);background:#fff;border-radius:10px;padding:11px 12px;min-width:0}
+.code{margin-top:22px;background:var(--deep);color:#eef1e8;border-radius:12px;padding:14px;font:12px/1.52 ui-monospace,monospace;white-space:pre-wrap;overflow:auto}
+.item{padding:17px 18px;border-bottom:1px solid var(--line);cursor:pointer;transition:.12s}
+.item:hover,.item.active{background:#f0ece3}
+.itemtop{display:flex;justify-content:space-between;gap:12px}
+.itemuri{font:700 11px/1 ui-monospace,monospace;color:var(--signal)}
+.score{font:700 11px/1 ui-monospace,monospace;color:var(--muted)}
+.item h3{font-size:17px;line-height:1.18;letter-spacing:-.025em;margin:8px 0 6px}
+.meta{font-size:12px;color:var(--muted)}
+.empty{text-align:center;padding:60px 24px;color:var(--muted)}
+.check{font-size:50px;color:var(--ok);margin-bottom:8px}
+.hidden{display:none!important}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:19px}
+.card h3{font-size:21px;margin:8px 0}
+.big{font-size:45px;font-weight:850;letter-spacing:-.055em}
+.small{font-size:12px;line-height:1.5;color:var(--muted)}
+.bar{height:9px;border-radius:99px;background:var(--soft);overflow:hidden;margin:13px 0}
+.bar span{display:block;height:100%;background:var(--acid)}
+.pipeline{margin-top:18px;background:var(--deep);color:#fff;border-radius:18px;padding:23px}
+.pipelineTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.pipeline h3{margin:0;font-size:24px}
+.flow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font:650 12px/1.4 ui-monospace,monospace}
+.node{border:1px solid #45473f;padding:9px 11px;border-radius:8px}
+.node.hot{border-color:var(--acid);color:var(--acid)}
+.arrow{color:var(--acid)}
+.eventline{margin-top:14px;border-top:1px solid #34362f;padding-top:12px;color:#b9bdb3;font:12px/1.6 ui-monospace,monospace}
+.timeline{display:grid;gap:10px}
+.event{display:grid;grid-template-columns:120px 1fr auto;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.event .time{font:650 11px/1 ui-monospace,monospace;color:var(--muted)}
+.event strong{font-size:14px}
+.event .eventmeta{font-size:12px;color:var(--muted);margin-top:3px}
+.event .status{font:700 10px/1 ui-monospace,monospace;text-transform:uppercase;border-radius:999px;padding:6px 8px;background:var(--soft)}
+.inject{margin-bottom:14px;background:var(--card);border:1px dashed #aaa398;border-radius:17px;padding:18px}
+.inject h3{margin:0 0 6px;font-size:20px}
+.injectGrid{display:grid;grid-template-columns:1fr 1fr 1.4fr auto;gap:9px;margin-top:13px}
+.toast{position:fixed;right:22px;bottom:22px;background:var(--deep);color:white;border-radius:12px;padding:13px 16px;box-shadow:0 10px 35px rgba(0,0,0,.18);opacity:0;transform:translateY(10px);pointer-events:none;transition:.2s;max-width:min(420px,calc(100vw - 44px))}
+.toast.show{opacity:1;transform:none}
+.footer{display:flex;justify-content:space-between;gap:20px;color:var(--muted);font-size:12px;padding:22px 0 0}
+@media(max-width:1000px){.injectGrid{grid-template-columns:1fr 1fr}.hero,.grid{grid-template-columns:1fr}.hero h1{font-size:64px}.badge{display:none}}
+@media(max-width:640px){.wrap{padding:14px}.hero h1{font-size:51px}.stats{grid-template-columns:1fr}.injectGrid{grid-template-columns:1fr}.body{padding:21px}h2{font-size:34px}.event{grid-template-columns:1fr}.footer{flex-direction:column}.formrow{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
-<header class="top"><div class="brand"><span>human://</span></div><div class="topright"><div class="live"><i class="dot"></i>interactive public demo</div><button class="reset" onclick="resetDemo()">Reset demo</button></div></header>
-<section class="hero"><div><div class="eyebrow">machine → human → machine</div><h1>YOU ARE BLOCKING <b id="blocking">5</b> MACHINES.</h1><p><strong>One queue for everything that needs a human.</strong> AI agents, deployments and workflows stop here only when judgment is actually required — then continue from where they left off.</p></div><div class="stats"><div class="stat acid"><div class="k">interruptions avoided / demo</div><div class="v" id="avoided">14</div><div class="s">batched instead of interrupting you one by one</div></div><div class="stat"><div class="k">attention left</div><div class="v" id="seconds">61s</div><div class="s">estimated human judgment required by visible work</div></div></div></section>
-<nav class="nav"><button class="tab active" data-view="now">Needs you now</button><button class="tab" data-view="batches">Batches</button><button class="tab" data-view="policies">Policies waiting to exist</button><span class="badge">No login · click the decisions</span></nav>
-<main id="view-now" class="view grid"><section class="panel focus"><div class="hd"><div class="label">highest-value human intervention</div><div id="focusRank" class="rank">#1</div></div><div class="body" id="focus"></div></section><aside class="panel"><div class="hd"><div class="label">next</div><div id="count" class="rank">5 waiting</div></div><div id="next"></div></aside></main>
+<header class="top">
+  <div class="brand"><span>human://</span></div>
+  <div class="topright">
+    <div class="live"><i class="dot"></i><span id="liveLabel">interactive public demo</span></div>
+    <button class="ghost" id="resetBtn">Reset demo</button>
+    <button class="primaryTop" id="injectTopBtn">+ Inject machine request</button>
+  </div>
+</header>
+
+<section class="hero">
+  <div>
+    <div class="eyebrow">machine → human → machine</div>
+    <h1>YOU ARE BLOCKING <b id="blocking">5</b> MACHINES.</h1>
+    <p><strong>One queue for everything that needs a human.</strong> AI agents, deployments and workflows stop here only when judgment is actually required — then continue from where they left off.</p>
+  </div>
+  <div class="stats">
+    <div class="stat acid"><div class="k">interruptions avoided</div><div class="v" id="avoided">14</div><div class="s">batched or deferred instead of interrupting you one-by-one</div></div>
+    <div class="stat"><div class="k">machines resumed</div><div class="v" id="resumed">0</div><div class="s">workflows continued after explicit human decisions</div></div>
+  </div>
+</section>
+
+<nav class="nav">
+  <button class="tab active" data-view="now">Needs you now</button>
+  <button class="tab" data-view="batches">Batches <span id="batchCount"></span></button>
+  <button class="tab" data-view="policies">Policies waiting to exist</button>
+  <button class="tab" data-view="timeline">Decision timeline</button>
+  <span class="badge">No login · all interactions are local demo state</span>
+</nav>
+
+<main id="view-now" class="view">
+  <section class="inject" id="injectBox">
+    <div class="eyebrow">simulate a new machine→human boundary</div>
+    <h3>Inject a live request into the global queue</h3>
+    <div class="small">Use this to feel how unrelated systems compete for the same scarce human attention.</div>
+    <div class="injectGrid">
+      <select id="injectSource">
+        <option>Claude Code</option><option>Codex</option><option>GitHub</option><option>MCP</option><option>n8n</option><option>Support Agent</option>
+      </select>
+      <select id="injectType">
+        <option value="human://approve">human://approve</option>
+        <option value="human://review">human://review</option>
+        <option value="human://clarify">human://clarify</option>
+        <option value="human://auth">human://auth</option>
+      </select>
+      <input id="injectTitle" value="Approve a newly blocked workflow?" aria-label="Request title">
+      <button class="btn primary" id="injectBtn">Inject</button>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel focus">
+      <div class="hd"><div class="label">highest-value human intervention</div><div id="focusRank" class="rank">#1</div></div>
+      <div class="body" id="focus"></div>
+    </section>
+    <aside class="panel">
+      <div class="hd"><div class="label">global queue</div><div id="count" class="rank">5 waiting</div></div>
+      <div id="next"></div>
+    </aside>
+  </div>
+
+  <section class="pipeline">
+    <div class="pipelineTop"><h3>Live resume path</h3><div class="label" id="pipelineState">waiting for human</div></div>
+    <div class="flow" id="flow"></div>
+    <div class="eventline" id="eventline">Select a request and make a decision. You will see the original machine resume here.</div>
+  </section>
+</main>
+
 <main id="view-batches" class="view hidden"><div id="batches" class="cards"></div></main>
 <main id="view-policies" class="view hidden"><div id="policies" class="cards"></div></main>
-<section class="architecture"><h3>The primitive</h3><div class="flow"><span class="node">Codex</span><span class="node">GitHub</span><span class="node">MCP</span><span class="node">n8n</span><span class="arrow">→</span><span class="node">human://</span><span class="arrow">→</span><span class="node">one human queue</span><span class="arrow">→</span><span class="node">resume</span></div></section>
-<div class="footer"><span>Every repeated human interruption is a candidate for a better policy.</span><span>human://approve · review · clarify · auth · choose · edit · claim</span></div>
-</div><div id="toast" class="toast"></div>
+<main id="view-timeline" class="view hidden"><div id="timeline" class="timeline"></div></main>
+
+<div class="footer">
+  <span>Every repeated human interruption is a candidate for a better policy.</span>
+  <span>human://approve · review · clarify · auth · choose · edit · claim</span>
+</div>
+</div>
+<div id="toast" class="toast" aria-live="polite"></div>
+
 <script>
-var initial=[
-{id:"db",uri:"human://approve",source:"Codex",ref:"agent-17",title:"Delete stale production cache keys?",summary:"Codex found 1,842 stale keys and prepared a destructive cleanup command.",why:"Destructive production action. The agent can execute immediately after your decision.",risk:"high",unblocks:1,sec:8,priority:98,actions:["Approve","Reject"]},
-{id:"deploy",uri:"human://approve",source:"GitHub",ref:"deploy/api-2.4.0",title:"Deploy api@2.4.0 to production?",summary:"CI is green. Four downstream jobs are waiting for the production environment review.",why:"A 6-second decision releases four already-completed pieces of work.",risk:"meaningful",unblocks:4,sec:6,priority:94,actions:["Approve","Reject"]},
-{id:"refund",uri:"human://review",source:"Support Agent",ref:"ticket-4481",title:"Refund $149 to a repeat customer?",summary:"The customer has two prior successful orders. Policy covers refunds below $100, so this case crossed the current boundary.",why:"The agent exhausted its existing refund policy and needs one judgment.",risk:"meaningful",unblocks:1,sec:12,priority:79,actions:["Approve","Reject","Edit"]},
-{id:"clarify",uri:"human://clarify",source:"Research Agent",ref:"run-218",title:"Which market should the report optimize for?",summary:"The brief says APAC launch but the evidence differs materially between Japan and Singapore.",why:"One clarification now prevents a long research branch from optimizing the wrong market.",risk:"low",unblocks:2,sec:20,priority:67,actions:["Japan","Singapore","Both"]},
-{id:"auth",uri:"human://auth",source:"n8n",ref:"workflow-61",title:"Reconnect the expired CRM credential",summary:"A scheduled lead-enrichment workflow reached an expired OAuth grant.",why:"Authentication requires you; the remaining workflow can continue automatically.",risk:"low",unblocks:1,sec:15,priority:58,actions:["Mark reconnected","Defer"]}
+(function(){
+const root=document;
+const initial=[
+{id:"db",uri:"human://approve",source:"Codex",ref:"agent-17",title:"Delete stale production cache keys?",summary:"Codex found 1,842 stale keys and prepared a destructive cleanup command.",why:"Destructive production action. The agent can execute immediately after your decision.",risk:"high",unblocks:1,sec:8,priority:98,actions:["Approve","Reject"],context:"redis-cli --scan --pattern 'legacy:*' | xargs redis-cli del"},
+{id:"deploy",uri:"human://approve",source:"GitHub",ref:"deploy/api-2.4.0",title:"Deploy api@2.4.0 to production?",summary:"CI is green. Four downstream jobs are waiting for the production environment review.",why:"A 6-second decision releases four already-completed pieces of work.",risk:"meaningful",unblocks:4,sec:6,priority:94,actions:["Approve","Reject"],context:"environment=production · commit=8f1ab22 · checks=12/12"},
+{id:"refund",uri:"human://review",source:"Support Agent",ref:"ticket-4481",title:"Refund $149 to a repeat customer?",summary:"The customer has two prior successful orders. Policy covers refunds below $100, so this case crossed the current boundary.",why:"The agent exhausted its existing refund policy and needs one judgment.",risk:"meaningful",unblocks:1,sec:12,priority:79,actions:["Approve","Reject","Edit"],context:"customer_risk=low · order_age=3d · requested=$149"},
+{id:"clarify",uri:"human://clarify",source:"Research Agent",ref:"run-218",title:"Which market should the report optimize for?",summary:"The brief says APAC launch but the evidence differs materially between Japan and Singapore.",why:"One clarification now prevents a long research branch from optimizing the wrong market.",risk:"low",unblocks:2,sec:20,priority:67,actions:["Submit"],input:true,context:"blocked branch: market analysis"},
+{id:"auth",uri:"human://auth",source:"n8n",ref:"workflow-61",title:"Reconnect the expired CRM credential",summary:"A scheduled lead-enrichment workflow reached an expired OAuth grant.",why:"Authentication requires you; the remaining workflow can continue automatically.",risk:"low",unblocks:1,sec:15,priority:58,actions:["Mark reconnected","Defer"],context:"credential=salesforce-prod · expired=17m ago"}
 ];
-var batches=[{name:"refund-under-20",count:11,sec:54,text:"Eleven low-risk refunds grouped into one review instead of eleven interruptions."},{name:"duplicate-ci-retries",count:3,sec:18,text:"Three equivalent retry approvals collapsed into a single decision."}];
-var policies=[{name:"refund-under-20-known-customer",agreement:98,samples:48,match:47,conflict:1,save:"19 interruptions / week",action:"approve"},{name:"retry-known-flaky-ci-step",agreement:100,samples:26,match:26,conflict:0,save:"11 interruptions / week",action:"retry"}];
-var items=[],selected=null,batched=14;
-function esc(s){return String(s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]})}
-function resetDemo(){items=initial.map(function(x){return Object.assign({},x)});selected=items[0];batched=14;render();toast("Demo reset. Five machines are waiting for you.")}
-function totalSec(){return items.reduce(function(a,x){return a+x.sec},0)}
-function render(){document.getElementById("blocking").textContent=items.length;document.getElementById("count").textContent=items.length+" waiting";document.getElementById("seconds").textContent=totalSec()+"s";document.getElementById("avoided").textContent=batched;if(!selected||!items.some(function(x){return x.id===selected.id}))selected=items[0]||null;renderFocus();renderNext();renderBatches();renderPolicies()}
-function renderFocus(){var el=document.getElementById("focus");if(!selected){document.getElementById("focusRank").textContent="# —";el.innerHTML='<div class="empty"><div class="check">✓</div><strong>No machine needs you right now.</strong><br><br>You cleared every human boundary in the demo.</div>';return}var i=items.findIndex(function(x){return x.id===selected.id});document.getElementById("focusRank").textContent="#"+(i+1)+" · "+selected.priority;var buttons=selected.actions.map(function(a,n){var cls=n===0?" primary":a==="Reject"?" danger":"";return '<button class="btn'+cls+'" onclick="decide(\''+esc(a)+'\')">'+esc(a)+"</button>"}).join("");var code='await human.ask({\n  uri: "'+selected.uri+'",\n  title: "'+selected.title+'",\n  source: "'+selected.source.toLowerCase().replaceAll(" ","-")+'"\n})';el.innerHTML='<div class="uri">'+esc(selected.uri)+'</div><div class="source">'+esc(selected.source)+" / "+esc(selected.ref)+'</div><h2>'+esc(selected.title)+'</h2><div class="summary">'+esc(selected.summary)+'</div><div class="why"><strong>Why now:</strong> '+esc(selected.why)+'</div><div class="pills"><span class="pill '+(selected.risk==="high"?"danger":"")+'">'+esc(selected.risk)+' risk</span><span class="pill good">unblocks '+selected.unblocks+'</span><span class="pill">~'+selected.sec+'s human time</span></div><div class="actions">'+buttons+'</div><div class="code">'+esc(code)+"</div>"}
-function renderNext(){var e=document.getElementById("next");e.innerHTML=items.length?items.map(function(x){return '<div class="item '+(selected&&x.id===selected.id?"active":"")+'" onclick="pick(\''+x.id+'\')"><div class="itemtop"><span class="itemuri">'+esc(x.uri)+'</span><span class="score">'+x.priority+'</span></div><h3>'+esc(x.title)+'</h3><div class="meta">'+esc(x.source)+" · ~"+x.sec+"s · unblocks "+x.unblocks+"</div></div>"}).join(""):'<div class="empty">Queue cleared.</div>'}
-function renderBatches(){document.getElementById("batches").innerHTML=batches.map(function(b,i){return '<article class="card"><div class="eyebrow">batch instead of interrupt</div><div class="big">'+b.count+'</div><h3>'+esc(b.name)+'</h3><div class="small">'+esc(b.text)+" Estimated attention: "+b.sec+'s.</div><div class="actions"><button class="btn primary" onclick="batch('+i+')">Approve batch</button><button class="btn danger" onclick="batch('+i+')">Reject batch</button></div></article>'}).join("")}
-function renderPolicies(){document.getElementById("policies").innerHTML=policies.map(function(p){return '<article class="card"><div class="eyebrow">shadow replay · never auto-enabled</div><h3>'+esc(p.name)+'</h3><div class="big">'+p.agreement+'%</div><div class="small">Would match '+p.match+"/"+p.samples+" historical human decisions · "+p.conflict+" conflict"+(p.conflict===1?"":"s")+'.</div><div class="bar"><span style="width:'+p.agreement+'%"></span></div><div class="small">Candidate impact: <strong>'+esc(p.save)+'</strong>.</div><div class="code">proposed: '+esc(p.action)+"\nmode: shadow_only\nenabled: false</div></article>"}).join("")}
-function pick(id){selected=items.find(function(x){return x.id===id});render()}
-function decide(action){if(!selected)return;var title=selected.title;items=items.filter(function(x){return x.id!==selected.id});selected=items[0]||null;render();toast(action+": "+title+" → original workflow resumed")}
-function batch(i){batched+=batches[i].count;toast(batches[i].count+" interruptions handled as one batch")}
-function toast(t){var e=document.getElementById("toast");e.textContent=t;e.classList.add("show");clearTimeout(window.__tt);window.__tt=setTimeout(function(){e.classList.remove("show")},2200)}
-document.querySelectorAll(".tab").forEach(function(t){t.onclick=function(){document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("active",x===t)});document.querySelectorAll(".view").forEach(function(v){v.classList.add("hidden")});document.getElementById("view-"+t.dataset.view).classList.remove("hidden")}});
+const initialBatches=[
+{id:"refunds",name:"refund-under-20",count:11,sec:54,text:"Eleven low-risk refunds grouped into one review instead of eleven interruptions.",status:"waiting"},
+{id:"retries",name:"duplicate-ci-retries",count:3,sec:18,text:"Three equivalent retry approvals collapsed into a single decision.",status:"waiting"}
+];
+const policies=[
+{name:"refund-under-20-known-customer",agreement:98,samples:48,match:47,conflict:1,save:"19 interruptions / week",action:"approve"},
+{name:"retry-known-flaky-ci-step",agreement:100,samples:26,match:26,conflict:0,save:"11 interruptions / week",action:"retry"}
+];
+
+let items=[],batches=[],selected=null,resumed=0,avoided=14,events=[],seq=100;
+
+function clone(x){return JSON.parse(JSON.stringify(x))}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+function now(){return new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+function log(kind,title,meta,status){
+  events.unshift({id:++seq,time:now(),kind,title,meta,status});
+  events=events.slice(0,30); renderTimeline();
+}
+function resetDemo(){
+  items=clone(initial);batches=clone(initialBatches);selected=items[0];resumed=0;avoided=14;events=[];seq=100;
+  log("system","Demo reset","Five unrelated workflows are waiting for you.","ready");
+  render();
+}
+function totalSec(){return items.reduce((a,x)=>a+x.sec,0)}
+function render(){
+  root.getElementById("blocking").textContent=items.length;
+  root.getElementById("count").textContent=items.length+" waiting";
+  root.getElementById("resumed").textContent=resumed;
+  root.getElementById("avoided").textContent=avoided;
+  root.getElementById("batchCount").textContent="("+batches.filter(b=>b.status==="waiting").length+")";
+  if(!selected||!items.some(x=>x.id===selected.id)) selected=items[0]||null;
+  renderFocus();renderNext();renderBatches();renderPolicies();renderFlow();renderTimeline();
+}
+function renderFocus(){
+  const el=root.getElementById("focus");
+  if(!selected){
+    root.getElementById("focusRank").textContent="# —";
+    el.innerHTML='<div class="empty"><div class="check">✓</div><strong>No machine needs you right now.</strong><br><br>Inject a request above to create another machine→human boundary.</div>';
+    return;
+  }
+  const i=items.findIndex(x=>x.id===selected.id);
+  root.getElementById("focusRank").textContent="#"+(i+1)+" · priority "+selected.priority;
+  const buttons=selected.actions.map((a,n)=>{
+    const cls=n===0?" primary":a==="Reject"?" danger":a==="Defer"?" soft":"";
+    return '<button class="btn'+cls+'" data-action="'+esc(a)+'">'+esc(a)+'</button>'
+  }).join("");
+  const input=selected.input?'<div class="formrow"><input id="humanInput" placeholder="Type the clarification…" aria-label="Human clarification"><button class="btn primary" data-action="Submit">Send answer</button></div>':"";
+  const code='await human.ask({\n  uri: "'+selected.uri+'",\n  source: "'+selected.source.toLowerCase().replaceAll(" ","-")+'",\n  ref: "'+selected.ref+'",\n  title: "'+selected.title.replaceAll('"','\\\"')+'"\n})';
+  el.innerHTML='<div class="uri">'+esc(selected.uri)+'</div><div class="source">'+esc(selected.source)+" / "+esc(selected.ref)+'</div><h2>'+esc(selected.title)+'</h2><div class="summary">'+esc(selected.summary)+'</div><div class="why"><strong>Why now:</strong> '+esc(selected.why)+'</div><div class="pills"><span class="pill '+(selected.risk==="high"?"danger":"")+'">'+esc(selected.risk)+' risk</span><span class="pill good">unblocks '+selected.unblocks+'</span><span class="pill blue">~'+selected.sec+'s human time</span></div>'+input+'<div class="actions">'+(selected.input?"":buttons)+'</div><div class="code">'+esc(selected.context)+"\n\n"+esc(code)+'</div>';
+  el.querySelectorAll("[data-action]").forEach(btn=>btn.addEventListener("click",()=>decide(btn.dataset.action)));
+}
+function renderNext(){
+  const e=root.getElementById("next");
+  e.innerHTML=items.length?items.map(x=>'<div class="item '+(selected&&x.id===selected.id?"active":"")+'" data-id="'+esc(x.id)+'"><div class="itemtop"><span class="itemuri">'+esc(x.uri)+'</span><span class="score">'+x.priority+'</span></div><h3>'+esc(x.title)+'</h3><div class="meta">'+esc(x.source)+" · ~"+x.sec+"s · unblocks "+x.unblocks+"</div></div>").join(""):'<div class="empty">Queue cleared.</div>';
+  e.querySelectorAll("[data-id]").forEach(card=>card.addEventListener("click",()=>{selected=items.find(x=>x.id===card.dataset.id);render()}));
+}
+function renderBatches(){
+  const waiting=batches.filter(b=>b.status==="waiting");
+  root.getElementById("batches").innerHTML=waiting.length?waiting.map(b=>'<article class="card"><div class="eyebrow">batch instead of interrupt</div><div class="big">'+b.count+'</div><h3>'+esc(b.name)+'</h3><div class="small">'+esc(b.text)+" Estimated attention: "+b.sec+'s.</div><div class="actions"><button class="btn primary" data-batch="'+b.id+'" data-baction="approve">Approve batch</button><button class="btn danger" data-batch="'+b.id+'" data-baction="reject">Reject batch</button></div></article>').join(""):'<div class="empty">No batchable interruptions remain.</div>';
+  root.querySelectorAll("[data-batch]").forEach(btn=>btn.addEventListener("click",()=>resolveBatch(btn.dataset.batch,btn.dataset.baction)));
+}
+function renderPolicies(){
+  root.getElementById("policies").innerHTML=policies.map(p=>'<article class="card"><div class="eyebrow">shadow replay · never auto-enabled</div><h3>'+esc(p.name)+'</h3><div class="big">'+p.agreement+'%</div><div class="small">Would match '+p.match+"/"+p.samples+" historical human decisions · "+p.conflict+" conflict"+(p.conflict===1?"":"s")+'.</div><div class="bar"><span style="width:'+p.agreement+'%"></span></div><div class="small">Candidate impact: <strong>'+esc(p.save)+'</strong>.</div><div class="code">proposed: '+esc(p.action)+"\nmode: shadow_only\nenabled: false</div><div class="actions"><button class="btn" data-policy=""+esc(p.name)+"">Replay policy</button></div></article>").join("");
+  root.querySelectorAll("[data-policy]").forEach(btn=>btn.addEventListener("click",()=>{
+    const p=policies.find(x=>x.name===btn.dataset.policy);
+    log("policy","Shadow replay: "+p.name,p.match+"/"+p.samples+" matched · "+p.conflict+" conflicts","shadow");
+    toast("Shadow replay only — nothing was auto-enabled");
+  }));
+}
+function renderTimeline(){
+  const e=root.getElementById("timeline");
+  e.innerHTML=events.length?events.map(ev=>'<div class="event"><div class="time">'+esc(ev.time)+'</div><div><strong>'+esc(ev.title)+'</strong><div class="eventmeta">'+esc(ev.meta)+'</div></div><div class="status">'+esc(ev.status)+'</div></div>').join(""):'<div class="empty">No decisions yet.</div>';
+}
+function renderFlow(){
+  const e=root.getElementById("flow");
+  if(!selected){
+    e.innerHTML='<span class="node">machines</span><span class="arrow">→</span><span class="node hot">human:// queue empty</span><span class="arrow">→</span><span class="node">autonomous work continues</span>';
+    root.getElementById("pipelineState").textContent="no human boundary active";
+    return;
+  }
+  e.innerHTML='<span class="node">'+esc(selected.source)+'</span><span class="arrow">→</span><span class="node hot">'+esc(selected.uri)+'</span><span class="arrow">→</span><span class="node">YOU</span><span class="arrow">→</span><span class="node">'+esc(selected.source)+' resumes</span>';
+  root.getElementById("pipelineState").textContent="waiting for your decision";
+}
+function decide(action){
+  if(!selected)return;
+  if(action==="Defer"){
+    const d=selected;
+    d.priority=Math.max(10,d.priority-24);
+    items=items.filter(x=>x.id!==d.id);items.push(d);selected=items[0]||null;
+    log("decision","Deferred: "+d.title,"Kept in the queue without interrupting you.","deferred");
+    toast("Deferred — request stays alive but loses interrupt priority");render();return;
+  }
+  const item=selected;
+  let humanValue="";
+  const inp=root.getElementById("humanInput");
+  if(inp)humanValue=inp.value.trim();
+  items=items.filter(x=>x.id!==item.id);
+  resumed++;
+  log("decision",action+": "+item.title,(humanValue?"human input: "+humanValue+" · ":"")+item.source+" resumed from "+item.ref,"resumed");
+  root.getElementById("eventline").textContent=action+" → "+item.source+" resumed "+item.ref+" at "+now();
+  selected=items[0]||null;
+  toast(action+": original "+item.source+" workflow resumed");
+  render();
+}
+function resolveBatch(id,action){
+  const b=batches.find(x=>x.id===id);if(!b)return;
+  b.status="done";avoided+=b.count;resumed+=b.count;
+  log("batch",action+" batch: "+b.name,b.count+" machine decisions handled as one human review.","batched");
+  toast(b.count+" separate interruptions collapsed into one batch");
+  render();
+}
+function inject(){
+  const source=root.getElementById("injectSource").value;
+  const uri=root.getElementById("injectType").value;
+  const title=root.getElementById("injectTitle").value.trim()||"New machine request";
+  const id="inj-"+Date.now();
+  const typeMap={
+    "human://approve":{risk:"meaningful",actions:["Approve","Reject"],sec:8},
+    "human://review":{risk:"meaningful",actions:["Approve","Reject","Edit"],sec:14},
+    "human://clarify":{risk:"low",actions:["Submit"],sec:12,input:true},
+    "human://auth":{risk:"low",actions:["Mark reconnected","Defer"],sec:18}
+  };
+  const cfg=typeMap[uri];
+  const item={id,uri,source,ref:"live-"+String(Date.now()).slice(-5),title,summary:"A newly injected workflow reached a boundary that cannot continue without a person.",why:"This request was inserted live to demonstrate how Human Queue arbitrates unrelated machine work.",risk:cfg.risk,unblocks:Math.floor(Math.random()*4)+1,sec:cfg.sec,priority:Math.floor(Math.random()*23)+72,actions:cfg.actions,input:cfg.input,context:"demo=true · injected_at="+new Date().toISOString()};
+  items.push(item);items.sort((a,b)=>b.priority-a.priority);selected=item;
+  log("request","Injected from "+source,title,"queued");
+  toast(source+" entered the global Human Queue");render();
+}
+function toast(t){
+  const e=root.getElementById("toast");e.textContent=t;e.classList.add("show");
+  clearTimeout(window.__hqToast);window.__hqToast=setTimeout(()=>e.classList.remove("show"),2400);
+}
+root.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
+  root.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===t));
+  root.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
+  root.getElementById("view-"+t.dataset.view).classList.remove("hidden");
+}));
+root.getElementById("resetBtn").addEventListener("click",resetDemo);
+root.getElementById("injectBtn").addEventListener("click",inject);
+root.getElementById("injectTopBtn").addEventListener("click",()=>{
+  root.querySelector('[data-view="now"]').click();
+  root.getElementById("injectBox").scrollIntoView({behavior:"smooth",block:"center"});
+  root.getElementById("injectTitle").focus();
+});
 resetDemo();
+})();
 </script>
 </body>
 </html>
