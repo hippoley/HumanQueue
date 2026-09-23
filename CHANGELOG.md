@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 — self-hosted Human Gateway
+
+- Added `humanq onboard` to create local state and a private `hq_...` gateway token.
+- Added `humanq gateway run/status`, `humanq dashboard`, `humanq doctor`, and `humanq token rotate`.
+- Added Bearer-token protection for all `/v1/*` gateway APIs.
+- Added token-aware Python and JavaScript SDK clients.
+- Added one-command macOS/Linux/WSL installer plus Windows PowerShell installer.
+- Added Docker bootstrap that generates a gateway token and persistent local volume.
+- Added `docs/self-host.md` and made self-hosting the primary README quickstart.
+- Added secure dashboard token handoff via URL fragment + session storage.
+- Added gateway auth/token tests; suite now passes 14 tests.
+- Added a public-demo “Deploy yours” flow.
+
+
 ## 0.3.0 — `human://`
 
 The project stops presenting itself as an approval dashboard and becomes a small machine→human primitive.
