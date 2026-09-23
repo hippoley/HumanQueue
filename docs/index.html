@@ -134,7 +134,9 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
   <button class="tab active" data-view="now">Needs you now</button>
   <button class="tab" data-view="batches">Batches <span id="batchCount"></span></button>
   <button class="tab" data-view="policies">Policies waiting to exist</button>
-  <button class="tab" data-view="timeline">Decision timeline</button>\n  <button class="tab" data-view="deploy">Deploy yours</button>
+  <button class="tab" data-view="timeline">Decision timeline</button>
+  <button class="tab" data-view="connectors">Connector Lab</button>
+  <button class="tab" data-view="deploy">Deploy yours</button>
   <span class="badge">No login · all interactions are local demo state</span>
 </nav>
 
@@ -178,7 +180,65 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
 
 <main id="view-batches" class="view hidden"><div id="batches" class="cards"></div></main>
 <main id="view-policies" class="view hidden"><div id="policies" class="cards"></div></main>
-<main id="view-timeline" class="view hidden"><div id="timeline" class="timeline"></div></main>\n<main id="view-deploy" class="view hidden">
+<main id="view-timeline" class="view hidden"><div id="timeline" class="timeline"></div></main>
+<main id="view-connectors" class="view hidden">
+  <div class="cards">
+    <article class="card">
+      <div class="eyebrow">real · native round-trip</div>
+      <h3>Codex PermissionRequest</h3>
+      <div class="small">Session + turn + tool boundary enter the Gateway. Your decision returns as native allow/deny to the same waiting Codex tool call.</div>
+      <div class="code">humanq connect codex
+
+PermissionRequest → human://approve
+                 → allow | deny</div>
+      <div class="actions"><button class="btn primary" data-sim-connector="codex">Simulate Codex gate</button></div>
+    </article>
+    <article class="card">
+      <div class="eyebrow">real · conservative gate</div>
+      <h3>Cursor high-risk shell</h3>
+      <div class="small">Conversation is observed continuously, while only explicit high-risk beforeShellExecution commands are routed for human approval.</div>
+      <div class="code">humanq connect cursor
+
+beforeShellExecution
+→ permission: allow | deny | ask</div>
+      <div class="actions"><button class="btn primary" data-sim-connector="cursor">Simulate Cursor shell</button></div>
+    </article>
+    <article class="card">
+      <div class="eyebrow">real · semantic input</div>
+      <h3>MCP human_ask</h3>
+      <div class="small">Clarification, choice, review or edit blocks inside the same MCP tool call and returns the human result to that exact invocation.</div>
+      <div class="code">humanq mcp serve
+
+human_ask({
+  uri: "human://clarify"
+})</div>
+      <div class="actions"><button class="btn primary" data-sim-connector="mcp">Simulate human_ask</button></div>
+    </article>
+    <article class="card">
+      <div class="eyebrow">real · channel projection</div>
+      <h3>Signed Webhook Channel</h3>
+      <div class="small">A bounded dialogue capsule can appear in another UI. The signed action comes back to the Gateway; the channel never owns a second queue.</div>
+      <div class="code">humanq channel add webhook ops \
+  https://channel.example/human
+
+X-Human-Channel-Signature: sha256=…</div>
+      <div class="actions"><button class="btn" data-sim-connector="channel">Simulate channel projection</button></div>
+    </article>
+  </div>
+  <section class="pipeline">
+    <div class="pipelineTop"><h3>One request, many surfaces, one resume path</h3><div class="label">v0.5 connector runtime</div></div>
+    <div class="flow">
+      <span class="node">editor session</span><span class="arrow">→</span>
+      <span class="node">Native Connector</span><span class="arrow">→</span>
+      <span class="node hot">Human Gateway</span><span class="arrow">→</span>
+      <span class="node">Web / channel</span><span class="arrow">→</span>
+      <span class="node">native resume</span>
+    </div>
+    <div class="eventline">Implemented: Codex native approval · Cursor high-risk shell · MCP human_ask · generic signed webhook. Claude Code / OpenCode are not marked supported yet.</div>
+  </section>
+</main>
+
+<main id="view-deploy" class="view hidden">
   <div class="cards">
     <article class="card">
       <div class="eyebrow">01 · install</div>
@@ -369,6 +429,27 @@ function inject(){
   log("request","Injected from "+source,title,"queued");
   toast(source+" entered the global Human Queue");render();
 }
+function simulateConnector(kind){
+  if(kind==="channel"){
+    log("channel","Projected bounded dialogue capsule","request_id preserved · transcript path excluded · signed action returns to Gateway","projected");
+    toast("Third-party channel receives a bounded signed projection");
+    document.querySelector('[data-view="timeline"]').click();
+    return;
+  }
+  var presets={
+    codex:{uri:"human://approve",source:"Codex",title:"Allow Codex Bash: git push origin main?",summary:"Codex paused at its native PermissionRequest boundary.",why:"User: deploy only after CI is green. Agent: CI passed; preparing git push.",risk:"high",unblocks:1,sec:8,priority:99,actions:["Approve","Reject"],context:"provider=codex · session=thr_demo · turn=turn_12 · resume=PermissionRequest"},
+    cursor:{uri:"human://approve",source:"Cursor",title:"Allow Cursor shell: terraform apply?",summary:"The command matched the conservative high-risk beforeShellExecution gate.",why:"Ordinary Cursor tool calls remain native; this gate only catches explicitly risky shell.",risk:"high",unblocks:1,sec:8,priority:96,actions:["Approve","Reject"],context:"provider=cursor · conversation=conv_demo · generation=gen_7 · fallback=permission:ask"},
+    mcp:{uri:"human://clarify",source:"MCP Agent",title:"Which market should this launch plan optimize for?",summary:"human_ask is waiting inside the same MCP tool invocation.",why:"Returning an answer resumes the exact calling agent conversation.",risk:"low",unblocks:2,sec:15,priority:82,actions:["Submit"],input:true,context:"tool=human_ask · transport=stdio · result→same tools/call"}
+  };
+  var p=presets[kind];if(!p)return;
+  p.id="connector-"+kind+"-"+Date.now();
+  p.ref="native-"+String(Date.now()).slice(-5);
+  items.push(p);items.sort(function(a,b){return b.priority-a.priority});selected=p;
+  log("connector",p.source+" native event",p.title,"waiting");
+  document.querySelector('[data-view="now"]').click();
+  toast(p.source+" → Human Gateway");
+  render();
+}
 function toast(t){
   const e=root.getElementById("toast");e.textContent=t;e.classList.add("show");
   clearTimeout(window.__hqToast);window.__hqToast=setTimeout(()=>e.classList.remove("show"),2400);
@@ -385,6 +466,7 @@ root.getElementById("injectTopBtn").addEventListener("click",()=>{
   root.getElementById("injectBox").scrollIntoView({behavior:"smooth",block:"center"});
   root.getElementById("injectTitle").focus();
 });
+document.querySelectorAll("[data-sim-connector]").forEach(function(b){b.addEventListener("click",function(){simulateConnector(b.dataset.simConnector)})});
 resetDemo();
 })();
 </script>
