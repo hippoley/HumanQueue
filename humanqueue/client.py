@@ -19,7 +19,7 @@ class HumanQueue:
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 10.0):
-        self.base_url = (base_url or os.environ.get("HUMAN_QUEUE_URL") or "http://127.0.0.1:7482").rstrip("/")
+        self.base_url = (base_url or os.environ.get("HUMAN_QUEUE_URL") or gateway_url()).rstrip("/")
         self.timeout = timeout
 
     def ask(
