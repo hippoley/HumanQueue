@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from .adapters import ADAPTERS
 from .auth import require_gateway_token
 from .connector_registry import ConnectorEventIn, ConnectorRegistry
+from .context_enrichment import enrich_with_session_context
 from .demo import seed_wow
 from .humanize import to_attention_request
 from .models import (
@@ -119,7 +120,8 @@ async def channel_resolve(name: str, rid: str, request: Request):
 @app.post("/v1/human", status_code=201)
 def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
     try:
-        item = store.create(to_attention_request(ask))
+        req = enrich_with_session_context(to_attention_request(ask), connector_registry)
+        item = store.create(req)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     background_tasks.add_task(publish_request, item)
@@ -128,6 +130,7 @@ def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
 
 @app.post("/v1/requests", status_code=201)
 def create_request(req: AttentionRequestCreate, background_tasks: BackgroundTasks):
+    req = enrich_with_session_context(req, connector_registry)
     item = store.create(req)
     background_tasks.add_task(publish_request, item)
     return item
