@@ -59,58 +59,68 @@ def _sign(secret: str, body: bytes) -> str:
     return f"sha256={digest}"
 
 
-def publish_request(request: AttentionRequest) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    configs = channel_configs()
+def _publish_webhook_one(name: str, cfg: dict[str, Any], request: AttentionRequest) -> dict[str, Any]:
+    url = cfg.get("url")
+    secret = cfg.get("secret")
+    if not url or not secret:
+        return {"channel": name, "delivered": False, "error": "webhook config incomplete"}
 
-    for name, cfg in configs.items():
-        if cfg.get("type") != "webhook" or not cfg.get("enabled", True):
-            continue
-        url = cfg.get("url")
-        secret = cfg.get("secret")
-        if not url or not secret:
-            continue
+    payload = {
+        "event": "human.request.created",
+        "channel": name,
+        "request": {
+            "id": request.id,
+            "uri": uri_for_kind(request.kind),
+            "source": request.source,
+            "source_ref": request.source_ref,
+            "title": request.title,
+            "summary": request.summary,
+            "priority": request.priority,
+            "surface_mode": request.surface_mode.value,
+            "signals": request.signals.model_dump(mode="json"),
+            "actions": [o.model_dump(mode="json") for o in request.options],
+            "context": _bounded_context(request.context),
+        },
+        "resolve": {
+            "url": f"{gateway_url()}/channels/{name}/resolve/{request.id}",
+            "method": "POST",
+            "signature_header": "X-Human-Channel-Signature",
+        },
+    }
 
-        payload = {
-            "event": "human.request.created",
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+    headers = {
+        "content-type": "application/json",
+        "X-Human-Channel": name,
+        "X-Human-Channel-Signature": _sign(secret, body),
+    }
+    try:
+        response = httpx.post(str(url), content=body, headers=headers, timeout=1.2)
+        return {
             "channel": name,
-            "request": {
-                "id": request.id,
-                "uri": uri_for_kind(request.kind),
-                "source": request.source,
-                "source_ref": request.source_ref,
-                "title": request.title,
-                "summary": request.summary,
-                "priority": request.priority,
-                "surface_mode": request.surface_mode.value,
-                "signals": request.signals.model_dump(mode="json"),
-                "actions": [o.model_dump(mode="json") for o in request.options],
-                "context": _bounded_context(request.context),
-            },
-            "resolve": {
-                "url": f"{gateway_url()}/channels/{name}/resolve/{request.id}",
-                "method": "POST",
-                "signature_header": "X-Human-Channel-Signature",
-            },
+            "delivered": response.is_success,
+            "status_code": response.status_code,
         }
+    except Exception as exc:
+        return {"channel": name, "delivered": False, "error": str(exc)}
 
-        body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
-        headers = {
-            "content-type": "application/json",
-            "X-Human-Channel": name,
-            "X-Human-Channel-Signature": _sign(secret, body),
-        }
-        try:
-            response = httpx.post(str(url), content=body, headers=headers, timeout=1.2)
-            results.append({
-                "channel": name,
-                "delivered": response.is_success,
-                "status_code": response.status_code,
-            })
-        except Exception as exc:
-            results.append({"channel": name, "delivered": False, "error": str(exc)})
+
+def publish_request(request: AttentionRequest) -> list[dict[str, Any]]:
+    """Project one Gateway request into every enabled human-facing channel."""
+    results: list[dict[str, Any]] = []
+
+    for name, cfg in channel_configs().items():
+        if not cfg.get("enabled", True):
+            continue
+
+        channel_type = cfg.get("type")
+        if channel_type == "webhook":
+            results.append(_publish_webhook_one(name, cfg, request))
+        elif channel_type == "telegram":
+            from .telegram import publish_one
+            results.append(publish_one(name, cfg, request))
+
     return results
-
 
 def verify_resolution(name: str, body: bytes, signature: str | None) -> bool:
     cfg = channel_configs().get(name) or {}
