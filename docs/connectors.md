@@ -184,6 +184,22 @@ The callback verifies the channel HMAC, resolves the one Gateway request, reject
 
 When the webhook receiver is remote, set `HUMAN_QUEUE_URL` to a URL that receiver can reach. Local-only transports such as a future Slack Socket Mode or Telegram long-poll adapter can avoid opening the Gateway directly.
 
+### Telegram long-poll channel
+
+Telegram is a concrete channel implementation that requires no public inbound Gateway URL:
+
+```bash
+export HUMAN_QUEUE_TELEGRAM_BOT_TOKEN="123:..."
+export HUMAN_QUEUE_TELEGRAM_CHAT_ID="123456789"
+
+humanq channel add telegram phone
+humanq channel run phone
+```
+
+The Gateway sends each request to the configured chat with inline buttons. The local worker uses `getUpdates` long polling for `callback_query` events, verifies that the click came from the configured chat, resolves the canonical Gateway request, calls `answerCallbackQuery`, and removes the keyboard after a successful resolution.
+
+A Telegram bot cannot use `getUpdates` while it has an outgoing webhook configured. The worker checks `getWebhookInfo` at startup and refuses to run in that conflicting state rather than silently reconfigure your bot.
+
 Each channel adapter must:
 
 1. render a bounded `ContextCapsule`;
