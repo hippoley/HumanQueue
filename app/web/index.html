@@ -135,7 +135,17 @@ async function renderPolicies(suggestions){
   $('#policyGrid').innerHTML=cards.join('');
 }
 $$('.tab').forEach(t=>t.addEventListener('click',()=>{$$('.tab').forEach(x=>x.classList.toggle('active',x===t));$$('.view').forEach(v=>v.classList.add('hidden'));$(`#view-${t.dataset.view}`).classList.remove('hidden')}));
-try{const es=new EventSource('/v1/events/stream');es.addEventListener('changed',()=>load());es.onopen=()=>$('#liveText').textContent='control plane online';es.onerror=()=>$('#liveText').textContent='reconnecting…'}catch(_){setInterval(load,4000)}
+if(gatewayToken){
+  $('#liveText').textContent='secure gateway connected';
+  setInterval(load,2500);
+}else{
+  try{
+    const es=new EventSource('/v1/events/stream');
+    es.addEventListener('changed',()=>load());
+    es.onopen=()=>$('#liveText').textContent='control plane online';
+    es.onerror=()=>$('#liveText').textContent='token required';
+  }catch(_){setInterval(load,4000)}
+}
 load();
 </script>
 </body>
