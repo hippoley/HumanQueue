@@ -1,11 +1,20 @@
 services:
   human-queue:
     build: .
+    restart: unless-stopped
     ports:
-      - "7482:7482"
+      - "${HUMAN_QUEUE_PORT:-7482}:7482"
     volumes:
       - human-queue-data:/data
     environment:
       HUMAN_QUEUE_DB: /data/human-queue.db
+      HUMAN_QUEUE_TOKEN: ${HUMAN_QUEUE_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7482/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
 volumes:
   human-queue-data:
