@@ -4,7 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -25,7 +25,7 @@ from .models import (
 from .protocol import uri_for_kind
 from .resume import resume
 from .store import Store
-from humanqueue.config import db_path, gateway_token
+from humanqueue.channels.webhook import publish_request, verify_resolution\nfrom humanqueue.config import db_path, gateway_token
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -75,23 +75,68 @@ def gateway_info():
     }
 
 
+
+
+@app.post("/channels/{name}/resolve/{rid}")
+async def channel_resolve(name: str, rid: str, request: Request):
+    body = await request.body()
+    signature = request.headers.get("X-Human-Channel-Signature")
+    if not verify_resolution(name, body, signature):
+        raise HTTPException(401, "invalid channel signature")
+
+    try:
+        payload = json.loads(body)
+    except Exception as exc:
+        raise HTTPException(400, "invalid JSON body") from exc
+
+    action = str(payload.get("action") or "").strip()
+    if not action:
+        raise HTTPException(422, "action is required")
+
+    existing = store.get(rid)
+    if not existing:
+        raise HTTPException(404, "request not found")
+    if existing.status.value in {"resolved", "cancelled", "expired", "superseded"}:
+        raise HTTPException(409, f"request is already {existing.status.value}")
+
+    resolution = {
+        "action": action,
+        "values": payload.get("values") or {},
+        "comment": payload.get("comment"),
+    }
+    actor = str(payload.get("actor") or f"channel:{name}")
+    try:
+        item, finalized = store.resolve(rid, actor, resolution)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+    delivery = {"delivered": False, "reason": "waiting_for_quorum"}
+    if finalized:
+        delivery = await resume(item, item.resolution or resolution)
+    return {"request": item, "finalized": finalized, "resume": delivery}
+
 @app.post("/v1/human", status_code=201)
-def human_interrupt(ask: HumanAsk):
+def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
     try:
         item = store.create(to_attention_request(ask))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    background_tasks.add_task(publish_request, item)
     return {"human_uri": uri_for_kind(item.kind), "request": item}
 
 
 @app.post("/v1/requests", status_code=201)
-def create_request(req: AttentionRequestCreate):
-    return store.create(req)
+def create_request(req: AttentionRequestCreate, background_tasks: BackgroundTasks):
+    item = store.create(req)
+    background_tasks.add_task(publish_request, item)
+    return item
 
 
 @app.post("/v1/import", status_code=201)
-def import_request(env: ImportEnvelope):
-    return store.create(ADAPTERS[env.adapter](env.payload))
+def import_request(env: ImportEnvelope, background_tasks: BackgroundTasks):
+    item = store.create(ADAPTERS[env.adapter](env.payload))
+    background_tasks.add_task(publish_request, item)
+    return item
 
 
 @app.post("/v1/connectors/events", status_code=202)
