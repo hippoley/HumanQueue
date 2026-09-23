@@ -9,13 +9,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .adapters import ADAPTERS
+from .adapters import ADAPTERS\nfrom .auth import require_gateway_token
 from .demo import seed_wow
 from .humanize import to_attention_request
 from .models import AttentionRequestCreate, BatchResolveRequest, BudgetPolicy, ClaimRequest, HumanAsk, ImportEnvelope, ResolveRequest
 from .protocol import uri_for_kind
 from .resume import resume
-from .store import Store
+from .store import Store\nfrom humanqueue.config import db_path, gateway_token
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -23,8 +23,14 @@ DEFAULT_DB = Path.home() / ".human-queue" / "human-queue.db"
 DB_PATH = os.environ.get("HUMAN_QUEUE_DB", os.environ.get("ATTENTION_DB", str(DEFAULT_DB)))
 store = Store(DB_PATH)
 
-app = FastAPI(title="human://",version="0.3.0",description="One queue for everything that needs a human.")
+app = FastAPI(title="human://",version="0.4.0",description="One queue for everything that needs a human.")
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
+@app.middleware("http")
+async def gateway_auth(request: Request, call_next):
+    if request.url.path.startswith("/v1/"):
+        require_gateway_token(request)
+    return await call_next(request)
 
 @app.get("/")
 def home(): return FileResponse(WEB_DIR / "index.html")
