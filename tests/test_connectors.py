@@ -245,3 +245,48 @@ def test_webhook_channel_bounds_context():
     assert "transcript_locator" not in projected["native_handle"]
     assert projected["tool_input"] == {"command": "git push"}
     assert "unrelated_private_blob" not in projected
+
+
+def test_channel_callback_resolves_once_and_resumes(tmp_path: Path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    from app.models import AttentionRequestCreate, RequestKind
+    from app.store import Store
+
+    main.store = Store(str(tmp_path / "channel-roundtrip.db"))
+    item = main.store.create(AttentionRequestCreate(
+        source="codex",
+        source_ref="thr_1:turn_1:Bash",
+        title="Allow git push?",
+        summary="Native editor is waiting.",
+        kind=RequestKind.approval,
+    ))
+
+    monkeypatch.setattr(main, "verify_resolution", lambda name, body, signature: name == "ops")
+
+    resumed = {}
+
+    async def fake_resume(req, resolution):
+        resumed["request_id"] = req.id
+        resumed["action"] = resolution.get("action")
+        return {"delivered": True, "test": True}
+
+    monkeypatch.setattr(main, "resume", fake_resume)
+    client = TestClient(main.app)
+
+    first = client.post(
+        f"/channels/ops/resolve/{item.id}",
+        headers={"X-Human-Channel-Signature": "sha256=test"},
+        json={"actor": "channel:ops", "action": "approve"},
+    )
+    assert first.status_code == 200
+    assert first.json()["finalized"] is True
+    assert first.json()["resume"]["delivered"] is True
+    assert resumed == {"request_id": item.id, "action": "approve"}
+
+    second = client.post(
+        f"/channels/ops/resolve/{item.id}",
+        headers={"X-Human-Channel-Signature": "sha256=test"},
+        json={"actor": "channel:ops", "action": "approve"},
+    )
+    assert second.status_code == 409
