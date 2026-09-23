@@ -224,6 +224,17 @@ human_ask({
 X-Human-Channel-Signature: sha256=…</div>
       <div class="actions"><button class="btn" data-sim-connector="channel">Simulate channel projection</button></div>
     </article>
+    <article class="card">
+      <div class="eyebrow">real · outbound-only channel</div>
+      <h3>Telegram long-poll</h3>
+      <div class="small">Human Queue pushes bounded approval cards to your Telegram chat. A local worker receives callback_query events and resolves localhost — no public inbound Gateway port required.</div>
+      <div class="code">humanq channel add telegram phone \
+  --bot-token "$BOT_TOKEN" \
+  --chat-id "$CHAT_ID"
+
+humanq channel run phone</div>
+      <div class="actions"><button class="btn" data-sim-connector="telegram">Simulate phone approval</button></div>
+    </article>
   </div>
   <section class="pipeline">
     <div class="pipelineTop"><h3>One request, many surfaces, one resume path</h3><div class="label">v0.5 connector runtime</div></div>
@@ -234,7 +245,7 @@ X-Human-Channel-Signature: sha256=…</div>
       <span class="node">Web / channel</span><span class="arrow">→</span>
       <span class="node">native resume</span>
     </div>
-    <div class="eventline">Implemented: Codex native approval · Cursor high-risk shell · MCP human_ask · generic signed webhook. Claude Code / OpenCode are not marked supported yet.</div>
+    <div class="eventline">Implemented: Codex native approval · Cursor high-risk shell · MCP human_ask · signed webhook · Telegram long-poll. Claude Code / OpenCode are not marked supported yet.</div>
   </section>
 </main>
 
@@ -430,9 +441,9 @@ function inject(){
   toast(source+" entered the global Human Queue");render();
 }
 function simulateConnector(kind){
-  if(kind==="channel"){
-    log("channel","Projected bounded dialogue capsule","request_id preserved · transcript path excluded · signed action returns to Gateway","projected");
-    toast("Third-party channel receives a bounded signed projection");
+  if(kind==="channel"||kind==="telegram"){
+    log("channel",kind==="telegram"?"Telegram callback_query":"Projected bounded dialogue capsule",kind==="telegram"?"long poll → localhost resolve → native resume":"request_id preserved · transcript path excluded · signed action returns to Gateway","projected");
+    toast(kind==="telegram"?"Telegram approval returns through local long-poll worker":"Third-party channel receives a bounded signed projection");
     document.querySelector('[data-view="timeline"]').click();
     return;
   }
