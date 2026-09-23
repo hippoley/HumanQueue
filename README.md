@@ -377,10 +377,10 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 12 passed
+# 14 passed
 ```
 
-The current suite covers ranking, adapter import, idempotency, supersession, quorum, attention budgets, delegation candidates, `human://` mapping, invalid protocol requests, policy shadow replay, and the cross-platform demo seed.
+The current suite covers ranking, adapter import, idempotency, supersession, quorum, attention budgets, delegation candidates, `human://` mapping, invalid protocol requests, policy shadow replay, gateway-token authentication, token generation, and the cross-platform demo seed.
 
 ---
 
