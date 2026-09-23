@@ -81,7 +81,7 @@ class HumanQueue:
         if resume_url:
             payload["resume"] = {"mode": "webhook", "url": resume_url, "secret": resume_secret}
 
-        response = httpx.post(f"{self.base_url}/v1/human", json=payload, timeout=self.timeout)
+        response = httpx.post(f"{self.base_url}/v1/human", json=payload, headers=self._headers(), timeout=self.timeout)
         self._raise(response)
         item = response.json()["request"]
         if not wait:
@@ -91,7 +91,7 @@ class HumanQueue:
     def wait(self, request_id: str, *, timeout: float | None = None, poll_interval: float = 1.0) -> dict[str, Any]:
         started = time.monotonic()
         while True:
-            response = httpx.get(f"{self.base_url}/v1/requests/{request_id}", timeout=self.timeout)
+            response = httpx.get(f"{self.base_url}/v1/requests/{request_id}", headers=self._headers(), timeout=self.timeout)
             self._raise(response)
             item = response.json()["request"]
             status = item["status"]
