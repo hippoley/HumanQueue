@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .adapters import ADAPTERS
 from .auth import require_gateway_token
+from .connector_registry import ConnectorEventIn, ConnectorRegistry
 from .demo import seed_wow
 from .humanize import to_attention_request
 from .models import (
@@ -30,6 +31,7 @@ APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
 DB_PATH = db_path()
 store = Store(DB_PATH)
+connector_registry = ConnectorRegistry(DB_PATH)
 
 app = FastAPI(
     title="human://",
@@ -90,6 +92,24 @@ def create_request(req: AttentionRequestCreate):
 @app.post("/v1/import", status_code=201)
 def import_request(env: ImportEnvelope):
     return store.create(ADAPTERS[env.adapter](env.payload))
+
+
+@app.post("/v1/connectors/events", status_code=202)
+def connector_event(event: ConnectorEventIn):
+    return {"accepted": True, "capsule": connector_registry.record(event)}
+
+
+@app.get("/v1/connectors/sessions")
+def connector_sessions(limit: int = 100):
+    return {"sessions": connector_registry.sessions(limit=limit)}
+
+
+@app.get("/v1/connectors/sessions/{provider}/{session_id}")
+def connector_session(provider: str, session_id: str, event_limit: int = 20):
+    session = connector_registry.session(provider, session_id, event_limit=event_limit)
+    if not session:
+        raise HTTPException(404, "connector session not found")
+    return session
 
 
 @app.get("/v1/queue")
