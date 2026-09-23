@@ -349,3 +349,103 @@ def test_webhook_projection_includes_bounded_dialogue_not_transcript():
     assert projected["session_context"]["latest_user_prompt"] == "Please deploy after tests."
     assert projected["session_context"]["latest_assistant_message"] == "Tests passed."
     assert "transcript_locator" not in projected["session_context"]
+
+
+def test_telegram_message_contains_bounded_dialogue(tmp_path: Path):
+    from app.models import AttentionRequestCreate, RequestKind
+    from app.store import Store
+    from humanqueue.channels.telegram import render_message
+
+    s = Store(str(tmp_path / "telegram-message.db"))
+    item = s.create(AttentionRequestCreate(
+        source="codex",
+        source_ref="native-telegram",
+        title="Allow production deploy?",
+        summary="Codex is waiting.",
+        kind=RequestKind.approval,
+        context={
+            "session_context": {
+                "provider": "codex",
+                "session_id": "thr_tg",
+                "latest_user_prompt": "Deploy only after CI.",
+                "latest_assistant_message": "CI is green.",
+                "transcript_locator": "/private/transcript.jsonl",
+            }
+        },
+    ))
+    text, markup = render_message(item)
+    assert "Deploy only after CI." in text
+    assert "CI is green." in text
+    assert "/private/transcript.jsonl" not in text
+    assert markup["inline_keyboard"]
+
+
+def test_telegram_callback_parser_and_authorized_resolution(monkeypatch):
+    from humanqueue.channels import telegram
+
+    assert telegram.parse_callback_data("hq|attn_123|approve") == ("attn_123", "approve")
+    assert telegram.parse_callback_data("bad|attn_123|approve") is None
+
+    called = {}
+    monkeypatch.setattr(
+        telegram,
+        "_resolve_local",
+        lambda rid, action, actor: (
+            called.update({"rid": rid, "action": action, "actor": actor}) or True,
+            "Resolved in Human Queue",
+        ),
+    )
+
+    class DummyResponse:
+        status_code = 200
+        content = b'{}'
+        is_success = True
+        def json(self):
+            return {"ok": True}
+
+    monkeypatch.setattr(telegram.httpx, "post", lambda *a, **k: DummyResponse())
+
+    ok, message = telegram.handle_callback(
+        "phone",
+        {"type": "telegram", "bot_token": "bot-secret", "chat_id": "42"},
+        {
+            "id": "callback-1",
+            "data": "hq|attn_123|approve",
+            "from": {"id": 7},
+            "message": {"message_id": 99, "chat": {"id": 42}},
+        },
+    )
+    assert ok is True
+    assert called == {"rid": "attn_123", "action": "approve", "actor": "telegram:7"}
+
+
+def test_telegram_rejects_callback_from_other_chat(monkeypatch):
+    from humanqueue.channels import telegram
+
+    monkeypatch.setattr(
+        telegram,
+        "_resolve_local",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not resolve")),
+    )
+
+    class DummyResponse:
+        status_code = 200
+        content = b'{}'
+        is_success = True
+        def json(self):
+            return {"ok": True}
+
+    monkeypatch.setattr(telegram.httpx, "post", lambda *a, **k: DummyResponse())
+
+    ok, message = telegram.handle_callback(
+        "phone",
+        {"type": "telegram", "bot_token": "bot-secret", "chat_id": "42"},
+        {
+            "id": "callback-2",
+            "data": "hq|attn_123|approve",
+            "from": {"id": 7},
+            "message": {"message_id": 100, "chat": {"id": 999}},
+        },
+    )
+    assert ok is False
+    assert "not authorized" in message
