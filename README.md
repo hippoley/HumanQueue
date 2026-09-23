@@ -65,6 +65,18 @@ humanq gateway status
 humanq dashboard
 humanq doctor
 humanq token rotate
+
+# real editor connectors
+humanq connect codex
+humanq connect cursor
+humanq sessions
+
+# semantic human input for MCP-capable agents
+humanq mcp serve
+
+# project requests into your own third-party channel
+humanq channel add webhook ops https://your-channel.example/human
+humanq channel list
 ```
 
 Prefer containers?
@@ -264,15 +276,39 @@ original machine resumes
 - delegation frontier for repeated low-risk decisions
 - **policy sandbox** that shadow-replays a proposed policy against historical human choices without enabling it
 
-### Adapters in the prototype
+### Bidirectional connectors
+
+These are different from normalization adapters: they observe a real editor session and know how to return the human decision to the native waiting point.
+
+| Surface | Read session/context | Human → agent round-trip | Current scope |
+| --- | --- | --- | --- |
+| **Codex** | Native hooks: session, turn, prompt, final response, transcript locator | Native `PermissionRequest` allow/deny | Real connector |
+| **Cursor** | Native hooks: session, prompt, final response, transcript locator | Native `beforeShellExecution` permission | High-risk shell gate only |
+| **MCP** | Tool arguments supplied by the calling agent | `human_ask` tool result returns to the same MCP call | Real stdio bridge |
+| **Generic webhook channel** | Receives bounded ContextCapsule | Signed action callback resolves the Gateway request | Real channel projection |
+| Claude Code / OpenCode | — | — | Not implemented yet |
+
+```bash
+humanq connect codex
+humanq connect cursor
+humanq sessions
+```
+
+A connector stores a bounded `ContextCapsule` in the Gateway. Full editor transcripts are not copied into the queue by default; the transcript path is retained only as an on-demand locator.
+
+If a native editor connector cannot reach Human Queue or times out, it falls back to the editor's native approval path rather than silently allowing the action.
+
+See [Connector runtime](docs/connectors.md).
+
+### Normalization adapters
 
 - generic JSON
 - A2A `input-required` / auth-style states
-- MCP elicitation
-- OpenAI-style tool interruption
-- GitHub deployment approval shape
+- MCP-shaped elicitation payloads
+- OpenAI-style tool interruption payloads
+- GitHub deployment approval payloads
 
-These are normalization adapters, not claims of full production integrations yet.
+These adapters normalize external events into Human Queue. They are not the same as a native bidirectional editor integration.
 
 ---
 
@@ -351,6 +387,10 @@ GET  /v1/metrics                       attention metrics
 GET  /v1/delegation-frontier           policy candidates
 GET  /v1/policy-sandbox/{policy_key}   shadow replay
 GET  /v1/events/stream                 live queue changes
+POST /v1/connectors/events             native connector observations
+GET  /v1/connectors/sessions           observed agent/editor sessions
+GET  /v1/connectors/sessions/{p}/{id}  bounded session context + recent events
+POST /channels/{name}/resolve/{id}     signed third-party channel decision
 ```
 
 FastAPI also exposes interactive API docs at `/docs`.
@@ -377,10 +417,10 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 14 passed
+# 25 passed
 ```
 
-The current suite covers ranking, adapter import, idempotency, supersession, quorum, attention budgets, delegation candidates, `human://` mapping, invalid protocol requests, policy shadow replay, gateway-token authentication, token generation, and the cross-platform demo seed.
+The current suite covers queue semantics, gateway authentication, Codex and Cursor native decision round-trips, connector session tracking, MCP initialize/list/call behavior, signed bounded channel projection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
 
 ---
 
