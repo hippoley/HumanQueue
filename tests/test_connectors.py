@@ -290,3 +290,62 @@ def test_channel_callback_resolves_once_and_resumes(tmp_path: Path, monkeypatch)
         json={"actor": "channel:ops", "action": "approve"},
     )
     assert second.status_code == 409
+
+
+def test_gateway_enriches_permission_with_latest_dialogue(tmp_path: Path):
+    from app.context_enrichment import enrich_with_session_context
+    from app.models import AttentionRequestCreate, RequestKind
+
+    reg = ConnectorRegistry(str(tmp_path / "enrich.db"))
+    reg.record(ConnectorEventIn(
+        provider="codex",
+        event_name="UserPromptSubmit",
+        session_id="thr_dialogue",
+        turn_id="turn_9",
+        cwd="/repo",
+        latest_user_prompt="Deploy this only if CI is green.",
+    ))
+    reg.record(ConnectorEventIn(
+        provider="codex",
+        event_name="Stop",
+        session_id="thr_dialogue",
+        turn_id="turn_9",
+        latest_assistant_message="CI is green; preparing git push.",
+    ))
+
+    req = AttentionRequestCreate(
+        source="codex",
+        source_ref="native-1",
+        title="Allow git push?",
+        summary="Native permission boundary.",
+        kind=RequestKind.approval,
+        context={
+            "native_handle": {
+                "provider": "codex",
+                "session_id": "thr_dialogue",
+                "turn_id": "turn_9",
+                "resume_kind": "codex_permission_request",
+            }
+        },
+    )
+    enriched = enrich_with_session_context(req, reg)
+    session = enriched.context["session_context"]
+    assert session["latest_user_prompt"] == "Deploy this only if CI is green."
+    assert session["latest_assistant_message"] == "CI is green; preparing git push."
+
+
+def test_webhook_projection_includes_bounded_dialogue_not_transcript():
+    from humanqueue.channels.webhook import _bounded_context
+
+    projected = _bounded_context({
+        "session_context": {
+            "provider": "codex",
+            "session_id": "thr_1",
+            "latest_user_prompt": "Please deploy after tests.",
+            "latest_assistant_message": "Tests passed.",
+            "transcript_locator": "/private/transcript.jsonl",
+        }
+    })
+    assert projected["session_context"]["latest_user_prompt"] == "Please deploy after tests."
+    assert projected["session_context"]["latest_assistant_message"] == "Tests passed."
+    assert "transcript_locator" not in projected["session_context"]
