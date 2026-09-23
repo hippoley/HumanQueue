@@ -1,0 +1,11 @@
+services:
+  human-queue:
+    build: .
+    ports:
+      - "7482:7482"
+    volumes:
+      - human-queue-data:/data
+    environment:
+      HUMAN_QUEUE_DB: /data/human-queue.db
+volumes:
+  human-queue-data:
