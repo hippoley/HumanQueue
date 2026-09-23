@@ -170,6 +170,20 @@ def handle_callback(name: str, cfg: dict[str, Any], query: dict[str, Any]) -> tu
             )
         except Exception:
             pass
+
+    if result[0] and token and message.get("message_id") is not None and actual_chat:
+        try:
+            httpx.post(
+                _api(token, "editMessageReplyMarkup"),
+                json={
+                    "chat_id": actual_chat,
+                    "message_id": message.get("message_id"),
+                    "reply_markup": {"inline_keyboard": []},
+                },
+                timeout=3,
+            )
+        except Exception:
+            pass
     return result
 
 
@@ -181,6 +195,20 @@ def run_long_poll(name: str) -> int:
     token = str(cfg.get("bot_token") or "")
     if not token:
         raise RuntimeError("Telegram bot token is missing")
+
+    try:
+        info = httpx.post(_api(token, "getWebhookInfo"), timeout=4)
+        info.raise_for_status()
+        webhook_url = ((info.json().get("result") or {}).get("url") or "").strip()
+        if webhook_url:
+            raise RuntimeError(
+                "Telegram bot currently has a webhook configured. "
+                "getUpdates long polling cannot run until that webhook is removed."
+            )
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"Cannot verify Telegram bot configuration: {exc}") from exc
 
     offset: int | None = None
     print(f"human:// Telegram channel '{name}' listening")
