@@ -1,0 +1,42 @@
+{
+  "$defs": {
+    "ActionOption": {
+      "properties": {
+        "id": {"title": "Id","type": "string"},
+        "label": {"title": "Label","type": "string"},
+        "style": {"default": "default","enum": ["default","safe","danger"],"title": "Style","type": "string"}
+      },
+      "required": ["id","label"],"title": "ActionOption","type": "object"
+    },
+    "AttentionSignals": {
+      "properties": {
+        "urgency": {"default": 0.5,"maximum": 1,"minimum": 0,"title": "Urgency","type": "number"},
+        "unblock_value": {"default": 0.5,"maximum": 1,"minimum": 0,"title": "Unblock Value","type": "number"},
+        "blast_radius": {"default": 0.2,"maximum": 1,"minimum": 0,"title": "Blast Radius","type": "number"},
+        "risk_if_wrong": {"default": 0.5,"maximum": 1,"minimum": 0,"title": "Risk If Wrong","type": "number"},
+        "risk_if_delayed": {"default": 0.2,"maximum": 1,"minimum": 0,"title": "Risk If Delayed","type": "number"},
+        "human_effort_seconds": {"default": 30,"maximum": 86400,"minimum": 1,"title": "Human Effort Seconds","type": "integer"},
+        "downstream_blocked": {"default": 1,"maximum": 100000,"minimum": 0,"title": "Downstream Blocked","type": "integer"}
+      },"title": "AttentionSignals","type": "object"
+    },
+    "RequestKind": {"enum": ["approval","choice","input","edit","authenticate","review","claim"],"title": "RequestKind","type": "string"},
+    "ResumeTarget": {"properties": {"mode": {"default": "none","enum": ["webhook","none"],"title": "Mode","type": "string"},"url": {"anyOf": [{"format": "uri","maxLength": 2083,"minLength": 1,"type": "string"},{"type": "null"}],"default": null,"title": "Url"},"secret": {"anyOf": [{"type": "string"},{"type": "null"}],"default": null,"title": "Secret"}},"title": "ResumeTarget","type": "object"},
+    "RoutePolicy": {"properties": {"mode": {"default": "single","enum": ["single","any_of","quorum","all_of"],"title": "Mode","type": "string"},"actors": {"items": {"type": "string"},"title": "Actors","type": "array"},"quorum": {"default": 1,"maximum": 1000,"minimum": 1,"title": "Quorum","type": "integer"},"team": {"anyOf": [{"type": "string"},{"type": "null"}],"default": null,"title": "Team"},"escalation_after_seconds": {"anyOf": [{"maximum": 604800,"minimum": 60,"type": "integer"},{"type": "null"}],"default": null,"title": "Escalation After Seconds"}},"title": "RoutePolicy","type": "object"}
+  },
+  "properties": {
+    "source": {"description": "Platform or runtime, e.g. github, jira, openai-agents","title": "Source","type": "string"},
+    "source_ref": {"description": "Native request/task/session identifier","title": "Source Ref","type": "string"},
+    "title": {"title": "Title","type": "string"},"summary": {"title": "Summary","type": "string"},"kind": {"$ref": "#/$defs/RequestKind"},
+    "actor_hint": {"anyOf": [{"type": "string"},{"type": "null"}],"default": null,"title": "Actor Hint"},
+    "due_at": {"anyOf": [{"format": "date-time","type": "string"},{"type": "null"}],"default": null,"title": "Due At"},
+    "options": {"items": {"$ref": "#/$defs/ActionOption"},"title": "Options","type": "array"},
+    "fields_schema": {"anyOf": [{"additionalProperties": true,"type": "object"},{"type": "null"}],"default": null,"title": "Fields Schema"},
+    "context": {"additionalProperties": true,"title": "Context","type": "object"},"signals": {"$ref": "#/$defs/AttentionSignals"},"route": {"$ref": "#/$defs/RoutePolicy"},"resume": {"$ref": "#/$defs/ResumeTarget"},
+    "idempotency_key": {"anyOf": [{"type": "string"},{"type": "null"}],"default": null,"title": "Idempotency Key"},
+    "batch_key": {"anyOf": [{"type": "string"},{"type": "null"}],"default": null,"title": "Batch Key"},
+    "supersession_key": {"anyOf": [{"type": "string"},{"type": "null"}],"default": null,"title": "Supersession Key"},
+    "policy_key": {"anyOf": [{"type": "string"},{"type": "null"}],"default": null,"title": "Policy Key"},
+    "attention_group": {"default": "default","title": "Attention Group","type": "string"}
+  },
+  "required": ["source","source_ref","title","summary","kind"],"title": "AttentionRequestCreate","type": "object","$id": "urn:human-queue:attention-request:v0.3"
+}
