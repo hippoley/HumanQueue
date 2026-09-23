@@ -130,3 +130,32 @@ def test_home_is_product_surface(tmp_path: Path):
     assert response.status_code == 200
     assert "YOU ARE BLOCKING" in response.text
     assert "human://" in response.text
+
+
+def test_gateway_token_protects_v1_routes(tmp_path: Path, monkeypatch):
+    from app import main
+    import app.auth as auth
+
+    main.store = Store(str(tmp_path / "auth.db"))
+    monkeypatch.setattr(auth, "gateway_token", lambda: "hq_test_secret")
+    client = TestClient(main.app)
+
+    assert client.get("/health").status_code == 200
+    denied = client.post("/v1/human", json={
+        "uri":"human://approve","source":"agent","ref":"1","title":"Continue?"
+    })
+    assert denied.status_code == 401
+
+    allowed = client.post(
+        "/v1/human",
+        headers={"Authorization":"Bearer hq_test_secret"},
+        json={"uri":"human://approve","source":"agent","ref":"1","title":"Continue?"},
+    )
+    assert allowed.status_code == 201
+
+
+def test_gateway_token_shape():
+    from humanqueue.config import generate_token
+    token = generate_token()
+    assert token.startswith("hq_")
+    assert len(token) > 20
