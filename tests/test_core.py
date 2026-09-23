@@ -159,3 +159,24 @@ def test_gateway_token_shape():
     token = generate_token()
     assert token.startswith("hq_")
     assert len(token) > 20
+
+
+def test_standard_resolve_rejects_duplicate_terminal_decision(tmp_path: Path):
+    from app import main
+    import app.auth as auth
+
+    main.store = Store(str(tmp_path / "duplicate-resolve.db"))
+    client = TestClient(main.app)
+    item = main.store.create(req())
+
+    first = client.post(
+        f"/v1/requests/{item.id}/resolve",
+        json={"actor": "alice", "action": "approve"},
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        f"/v1/requests/{item.id}/resolve",
+        json={"actor": "alice", "action": "approve"},
+    )
+    assert second.status_code == 409
