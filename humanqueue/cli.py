@@ -6,70 +6,173 @@ import threading
 import webbrowser
 from pathlib import Path
 
+import httpx
 import uvicorn
 
-DEFAULT_DB = Path.home() / ".human-queue" / "human-queue.db"
-
-
-def _db_path(value: str | None) -> str:
-    return value or os.environ.get("HUMAN_QUEUE_DB") or str(DEFAULT_DB)
+from .config import CONFIG_PATH, db_path, ensure_config, gateway_url, load_config, save_config, generate_token
 
 
 def _open_later(url: str) -> None:
-    threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
 
-def demo(args: argparse.Namespace) -> None:
-    db = _db_path(args.db)
-    os.environ["HUMAN_QUEUE_DB"] = db
-    from app.demo import seed_wow
-    from app.store import Store
+def onboard(args: argparse.Namespace) -> None:
+    cfg = ensure_config(host=args.host, port=args.port, force=args.force)
+    if args.demo:
+        from app.demo import seed_wow
+        from app.store import Store
+        seed_wow(Store(cfg["db"]), reset=True)
+    print("\n  human://  local gateway initialized")
+    print(f"  State      {CONFIG_PATH.parent}")
+    print(f"  Dashboard  {gateway_url()}")
+    print(f"  Token      {cfg['token']}")
+    print("\n  Next:")
+    print("    humanq gateway run")
+    print("    humanq dashboard")
+    print("\n  Agent endpoint:")
+    print(f"    {gateway_url()}/v1/human\n")
 
-    store = Store(db)
-    seed_wow(store, reset=True)
-    url = f"http://{args.host if args.host != '0.0.0.0' else '127.0.0.1'}:{args.port}"
-    print("\n  human://  One queue for everything that needs a human.")
-    print(f"  Demo seeded → {url}\n")
-    if not args.no_open:
-        _open_later(url)
-    uvicorn.run("app.main:app", host=args.host, port=args.port, reload=False)
+
+def _run_gateway(host: str | None, port: int | None, reload: bool = False) -> None:
+    cfg = load_config() or ensure_config()
+    bind = host or cfg.get("host", "127.0.0.1")
+    listen = int(port or cfg.get("port", 7482))
+    os.environ["HUMAN_QUEUE_DB"] = db_path()
+    uvicorn.run("app.main:app", host=bind, port=listen, reload=reload)
 
 
 def serve(args: argparse.Namespace) -> None:
-    os.environ["HUMAN_QUEUE_DB"] = _db_path(args.db)
-    uvicorn.run("app.main:app", host=args.host, port=args.port, reload=args.reload)
+    _run_gateway(args.host, args.port, args.reload)
+
+
+def gateway_run(args: argparse.Namespace) -> None:
+    _run_gateway(args.host, args.port, args.reload)
+
+
+def gateway_status(_: argparse.Namespace) -> None:
+    url = gateway_url()
+    try:
+        r = httpx.get(url + "/health", timeout=2)
+        r.raise_for_status()
+        print(f"human:// gateway online  {url}")
+    except Exception as exc:
+        print(f"human:// gateway offline {url}")
+        print(f"reason: {exc}")
+        raise SystemExit(1)
+
+
+def dashboard(args: argparse.Namespace) -> None:
+    cfg = load_config() or ensure_config()
+    url = gateway_url()
+    print(f"Dashboard  {url}")
+    print(f"Token      {cfg['token']}")
+    print("The browser receives the token in the URL fragment once, then keeps it in session storage.")
+    if not args.no_open:
+        _open_later(url + "/#token=" + cfg["token"])
+
+
+def doctor(_: argparse.Namespace) -> None:
+    cfg = load_config()
+    issues = []
+    if not cfg:
+        issues.append("not onboarded: run humanq onboard")
+    else:
+        p = Path(cfg.get("db", db_path()))
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            probe = p.parent / ".write-test"
+            probe.write_text("ok")
+            probe.unlink()
+        except Exception as exc:
+            issues.append(f"state directory is not writable: {exc}")
+        if not str(cfg.get("token", "")).startswith("hq_"):
+            issues.append("gateway token is missing or malformed")
+    if issues:
+        print("human:// doctor found problems:")
+        for x in issues:
+            print(" - " + x)
+        raise SystemExit(1)
+    print("human:// doctor: OK")
+    print(f" config  {CONFIG_PATH}")
+    print(f" db      {cfg['db']}")
+    print(f" bind    {cfg['host']}:{cfg['port']}")
+
+
+def rotate_token(_: argparse.Namespace) -> None:
+    cfg = load_config() or ensure_config()
+    cfg["token"] = generate_token()
+    save_config(cfg)
+    print("New gateway token:")
+    print(cfg["token"])
+    print("Restart the gateway so all clients use the new token.")
+
+
+def demo(args: argparse.Namespace) -> None:
+    cfg = load_config() or ensure_config()
+    from app.demo import seed_wow
+    from app.store import Store
+    seed_wow(Store(cfg["db"]), reset=True)
+    url = gateway_url()
+    print(f"Demo seeded → {url}")
+    if not args.no_open:
+        _open_later(url + "/#token=" + cfg["token"])
+    _run_gateway(args.host, args.port, False)
 
 
 def seed(args: argparse.Namespace) -> None:
-    db = _db_path(args.db)
-    os.environ["HUMAN_QUEUE_DB"] = db
+    cfg = load_config() or ensure_config()
     from app.demo import seed_wow
     from app.store import Store
-
-    ids = seed_wow(Store(db), reset=args.reset)
-    print(f"Seeded {len(ids)} visible machine→human interrupts into {db}")
+    ids = seed_wow(Store(cfg["db"]), reset=args.reset)
+    print(f"Seeded {len(ids)} visible machine→human interrupts into {cfg['db']}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="humanq", description="One queue for everything that needs a human.")
+    parser = argparse.ArgumentParser(prog="humanq", description="Self-hosted human:// gateway.")
     sub = parser.add_subparsers(dest="command")
 
-    p_demo = sub.add_parser("demo", help="seed the wow demo and open the local inbox")
-    p_demo.add_argument("--host", default="127.0.0.1")
-    p_demo.add_argument("--port", type=int, default=7482)
-    p_demo.add_argument("--db")
+    p_onboard = sub.add_parser("onboard", help="create local state and a gateway token")
+    p_onboard.add_argument("--host", default="127.0.0.1")
+    p_onboard.add_argument("--port", type=int, default=7482)
+    p_onboard.add_argument("--force", action="store_true")
+    p_onboard.add_argument("--demo", action="store_true")
+    p_onboard.set_defaults(func=onboard)
+
+    p_gateway = sub.add_parser("gateway", help="run or inspect the local gateway")
+    gs = p_gateway.add_subparsers(dest="gateway_command")
+    p_run = gs.add_parser("run", help="run the gateway")
+    p_run.add_argument("--host")
+    p_run.add_argument("--port", type=int)
+    p_run.add_argument("--reload", action="store_true")
+    p_run.set_defaults(func=gateway_run)
+    p_status = gs.add_parser("status", help="check gateway health")
+    p_status.set_defaults(func=gateway_status)
+
+    p_dashboard = sub.add_parser("dashboard", help="open the local Human Queue UI")
+    p_dashboard.add_argument("--no-open", action="store_true")
+    p_dashboard.set_defaults(func=dashboard)
+
+    p_doctor = sub.add_parser("doctor", help="validate local configuration")
+    p_doctor.set_defaults(func=doctor)
+
+    p_token = sub.add_parser("token", help="manage the gateway token")
+    ts = p_token.add_subparsers(dest="token_command")
+    p_rotate = ts.add_parser("rotate", help="rotate the gateway token")
+    p_rotate.set_defaults(func=rotate_token)
+
+    p_demo = sub.add_parser("demo", help="seed demo work and run the gateway")
+    p_demo.add_argument("--host")
+    p_demo.add_argument("--port", type=int)
     p_demo.add_argument("--no-open", action="store_true")
     p_demo.set_defaults(func=demo)
 
-    p_serve = sub.add_parser("serve", help="run the Human Queue server")
-    p_serve.add_argument("--host", default="127.0.0.1")
-    p_serve.add_argument("--port", type=int, default=7482)
-    p_serve.add_argument("--db")
+    p_serve = sub.add_parser("serve", help="compatibility alias for gateway run")
+    p_serve.add_argument("--host")
+    p_serve.add_argument("--port", type=int)
     p_serve.add_argument("--reload", action="store_true")
     p_serve.set_defaults(func=serve)
 
     p_seed = sub.add_parser("seed", help="seed demo interrupts")
-    p_seed.add_argument("--db")
     p_seed.add_argument("--reset", action="store_true")
     p_seed.set_defaults(func=seed)
 
