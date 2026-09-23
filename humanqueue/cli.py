@@ -147,6 +147,16 @@ def connect(args: argparse.Namespace) -> None:
         print("\nCodex requires review of new non-managed hooks.")
         print("Open Codex and run /hooks once to trust the Human Queue hook definition.")
         return
+    if args.provider == "cursor":
+        from .connectors.cursor import install_cursor_hooks
+        result = install_cursor_hooks()
+        print("human:// connected to Cursor")
+        print(f" hooks      {result['hooks_path']}")
+        print(f" detected   {'yes' if result['cursor_detected'] else 'not on PATH'}")
+        print(" observe    session + prompt + final response")
+        print(" gate       high-risk beforeShellExecution")
+        print(" roundtrip  native permission allow/deny/ask")
+        return
     raise SystemExit(f"unsupported connector: {args.provider}")
 
 
@@ -156,12 +166,20 @@ def disconnect(args: argparse.Namespace) -> None:
         result = uninstall_codex_hooks()
         print(json.dumps(result, indent=2))
         return
+    if args.provider == "cursor":
+        from .connectors.cursor import uninstall_cursor_hooks
+        result = uninstall_cursor_hooks()
+        print(json.dumps(result, indent=2))
+        return
     raise SystemExit(f"unsupported connector: {args.provider}")
 
 
 def connector_hook(args: argparse.Namespace) -> None:
     if args.mode.startswith("codex-"):
         from .connectors.codex import hook_main
+        raise SystemExit(hook_main(args.mode))
+    if args.mode.startswith("cursor-"):
+        from .connectors.cursor import hook_main
         raise SystemExit(hook_main(args.mode))
     raise SystemExit(f"unknown hook mode: {args.mode}")
 
@@ -224,11 +242,11 @@ def main() -> None:
     p_dashboard.set_defaults(func=dashboard)
 
     p_connect = sub.add_parser("connect", help="install an editor/agent connector")
-    p_connect.add_argument("provider", choices=["codex"])
+    p_connect.add_argument("provider", choices=["codex", "cursor"])
     p_connect.set_defaults(func=connect)
 
     p_disconnect = sub.add_parser("disconnect", help="remove an editor/agent connector")
-    p_disconnect.add_argument("provider", choices=["codex"])
+    p_disconnect.add_argument("provider", choices=["codex", "cursor"])
     p_disconnect.set_defaults(func=disconnect)
 
     p_sessions = sub.add_parser("sessions", help="show sessions observed from connected agents")
