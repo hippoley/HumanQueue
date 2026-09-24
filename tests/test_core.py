@@ -1,3 +1,6 @@
+import asyncio
+
+import httpx
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -223,3 +226,58 @@ def test_channel_delivery_failure_is_audited_without_consuming_request(tmp_path:
 
     # Delivery evidence is not yet a lifecycle decision. The obligation remains pending.
     assert main.store.get(rid).status.value == "pending"
+
+
+def test_resume_transport_error_returns_evidence_instead_of_raising(tmp_path: Path, monkeypatch):
+    import app.resume as resume_module
+
+    item = Store(str(tmp_path / "resume-transport.db")).create(
+        req(
+            resume={
+                "mode": "webhook",
+                "url": "https://example.invalid/human-resume",
+                "secret": "test-secret",
+            }
+        )
+    )
+
+    class BrokenAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            raise RuntimeError("simulated network failure")
+
+    monkeypatch.setattr(resume_module.httpx, "AsyncClient", BrokenAsyncClient)
+
+    result = asyncio.run(resume_module.resume(item, {"action": "approve"}))
+    assert result["delivered"] is False
+    assert result["confirmed"] is False
+    assert result["reason"] == "resume_transport_error"
+    assert "network failure" in result["error"]
+
+
+def test_resume_receipt_must_bind_to_exact_request_id():
+    from app.resume import _receipt_confirmation
+
+    good = httpx.Response(
+        200,
+        json={"request_id": "attn_exact", "resumed": True},
+    )
+    confirmed, receipt = _receipt_confirmation("attn_exact", good)
+    assert confirmed is True
+    assert receipt == {"request_id": "attn_exact", "resumed": True}
+
+    stale = httpx.Response(
+        200,
+        json={"request_id": "attn_stale", "resumed": True},
+    )
+    confirmed, receipt = _receipt_confirmation("attn_exact", stale)
+    assert confirmed is False
+    assert receipt["request_id"] == "attn_stale"
