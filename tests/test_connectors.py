@@ -132,7 +132,7 @@ def test_mcp_server_initialize_and_tool_list():
         "params": {},
     })
     names = [x["name"] for x in tools["result"]["tools"]]
-    assert names == ["human_ask"]
+    assert names == ["human_ask", "human_presence_list", "human_presence_summary"]
 
 
 def test_mcp_human_ask_returns_structured_decision(monkeypatch):
@@ -541,3 +541,30 @@ def test_slack_decision_value_and_bounded_blocks(tmp_path: Path):
     assert "CI passed." in encoded
     assert "/private/full.jsonl" not in encoded
     assert "humanq_decision" in encoded
+
+
+def test_mcp_presence_summary(monkeypatch):
+    class DummyResponse:
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {
+                "sessions": [
+                    {"provider": "openclaw", "account": "work", "state": "running", "session_id": "a"},
+                    {"provider": "muse", "account": "local", "state": "waiting_human", "session_id": "b"},
+                    {"provider": "cursor", "account": "local", "state": "failed", "session_id": "c"},
+                ]
+            }
+
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda *a, **k: DummyResponse())
+    response = mcp_server.handle({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {"name": "human_presence_summary", "arguments": {}},
+    })
+    structured = response["result"]["structuredContent"]
+    assert structured["total"] == 3
+    assert structured["counts"]["running"] == 1
+    assert structured["counts"]["waiting_human"] == 1
+    assert len(structured["needs_attention"]) == 2
