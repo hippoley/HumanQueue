@@ -27,6 +27,7 @@ from .protocol import uri_for_kind
 from .presence_registry import PresenceRegistry, PresenceUpdate
 from .resume import resume
 from .store import Store
+from humanqueue import __version__
 from humanqueue.channels.webhook import publish_request, verify_resolution
 from humanqueue.config import db_path, gateway_token
 
@@ -39,7 +40,7 @@ presence_registry = PresenceRegistry(DB_PATH)
 
 app = FastAPI(
     title="human://",
-    version="0.6.0",
+    version=__version__,
     description="Self-hosted control plane for routing human decisions back to the exact paused agent.",
 )
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
@@ -66,14 +67,14 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"ok": True, "name": "human://", "version": "0.6.0"}
+    return {"ok": True, "name": "human://", "version": __version__}
 
 
 @app.get("/gateway")
 def gateway_info():
     return {
         "name": "human://",
-        "version": "0.6.0",
+        "version": __version__,
         "auth_required": bool(gateway_token()),
         "self_hosted": True,
     }
