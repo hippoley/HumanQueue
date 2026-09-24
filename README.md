@@ -1,59 +1,63 @@
 # `human://`
 
-### Route human decisions back to the exact agent that is waiting.
+## Your agent isn't stuck. Its human answer got lost.
 
-**[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Evidence log](https://github.com/hippoley/HumanQueue/issues/1)** · Apache-2.0
+**HumanQueue routes a human decision back to the exact agent, session and run that is waiting.**
 
-Human Queue is a self-hosted control plane for one failure shape that keeps showing up in real agent runtimes:
-
-> a machine reaches a human boundary, the request is visible somewhere — but the answer cannot be reliably correlated back to the exact paused session.
-
-This is not primarily an approval-UI problem. It is a **pending-decision routing** problem.
+[**Try the live demo →**](https://hippoley.github.io/PAJ-Eval/human-queue/) · [Evidence from real agent failures](https://github.com/hippoley/HumanQueue/issues/1) · Apache-2.0
 
 ```text
-agent/runtime
-   │
-   ▼
-authoritative pending decision
-   │
-   ├── source + account + session identity
-   ├── bounded context
-   ├── authorized resolver
-   ├── dedupe / supersession / expiry
-   └── native resume handle
-   │
-   ▼
-web · phone · Slack · Telegram
-   │
-   ▼
-resolve once → resume exact waiting run
+Claude Code ─┐
+Codex ───────┤
+Cursor ──────┤     one pending human boundary
+OpenCode ────┼──► human:// ───► web / phone / Slack / Telegram
+MCP ─────────┤                         │
+your agent ──┘                         ▼
+                              exact waiting run resumes
 ```
 
-The project is intentionally being shaped against public failure reports, not a feature wishlist. If native runtimes solve these cases cleanly and users no longer need cross-session or cross-runtime routing, Human Queue should stay small.
+Agents are getting better at working without you.
 
-## Why this exists
+That creates a surprisingly boring failure mode: **they get stuck waiting for you somewhere you aren't looking.**
 
-The evidence thread tracks concrete failures across Claude Code, OpenCode and other agent runtimes:
+A background agent asks permission. A nested session needs clarification. A production workflow pauses for review. The request may even reach Slack or your phone — but the answer still has to return to the **right pending execution**, once, without reviving stale work or approving the wrong session.
 
-- a background or nested session can reach a permission boundary that the operator cannot reliably answer;
-- a transport can display the request but still fail to resume the owning run;
-- a local runtime bug can create a **false human boundary** that should be fixed upstream instead of becoming another queue item;
-- once several sessions or runtimes are active, the hard part becomes identifying which human decision belongs to which paused execution.
+That is the problem HumanQueue is built around.
 
-That leads to a deliberately narrow primitive:
+### Not another approval dashboard
+
+The UI is the easy part.
+
+The primitive is:
 
 ```text
-detect real human boundary
-→ assign stable identity
-→ expose only bounded context
-→ resolve exactly once
-→ resume the original run
-→ keep an auditable outcome
+(source, account, session, native request)
+                  │
+                  ▼
+        authoritative pending decision
+                  │
+       ┌──────────┼──────────┐
+       │          │          │
+    identity   bounded    resolver
+              context      auth
+       │          │          │
+       └──────────┼──────────┘
+                  ▼
+       dedupe · supersede · expire
+                  │
+                  ▼
+             resolve once
+                  │
+                  ▼
+          native resume handle
+                  │
+                  ▼
+          exact run continues
 ```
 
-If your runtime already does that, use its native approval UI.
+If your runtime already does this reliably, **use its native UI**. HumanQueue is for the cases that survive that fix: background sessions, nested agents, multiple runtimes, another device, another channel, or an operator who needs one trustworthy place to answer.
 
-## Try the core loop
+## 60 seconds to the first human boundary
 
 ```bash
 git clone https://github.com/hippoley/HumanQueue.git
@@ -62,41 +66,59 @@ pip install -e .
 humanq demo
 ```
 
-Then open `http://127.0.0.1:7482`.
+Open `http://127.0.0.1:7482`.
 
-For a real request:
+You will see machines that are actually waiting for a human decision — not a generic task inbox.
 
-```bash
-curl http://127.0.0.1:7482/v1/human \
-  -H "Content-Type: application/json" \
-  -d '{
-    "uri":"human://approve",
-    "source":"my-agent",
-    "ref":"run-42",
-    "title":"Deploy to production?"
-  }'
+```text
+YOU ARE BLOCKING 5 MACHINES.
+
+#1  human://approve
+    Delete production cache keys?
+    high consequence · unblocks 1 · ~8 sec
+
+#2  human://approve
+    Deploy api@2.4.0 to production
+    unblocks 4 · ~6 sec
+
+#3  human://auth
+    Reconnect Salesforce credential
 ```
 
-The success condition is not “the card appeared in a dashboard.”
+The demo is successful only when the decision returns to the correct waiting execution.
 
-It is:
+## Built against failures, not a feature wishlist
 
-> **the human decision is accepted once, correlated to the right pending boundary, and the exact blocked execution resumes.**
+HumanQueue has a public [evidence log](https://github.com/hippoley/HumanQueue/issues/1). The architecture changes when reality disagrees with it.
 
-## Reality contract
-
-Human Queue should only grow when one of these is observed in a real workflow:
-
-| Evidence | What it unlocks |
+| What we observe in a real workflow | What we do |
 | --- | --- |
-| runtime-local routing bug only | fix upstream; do not add Human Queue complexity |
-| unreachable background/nested human boundary | connector or pending-decision primitive |
-| duplicate / stale / superseded prompts | stronger correlation + dedupe semantics |
-| operator must answer from another surface | channel projection |
-| several runtimes need one place to resolve real boundaries | cross-runtime control plane |
-| repeated low-risk decisions with stable human behavior | policy candidate, shadow-only first |
+| runtime routed its own prompt incorrectly | fix upstream; **do not grow HumanQueue** |
+| background/nested request has no reachable responder | strengthen pending-decision + connector path |
+| stale or duplicate prompt can still be answered | strengthen correlation / supersession |
+| operator must answer from another device/channel | project the same canonical decision outward |
+| several runtimes expose real human boundaries | normalize them into one control plane |
+| repeated low-risk decisions become predictable | shadow a policy candidate; never silently enable it |
 
-The public [evidence log](https://github.com/hippoley/HumanQueue/issues/1) is part of the product. Evidence that removes a roadmap item is as valuable as evidence that adds one.
+That gives this project a falsifiable thesis:
+
+> **If native runtimes make every human boundary reachable and resumable, and cross-runtime operators don't need a shared control plane, HumanQueue should stay small.**
+
+That's a feature, not a failure.
+
+## The contract
+
+A HumanQueue integration should be able to prove five things:
+
+**1. The boundary is real.** The machine genuinely cannot or should not continue alone.
+
+**2. Identity survives transport.** A Slack card, Telegram button or web UI never becomes the source of truth.
+
+**3. Old decisions die.** Superseded, expired and already-resolved requests cannot revive stale execution.
+
+**4. Resolution is exact.** The answer maps back to the native request that created the boundary.
+
+**5. Failure stays safe.** If HumanQueue disappears, a connector falls back to the runtime's native approval path rather than silently allowing an action.
 
 ### What works today
 
