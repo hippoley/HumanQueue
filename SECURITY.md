@@ -53,6 +53,20 @@ For semantic confirmation, the target can return:
 
 Human Queue accepts this as confirmed only when the returned `request_id` exactly matches the request being resumed.
 
+## Identity integrity
+
+Human Queue does not use placeholder identity as authority.
+
+When a source cannot provide a stable request/session/turn identity:
+
+- request display may still use an explicit `unidentified` label;
+- idempotency must be disabled;
+- supersession must be disabled;
+- Presence must not guess an owner;
+- an old human decision must not be reused merely because tool name/input happens to match.
+
+This deliberately favors duplicate human requests over cross-session decision reuse.
+
 ## Fail-closed rules
 
 Human Queue should never convert infrastructure failure into implicit permission.
