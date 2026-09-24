@@ -130,6 +130,29 @@ The resulting audit semantics are:
 
 This avoids treating “HTTP 200” as proof that the correct waiting session consumed the decision.
 
+## Responder identity boundary
+
+Human Queue currently enforces responder policy with `route.actors`, but those actor strings are only as trustworthy as the surface that supplies them.
+
+Current trust model:
+
+- Slack Socket Mode derives the actor from Slack's authenticated interaction payload;
+- Telegram long polling derives the actor from Telegram's callback user and verifies the configured chat;
+- signed generic webhooks trust the configured channel secret to assert the actor;
+- direct Gateway API calls are trusted at the Gateway bearer-token boundary.
+
+Human Queue does **not** yet provide an independent per-human identity provider or IAM layer. A value such as `slack:U123` is therefore an authenticated channel identity only when it came through the trusted Slack connector path; the same string supplied by an administrator holding the Gateway token is still an administrator assertion.
+
+This is intentionally documented as a boundary rather than hidden behind the phrase “authorized resolver.” If a deployment needs CODEOWNER-, role-, organization- or directory-backed authorization, that policy must currently be enforced by the trusted channel/application or by a future responder-authorization layer.
+
+## Native blocking connectors
+
+Codex, Claude Code, Cursor and MCP-style blocking calls can wait synchronously for Human Queue and return the human decision directly through the host's native hook/tool call.
+
+For these paths, `resume.mode = none` is expected. The audit event is `resume_not_applicable`, not `resume_undeliverable`.
+
+A native hook returning a decision proves only that Human Queue returned a decision to the connector. Whether the host runtime actually consumes that decision is still runtime-specific evidence; this is especially important for background-session bugs where a host may discard a hook result.
+
 ## Safety invariants
 
 - Notification priority is not authorization.
