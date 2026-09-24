@@ -180,3 +180,46 @@ def test_standard_resolve_rejects_duplicate_terminal_decision(tmp_path: Path):
         json={"actor": "alice", "action": "approve"},
     )
     assert second.status_code == 409
+
+
+def test_channel_delivery_failure_is_audited_without_consuming_request(tmp_path: Path, monkeypatch):
+    from app import main
+
+    main.store = Store(str(tmp_path / "delivery-audit.db"))
+    monkeypatch.setattr(
+        main,
+        "publish_request",
+        lambda item: [
+            {
+                "channel": "ops",
+                "delivered": False,
+                "error": "simulated unreachable human surface",
+            }
+        ],
+    )
+
+    client = TestClient(main.app)
+    created = client.post(
+        "/v1/human",
+        json={
+            "uri": "human://approve",
+            "source": "agent",
+            "ref": "run-1",
+            "title": "Continue?",
+        },
+    )
+    assert created.status_code == 201
+    rid = created.json()["request"]["id"]
+
+    detail = client.get(f"/v1/requests/{rid}")
+    assert detail.status_code == 200
+    events = detail.json()["events"]
+
+    failed = [event for event in events if event["type"] == "channel_undeliverable"]
+    assert len(failed) == 1
+    assert failed[0]["actor"] == "channel:ops"
+    assert failed[0]["data"]["delivered"] is False
+    assert "unreachable" in failed[0]["data"]["error"]
+
+    # Delivery evidence is not yet a lifecycle decision. The obligation remains pending.
+    assert main.store.get(rid).status.value == "pending"
