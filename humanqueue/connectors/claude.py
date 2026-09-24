@@ -26,6 +26,7 @@ def _event_ref(event: dict[str, Any]) -> str:
         {
             "session_id": event.get("session_id"),
             "prompt_id": event.get("prompt_id"),
+            "tool_use_id": event.get("tool_use_id"),
             "tool_name": event.get("tool_name"),
             "tool_input": event.get("tool_input"),
         },
@@ -33,6 +34,10 @@ def _event_ref(event: dict[str, Any]) -> str:
         default=str,
     )
     return hashlib.sha256(raw.encode()).hexdigest()[:20]
+
+
+def _event_identity_is_stable(event: dict[str, Any]) -> bool:
+    return bool(event.get("session_id") and (event.get("prompt_id") or event.get("tool_use_id")))
 
 
 def observe_event(event: dict[str, Any]) -> None:
@@ -108,6 +113,9 @@ def permission_request(event: dict[str, Any]) -> dict[str, Any]:
         native_handle=handle,
     )
 
+    stable_identity = _event_identity_is_stable(event)
+    native_turn = event.get("prompt_id") or event.get("tool_use_id")
+
     client = HumanQueue()
     timeout = float(os.environ.get("HUMAN_QUEUE_HOOK_WAIT_SECONDS", "570"))
     try:
@@ -124,8 +132,11 @@ def permission_request(event: dict[str, Any]) -> dict[str, Any]:
             risk=0.85,
             seconds=8,
             downstream=1,
-            idempotency_key="claude:" + _event_ref(event),
-            supersession_key=f"claude:{event.get('session_id')}:{event.get('prompt_id')}:{tool_name}",
+            idempotency_key=("claude:" + _event_ref(event)) if stable_identity else None,
+            supersession_key=(
+                f"claude:{event.get('session_id')}:{native_turn}:{tool_name}"
+                if stable_identity else None
+            ),
             wait=True,
             wait_timeout=timeout,
             poll_interval=0.8,
