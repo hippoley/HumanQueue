@@ -120,9 +120,12 @@ async def channel_resolve(name: str, rid: str, request: Request):
     return {"request": item, "finalized": finalized, "resume": delivery}
 
 async def _resume_and_record(item, resolution):
-    """Resume the source workflow and record transport vs semantic confirmation separately."""
+    """Resume webhook-backed workflows without misclassifying native blocking connectors."""
     result = await resume(item, resolution)
-    if result.get("confirmed"):
+    reason = result.get("reason")
+    if reason == "no_resume_target":
+        event_type = "resume_not_applicable"
+    elif result.get("confirmed"):
         event_type = "resume_confirmed"
     elif result.get("delivered"):
         event_type = "resume_delivered_unconfirmed"
