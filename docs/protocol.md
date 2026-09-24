@@ -90,16 +90,16 @@ exact waiting action resumes
 
 The distinction between **presentation** and **resolution** is intentional. Showing a request in Slack, a web queue or a phone is not enough; the system must retain a trustworthy route back to the exact suspended action.
 
-## Transport outcome states
+## Transport outcome semantics
 
-A request should distinguish at least:
+The current implementation exposes request lifecycle states such as `pending`, `claimed`, `resolved`, `expired`, `cancelled` and `superseded`.
 
-- `pending` — decision obligation still exists;
-- `resolved` — an authorized answer was accepted;
-- `expired` — the answer is no longer valid;
-- `superseded` — newer state invalidated this request;
-- `undeliverable` — no reachable human surface / transport existed;
-- `unknown_owner` — source could not establish authoritative ownership.
+Two additional failure semantics are **protocol requirements we have evidence for, but are not yet first-class RequestStatus values**:
+
+- **undeliverable** — no reachable human surface / transport existed;
+- **unknown owner** — the source could not establish authoritative ownership.
+
+Until those are represented explicitly in the canonical model, integrations should preserve the evidence in connector/presence context rather than pretending the human ignored the request or guessing an owner.
 
 `undeliverable` is not the same as “human did not respond.”
 
