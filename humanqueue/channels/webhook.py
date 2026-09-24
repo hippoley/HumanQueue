@@ -119,6 +119,9 @@ def publish_request(request: AttentionRequest) -> list[dict[str, Any]]:
         elif channel_type == "telegram":
             from .telegram import publish_one
             results.append(publish_one(name, cfg, request))
+        elif channel_type == "slack":
+            from .slack import publish_one
+            results.append(publish_one(name, cfg, request))
 
     return results
 
