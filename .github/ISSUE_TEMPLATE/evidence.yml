@@ -1,0 +1,89 @@
+name: Human boundary evidence
+description: Report a real workflow where a human boundary failed, stalled, or required an ugly workaround.
+title: "[evidence] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Human Queue is developed evidence-first. Please report what actually happened before proposing a connector or feature.
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime and version
+      description: Agent/runtime/workflow and exact version or commit.
+      placeholder: "OpenCode 2.0.3 / OpenClaw 2026.9.5 / custom worker @ abc123"
+    validations:
+      required: true
+  - type: textarea
+    id: topology
+    attributes:
+      label: Runtime topology
+      description: Foreground/background, parent/child agents, remote gateway, shared channel, device, account layout, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: What exactly was waiting for a human?
+      description: Name the action/decision and why software could not safely continue.
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Authoritative owner
+      description: Which provider/account/agent/session/request actually owned the boundary? Write "unknown" if the runtime could not establish it.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_surface
+    attributes:
+      label: Where did you expect to answer it?
+      description: Native TUI, web, Slack, Telegram, phone, another session, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: actual_surface
+    attributes:
+      label: What actually happened?
+      description: Where did the request appear, disappear, time out, or become unreachable?
+    validations:
+      required: true
+  - type: textarea
+    id: native_resolve
+    attributes:
+      label: Native/programmatic resolve path
+      description: Could software list the pending request and resolve the exact waiting action? Include API/RPC/hook details if known.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+      description: TUI scraping, parent escalation, polling, auto-deny, Slack→Telegram, custom scripts, manual intervention, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: falsify
+    attributes:
+      label: What local/runtime fix would make Human Queue unnecessary here?
+      description: If the answer is "none", explain why the boundary still survives after a native fix.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Reproduction / logs / public links
+      description: Sanitized evidence only. Never paste secrets, tokens, credentials, or private transcript content.
+    validations:
+      required: false
+  - type: checkboxes
+    id: reality
+    attributes:
+      label: Reality check
+      options:
+        - label: This describes a workflow I actually ran or directly reproduced.
+          required: true
+        - label: I have not included credentials, tokens, or private transcript content.
+          required: true
