@@ -55,7 +55,7 @@ This project is being shaped against public failure reports, not a feature wishl
 
 - **Claude Code `--bg`** — a permission hook can fire while the background session still lacks a reliable answer/resume path: [#88698](https://github.com/anthropics/claude-code/issues/88698)
 - **OpenCode nested subagents** — descendant asks could exist without a reachable root presentation path; a recent report says v2.0.3 may fix the local case: [#13715](https://github.com/anomalyco/opencode/issues/13715)
-- **OpenClaw Slack → Telegram workaround** — operators have routed approvals to a different channel because the originating surface could not resolve them: [#48529](https://github.com/openclaw/openclaw/issues/48529)
+- **OpenClaw Slack approvals — historical evidence, now fixed upstream** — Slack-primary operators previously routed approvals through Telegram because Slack could not resolve them. OpenClaw later landed native Slack exec approvals in [PR #58155](https://github.com/openclaw/openclaw/pull/58155), closing [#48529](https://github.com/openclaw/openclaw/issues/48529). This is a useful falsification datapoint: a runtime-local fix can remove an apparent need for Human Queue.
 - **Hermes selected transport bypass** — an approval can be sent to a surface nobody is watching and later be misreported as “human did not respond”: [#120859](https://github.com/NousResearch/hermes-agent/issues/120859)
 - **Vercel eve HITL authorization** — the missing primitive is sometimes not “approve?” but **which human is allowed to answer after the durable pause**: [#1021](https://github.com/vercel/eve/issues/1021)
 
