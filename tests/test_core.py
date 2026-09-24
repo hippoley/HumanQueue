@@ -390,3 +390,37 @@ def test_missing_native_identity_never_creates_shared_supersession_key(tmp_path:
     openai_identified = from_openai({"run_id": "run-123", "tool_name": "shell"})
     assert openai_identified.source_ref == "run-123"
     assert openai_identified.supersession_key == "openai:run-123"
+
+
+def test_blank_identity_is_rejected_at_presence_and_connector_boundaries(tmp_path: Path):
+    from app import main
+
+    main.presence_registry = __import__("app.presence_registry", fromlist=["PresenceRegistry"]).PresenceRegistry(
+        str(tmp_path / "blank-presence.db")
+    )
+    main.connector_registry = __import__("app.connector_registry", fromlist=["ConnectorRegistry"]).ConnectorRegistry(
+        str(tmp_path / "blank-connectors.db")
+    )
+    client = TestClient(main.app)
+
+    presence = client.post(
+        "/v1/presence/sessions",
+        json={
+            "source_id": "   ",
+            "provider": "openclaw",
+            "account": "work",
+            "session_id": "session-1",
+            "state": "running",
+        },
+    )
+    assert presence.status_code == 422
+
+    connector = client.post(
+        "/v1/connectors/events",
+        json={
+            "provider": "codex",
+            "event_name": "SessionStart",
+            "session_id": "   ",
+        },
+    )
+    assert connector.status_code == 422
