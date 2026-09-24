@@ -1,121 +1,178 @@
-# `human://`
-
 <div align="center">
 
-# The human control plane for autonomous systems.
+<br />
 
-### Machines can run anywhere. Human judgment needs an address.
+# human://
 
-[**Live Demo**](https://hippoley.github.io/PAJ-Eval/human-queue/) · [**Evidence**](https://github.com/hippoley/HumanQueue/issues/1) · **Protocol** · Apache-2.0
+### The human control plane for autonomous systems.
+
+**Machines can run anywhere. Human judgment needs an address.**
+
+<br />
+
+[Live Demo](https://hippoley.github.io/PAJ-Eval/human-queue/) &nbsp;&nbsp;·&nbsp;&nbsp; [Evidence](https://github.com/hippoley/HumanQueue/issues/1) &nbsp;&nbsp;·&nbsp;&nbsp; Protocol &nbsp;&nbsp;·&nbsp;&nbsp; Apache-2.0
+
+<br />
+<br />
+
+<pre>
+MACHINE  ──────────────────────►  HUMAN  ──────────────────────►  MACHINE
+   yields control                    decides                       resumes
+                                      │
+                                  human://
+</pre>
+
+<br />
 
 </div>
 
 ---
 
-Software used to wait for commands.
+<br />
 
-Agents don't.
+<table>
+<tr>
+<td width="33%" valign="top">
 
-They plan, browse, write, deploy, delegate, spawn other agents and keep working while you are somewhere else. As autonomy scales, the scarce resource stops being machine execution.
+### ADDRESSABLE
 
-It becomes **human judgment at the exact moment a machine cannot safely continue alone.**
+Every human boundary gets a stable identity tied to the runtime, session and native request that created it.
 
-Today that judgment is fragmented across terminals, IDEs, browser tabs, chat threads, permission dialogs and background sessions.
+</td>
+<td width="33%" valign="top">
 
-HumanQueue gives it one address:
+### TRANSPORTABLE
 
-```text
-                              human://
-                                 │
-        ┌────────────────────────┼────────────────────────┐
-        │                        │                        │
-   Claude Code                Codex                  OpenCode
-   Cursor / IDEs              MCP                     your runtime
-        │                        │                        │
-        └────────────── human boundary appears ──────────┘
-                                 │
-                                 ▼
-                    ┌─────────────────────────┐
-                    │   PENDING DECISION      │
-                    │                         │
-                    │ identity   context      │
-                    │ authority  lifecycle    │
-                    │ resume     audit        │
-                    └────────────┬────────────┘
-                                 │
-                    ┌────────────┼────────────┐
-                    ▼            ▼            ▼
-                   web         phone       chat
-                    │            │            │
-                    └────────────┼────────────┘
-                                 ▼
-                         human judgment
-                                 │
-                                 ▼
-                       exact run continues
-```
+The same decision can surface on web, phone or chat without making the notification channel the source of truth.
 
-## Autonomy needs a return path to humans.
+</td>
+<td width="33%" valign="top">
 
-A machine asking for approval is the smallest version of the problem.
+### EXACT
 
-The larger problem is architectural: once software can act asynchronously across many sessions, runtimes and machines, **where does human authority live?**
+Resolve once. Kill stale decisions. Return the answer to the exact execution that yielded control.
 
-A human boundary needs more than a button. It needs a stable identity, bounded context, an authorized resolver, lifecycle semantics, and a return path to the exact execution that yielded control.
+</td>
+</tr>
+</table>
 
-That is the primitive behind `human://`.
+<br />
+
+## Autonomy changes where humans belong.
+
+Software used to wait for commands. Agents don't.
+
+They plan, browse, write, deploy, delegate and keep working while you are somewhere else.
+
+As autonomy scales, the scarce resource stops being machine execution.
+
+> ### It becomes human judgment at the exact moment a machine cannot safely continue alone.
+
+Today that judgment is fragmented across terminals, IDEs, browser tabs, permission dialogs, background sessions and chat threads.
+
+**HumanQueue gives that boundary an address.**
+
+<br />
 
 ```text
-machine yields control
-        ↓
-human://approve
-human://review
-human://clarify
-human://auth
-human://choose
-        ↓
-decision travels
-        ↓
-machine resumes
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           AUTONOMOUS SYSTEMS                              │
+│                                                                           │
+│   Claude Code       Codex       OpenCode       MCP       your runtime     │
+└────────┬──────────────┬────────────┬────────────┬────────────┬─────────────┘
+         │              │            │            │            │
+         └──────────────┴────────────┴─────┬──────┴────────────┘
+                                           │
+                                     HUMAN BOUNDARY
+                                           │
+                                           ▼
+                              ┌────────────────────────┐
+                              │        human://        │
+                              │                        │
+                              │ identity      context  │
+                              │ authority     lifecycle│
+                              │ resume        audit    │
+                              └───────────┬────────────┘
+                                          │
+                         ┌────────────────┼────────────────┐
+                         │                │                │
+                         ▼                ▼                ▼
+                        WEB             PHONE            CHAT
+                         │                │                │
+                         └────────────────┼────────────────┘
+                                          │
+                                          ▼
+                                  HUMAN JUDGMENT
+                                          │
+                                          ▼
+                                  EXACT RUN RESUMES
 ```
 
-HumanQueue is an attempt to make that boundary **addressable, transportable and auditable** without turning the notification surface into the source of truth.
+<br />
 
-## One protocol. Any surface. Exact return.
+## One boundary. Any surface. Exact return.
 
-The invariant is simple:
+A permission prompt is only the smallest form of the problem.
 
-> **A human decision must return to the exact machine state that requested it — once.**
+Once software acts asynchronously across sessions, runtimes and machines, a human boundary needs more than a button:
 
-So HumanQueue keeps the canonical boundary separate from wherever the human happens to answer it.
+<table>
+<tr>
+<td><b>Identity</b><br/><sub>Who yielded control?</sub></td>
+<td><b>Context</b><br/><sub>What does the human need?</sub></td>
+<td><b>Authority</b><br/><sub>Who may decide?</sub></td>
+</tr>
+<tr>
+<td><b>Lifecycle</b><br/><sub>Is this still pending?</sub></td>
+<td><b>Resolution</b><br/><sub>Was it answered exactly once?</sub></td>
+<td><b>Return</b><br/><sub>Which execution resumes?</sub></td>
+</tr>
+</table>
+
+<br />
+
+The invariant is deliberately small:
+
+> ## A human decision must return to the exact machine state that requested it — once.
 
 Slack is a surface. A phone is a surface. A web console is a surface.
 
-None of them owns the decision.
+**None of them owns the decision.**
+
+<br />
 
 ```text
-(source, account, session, native request)
-                  │
-                  ▼
-        authoritative pending decision
-                  │
-       identity · bounded context
-       resolver · lifecycle
-       dedupe · supersede · expire
-                  │
-                  ▼
-             resolve once
-                  │
-                  ▼
-          native resume handle
-                  │
-                  ▼
-          exact execution resumes
+native request
+     │
+     ▼
+stable identity ──► bounded context ──► authorized resolver
+     │
+     ▼
+dedupe / supersede / expire
+     │
+     ▼
+resolve once
+     │
+     ▼
+native resume handle
+     │
+     ▼
+exact execution
 ```
 
-This is deliberately **not another approval dashboard**.
+<br />
 
-If one runtime already keeps every human boundary reachable and resumable, use its native UI. HumanQueue matters when autonomy escapes a single foreground session: background agents, nested workers, multiple runtimes, another device, another operator, or a fleet that needs one trustworthy human control surface.
+### Not another approval dashboard.
+
+If one runtime already keeps every human boundary reachable and resumable, use its native UI.
+
+HumanQueue starts where a single foreground session stops being enough: **background agents, nested workers, multiple runtimes, another device, another operator, or a fleet that needs one trustworthy human control surface.**
+
+<br />
+
+---
+
+<br />
 
 ## 60 seconds to the first human boundary
 
