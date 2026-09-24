@@ -2,6 +2,8 @@
 
 Human Queue treats every editor and channel as an adapter around one source of truth: the local Human Gateway.
 
+> **Status:** Codex and Cursor native paths are implemented and exercised in the test suite. Claude Code and OpenCode connectors are implemented, but real-host end-to-end validation is still pending. Slack and Telegram channel adapters are implemented; Slack workspace E2E is still pending. OpenClaw and Muse live workers are not implemented yet.
+
 ```text
 Agent/editor native event
         |
@@ -81,7 +83,7 @@ humanq connect cursor
 
 The Cursor connector observes native `sessionStart`, `sessionEnd`, `beforeSubmitPrompt`, and `afterAgentResponse` events so the Gateway can show the live conversation boundary without copying the whole transcript.
 
-For native decision return, v0.5 intentionally gates only commands matching a conservative high-risk `beforeShellExecution` matcher, such as destructive deletes, pushes, infrastructure apply/delete commands, or state-changing HTTP calls. It does **not** claim to replace every Cursor approval surface.
+For native decision return, the connector intentionally gates only commands matching a conservative high-risk `beforeShellExecution` matcher, such as destructive deletes, pushes, infrastructure apply/delete commands, or state-changing HTTP calls. It does **not** claim to replace every Cursor approval surface.
 
 Round-trip:
 
@@ -103,6 +105,32 @@ same generation continues
 ```
 
 If Human Queue is unavailable or the wait expires, the connector returns `permission: ask`, handing control back to Cursor's own approval UI.
+
+
+## Claude Code
+
+```bash
+humanq connect claude
+```
+
+The Claude Code connector installs native hooks for `PermissionRequest`, `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd`.
+
+At a normal foreground `PermissionRequest`, Human Queue can return Claude-native allow/deny output. If Human Queue is unavailable, it returns no structured decision so Claude Code keeps its native permission path.
+
+**Important:** the connector is implemented, but real-host E2E remains pending. Public Claude Code reports also show that background `--bg` sessions can discard a hook decision and remain blocked. Human Queue therefore does not claim that “hook returned allow” proves the host resumed the background session.
+
+## OpenCode
+
+```bash
+humanq connect opencode
+```
+
+Human Queue installs the V2 plugin from `integrations/opencode/human-queue.ts`.
+
+The plugin evaluates only permission events that are already `ask`; configured native `allow` / `deny` semantics remain upstream-owned. When Human Queue cannot produce a decision, the permission remains `ask` rather than failing open.
+
+The plugin is implemented and packaged, but real-host E2E remains pending.
+
 
 ## human.ask MCP bridge
 
@@ -180,9 +208,18 @@ Example body:
 }
 ```
 
-The callback verifies the channel HMAC, resolves the one Gateway request, rejects stale/already-resolved requests, and then invokes the native connector resume path.
+The callback verifies the channel HMAC, resolves the one Gateway request, and rejects stale/already-resolved requests.
 
-When the webhook receiver is remote, set `HUMAN_QUEUE_URL` to a URL that receiver can reach. Local-only transports such as a future Slack Socket Mode or Telegram long-poll adapter can avoid opening the Gateway directly.
+For webhook-backed workflows, Human Queue then attempts the configured resume callback. Delivery and semantic resume are distinct:
+
+- HTTP 2xx means the callback transport accepted the request;
+- `{"request_id":"attn_...","resumed":true}` with the exact same request id confirms semantic resume;
+- otherwise the audit trail records `resume_delivered_unconfirmed`;
+- transport failure records `resume_undeliverable`.
+
+Native blocking connectors such as Codex / Claude / Cursor / MCP do not use this webhook path; their audit outcome is `resume_not_applicable`.
+
+When the webhook receiver is remote, set `HUMAN_QUEUE_URL` to a URL that receiver can reach. Local transports such as Slack Socket Mode and Telegram long polling can avoid opening the Gateway directly.
 
 ### Telegram long-poll channel
 
@@ -211,3 +248,12 @@ Each channel adapter must:
 The Native Connector alone owns the editor-specific resume mechanism.
 
 This keeps all races, quorum, supersession, audit history and policy learning inside one Gateway.
+
+
+### Slack Socket Mode channel
+
+Slack is implemented as a local Socket Mode worker, so no public inbound Gateway port is required.
+
+The worker renders bounded request context into Block Kit and resolves the canonical Gateway request when an authorized interaction arrives. Human Queue records the Slack user identity supplied by the authenticated Slack interaction path.
+
+The channel implementation is present and tested at the adapter/security level, but real workspace end-to-end validation is still pending.
