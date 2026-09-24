@@ -165,9 +165,13 @@ A native hook returning a decision proves only that Human Queue returned a decis
 
 ## Idempotency and supersession
 
-Use `idempotency_key` when a retry represents the same boundary.
+Use `idempotency_key` only when the source exposes enough stable native identity to prove that a retry represents the same boundary.
 
-Use `supersession_key` when newer state invalidates an older unresolved request, such as a newer deployment replacing an older deployment approval.
+Use `supersession_key` only when newer state can be tied to the same authoritative native worldline, such as a newer deployment replacing an older deployment approval.
+
+> **No stable identity → no idempotency, no supersession.**
+
+Fallback labels such as `unknown`, `run`, `main`, or `unidentified` are display/debug values, never proof that two requests are the same request. When provenance is incomplete, Human Queue prefers duplicate visible requests over reusing or superseding the wrong human decision.
 
 ## Runtime-local escalation is valid
 
