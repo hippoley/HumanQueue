@@ -40,7 +40,7 @@ presence_registry = PresenceRegistry(DB_PATH)
 app = FastAPI(
     title="human://",
     version="0.6.0",
-    description="One queue for everything that needs a human.",
+    description="Self-hosted control plane for routing human decisions back to the exact paused agent.",
 )
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
@@ -119,6 +119,22 @@ async def channel_resolve(name: str, rid: str, request: Request):
         delivery = await resume(item, item.resolution or resolution)
     return {"request": item, "finalized": finalized, "resume": delivery}
 
+def _publish_and_record(item):
+    """Project a request into configured channels and persist delivery evidence."""
+    results = publish_request(item)
+    for result in results:
+        delivered = bool(result.get("delivered"))
+        event_type = "channel_delivered" if delivered else "channel_undeliverable"
+        channel = str(result.get("channel") or "unknown")
+        store.record_event(
+            item.id,
+            event_type,
+            actor=f"channel:{channel}",
+            data=result,
+        )
+    return results
+
+
 @app.post("/v1/human", status_code=201)
 def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
     try:
@@ -126,7 +142,7 @@ def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
         item = store.create(req)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    background_tasks.add_task(publish_request, item)
+    background_tasks.add_task(_publish_and_record, item)
     return {"human_uri": uri_for_kind(item.kind), "request": item}
 
 
@@ -134,14 +150,14 @@ def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
 def create_request(req: AttentionRequestCreate, background_tasks: BackgroundTasks):
     req = enrich_with_session_context(req, connector_registry)
     item = store.create(req)
-    background_tasks.add_task(publish_request, item)
+    background_tasks.add_task(_publish_and_record, item)
     return item
 
 
 @app.post("/v1/import", status_code=201)
 def import_request(env: ImportEnvelope, background_tasks: BackgroundTasks):
     item = store.create(ADAPTERS[env.adapter](env.payload))
-    background_tasks.add_task(publish_request, item)
+    background_tasks.add_task(_publish_and_record, item)
     return item
 
 
