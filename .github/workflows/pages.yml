@@ -19,16 +19,48 @@ concurrency:
 
 jobs:
   deploy:
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Detect whether GitHub Pages is enabled
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")
+          if [ "$code" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ "$code" = "404" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            cat /tmp/pages.json
+            exit 1
+          fi
+
+      - name: Explain skipped standalone deployment
+        if: steps.pages.outputs.enabled != 'true'
+        run: |
+          echo "GitHub Pages is not enabled for this repository."
+          echo "Skipping deployment instead of failing the repository."
+          echo "The current public interactive demo remains hosted under PAJ-Eval."
+
       - uses: actions/configure-pages@v5
+        if: steps.pages.outputs.enabled == 'true'
+
       - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.enabled == 'true'
         with:
           path: docs
+
       - name: Deploy to GitHub Pages
         id: deployment
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/deploy-pages@v4
