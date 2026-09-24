@@ -14,7 +14,8 @@
 - Added regression coverage for undeliverable human surfaces, resume transport failures, exact receipt binding, native wait semantics, and version drift.
 - Disabled idempotency and supersession when native request/session identity is incomplete.
 - Reject blank Presence / connector provenance instead of persisting ambiguous control-plane identities.
-- Test suite currently passes 50 tests.
+- Preflight batch authorization before mutation so an unauthorized later item cannot leave an apparently failed batch partially approved.
+- Test suite currently passes 51 tests.
 
 ## 0.6.0 — agent presence hub
 
