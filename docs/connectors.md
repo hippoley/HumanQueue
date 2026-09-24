@@ -174,7 +174,7 @@ Example generic MCP configuration:
 
 Slack, Telegram, mobile push, email, or another UI are **projections**, not independent queues.
 
-v0.5 includes a working generic signed-webhook projection:
+The current release includes a working generic signed-webhook projection:
 
 ```bash
 humanq channel add webhook ops https://channel.example/human
