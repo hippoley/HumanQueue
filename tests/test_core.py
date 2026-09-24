@@ -353,3 +353,15 @@ def test_metrics_expose_integrity_event_counts(tmp_path: Path):
     assert integrity["resume_confirmed"] == 1
     assert integrity["resume_not_applicable"] == 1
     assert integrity.get("resume_undeliverable", 0) == 0
+
+
+def test_home_surfaces_boundary_integrity_view(tmp_path: Path):
+    from app import main
+
+    main.store = Store(str(tmp_path / "integrity-home.db"))
+    client = TestClient(main.app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Boundary integrity" in response.text
+    assert "resume confirmed" in response.text
+    assert "channel undeliverable" in response.text
