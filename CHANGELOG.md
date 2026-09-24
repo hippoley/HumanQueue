@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 — agent presence hub
+
+- Added multi-account Presence Hub registry keyed by `source_id + session_id`.
+- Added normalized session states: idle, running, waiting_human, waiting_external, completed, failed, offline, unknown.
+- Native connector lifecycle events now update Presence Hub automatically.
+- Added `humanq source add/list` and `humanq presence` for multi-account fleet inventory.
+- Added `human_presence_list` and `human_presence_summary` MCP tools so agents can query the fleet conversationally.
+- Added real Claude Code native PermissionRequest connector with fail-safe fallback.
+- Added OpenCode V2 plugin using permission evaluate hooks and recent session context.
+- Added Slack Socket Mode channel alongside Telegram long-poll and signed webhook projection.
+- Added private-network deployment design for OpenClaw Gateway and Muse MSP workers.
+- Current OpenClaw/Muse live worker supervision is the next implementation step; source registration is already in place.
+
+
 ## 0.5.0 — connector runtime
 
 - Added `NativeHandle` and bounded `ContextCapsule` connector primitives.
@@ -11,7 +25,10 @@
 - Added generic signed webhook channel projection with independent `hqc_...` secrets and bounded context.
 - Added signed third-party channel decision callback that resolves the Gateway request and resumes the native source.
 - Added fail-safe native fallback when Human Queue is unavailable instead of silently authorizing.
-- Added Telegram long-poll approval channel with chat authorization and inline decision buttons.\n- Added bounded dialogue enrichment so projected approvals include the latest user/agent turn without copying full transcripts.\n- Added duplicate-resolution protection so a stale/repeated button cannot resume the same workflow twice.\n- Expanded CI coverage to 32 passing tests.
+- Added Telegram long-poll approval channel with chat authorization and inline decision buttons.
+- Added bounded dialogue enrichment so projected approvals include the latest user/agent turn without copying full transcripts.
+- Added duplicate-resolution protection so a stale/repeated button cannot resume the same workflow twice.
+- Expanded CI coverage to 32 passing tests.
 
 
 ## 0.4.0 — self-hosted Human Gateway
