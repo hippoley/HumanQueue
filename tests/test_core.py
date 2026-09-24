@@ -334,3 +334,22 @@ def test_public_version_surfaces_match_package_version(tmp_path: Path):
         "params": {"protocolVersion": "2025-06-18"},
     })
     assert response["result"]["serverInfo"]["version"] == __version__
+
+
+def test_metrics_expose_integrity_event_counts(tmp_path: Path):
+    store = Store(str(tmp_path / "integrity-metrics.db"))
+    item = store.create(req())
+
+    store.record_event(item.id, "channel_delivered", actor="channel:slack", data={"delivered": True})
+    store.record_event(item.id, "channel_undeliverable", actor="channel:telegram", data={"delivered": False})
+    store.record_event(item.id, "resume_delivered_unconfirmed", actor="resume", data={"delivered": True, "confirmed": False})
+    store.record_event(item.id, "resume_confirmed", actor="resume", data={"delivered": True, "confirmed": True})
+    store.record_event(item.id, "resume_not_applicable", actor="resume", data={"reason": "no_resume_target"})
+
+    integrity = store.metrics()["integrity_last_24h"]
+    assert integrity["channel_delivered"] == 1
+    assert integrity["channel_undeliverable"] == 1
+    assert integrity["resume_delivered_unconfirmed"] == 1
+    assert integrity["resume_confirmed"] == 1
+    assert integrity["resume_not_applicable"] == 1
+    assert integrity.get("resume_undeliverable", 0) == 0
