@@ -7,14 +7,16 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PresenceUpdate(BaseModel):
-    source_id: str
-    provider: str
-    account: str
-    session_id: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source_id: str = Field(min_length=1)
+    provider: str = Field(min_length=1)
+    account: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
     state: str = "unknown"
     title: str | None = None
     workspace: str | None = None
