@@ -277,6 +277,25 @@ class Store:
                 out.append(req)
         return out
 
+    def record_event(
+        self,
+        rid: str,
+        event_type: str,
+        *,
+        actor: str | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        """Append an auditable event without mutating request lifecycle state."""
+        now = self._now().isoformat()
+        with self.lock, self._conn() as c:
+            exists = c.execute("SELECT 1 FROM requests WHERE id=?", (rid,)).fetchone()
+            if not exists:
+                return
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, event_type, actor, json.dumps(data or {}, default=str), now),
+            )
+
     def latest_event_seq(self) -> int:
         with self._conn() as c:
             row = c.execute("SELECT COALESCE(MAX(seq),0) AS seq FROM events").fetchone()
