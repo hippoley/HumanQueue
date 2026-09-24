@@ -116,8 +116,26 @@ async def channel_resolve(name: str, rid: str, request: Request):
 
     delivery = {"delivered": False, "reason": "waiting_for_quorum"}
     if finalized:
-        delivery = await resume(item, item.resolution or resolution)
+        delivery = await _resume_and_record(item, item.resolution or resolution)
     return {"request": item, "finalized": finalized, "resume": delivery}
+
+async def _resume_and_record(item, resolution):
+    """Resume the source workflow and record transport vs semantic confirmation separately."""
+    result = await resume(item, resolution)
+    if result.get("confirmed"):
+        event_type = "resume_confirmed"
+    elif result.get("delivered"):
+        event_type = "resume_delivered_unconfirmed"
+    else:
+        event_type = "resume_undeliverable"
+    store.record_event(
+        item.id,
+        event_type,
+        actor="resume",
+        data=result,
+    )
+    return result
+
 
 def _publish_and_record(item):
     """Project a request into configured channels and persist delivery evidence."""
@@ -271,7 +289,7 @@ async def resolve_batch(batch_key: str, decision: BatchResolveRequest):
         if item.status.value == "resolved":
             deliveries.append({
                 "id": item.id,
-                "resume": await resume(item, item.resolution or {}),
+                "resume": await _resume_and_record(item, item.resolution or {}),
             })
     return {"items": items, "deliveries": deliveries}
 
@@ -346,7 +364,7 @@ async def resolve_request(rid: str, decision: ResolveRequest):
 
     delivery = {"delivered": False, "reason": "waiting_for_quorum"}
     if finalized:
-        delivery = await resume(req, req.resolution or resolution)
+        delivery = await _resume_and_record(req, req.resolution or resolution)
     return {"request": req, "finalized": finalized, "resume": delivery}
 
 
