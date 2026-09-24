@@ -24,6 +24,7 @@ from .models import (
     ResolveRequest,
 )
 from .protocol import uri_for_kind
+from .presence_registry import PresenceRegistry, PresenceUpdate
 from .resume import resume
 from .store import Store
 from humanqueue.channels.webhook import publish_request, verify_resolution
@@ -34,6 +35,7 @@ WEB_DIR = APP_DIR / "web"
 DB_PATH = db_path()
 store = Store(DB_PATH)
 connector_registry = ConnectorRegistry(DB_PATH)
+presence_registry = PresenceRegistry(DB_PATH)
 
 app = FastAPI(
     title="human://",
@@ -143,9 +145,79 @@ def import_request(env: ImportEnvelope, background_tasks: BackgroundTasks):
     return item
 
 
+def _presence_state_for_event(event_name: str) -> str:
+    name = event_name.lower()
+    if name in {"permissionrequest", "beforeshellexecution", "notification"}:
+        return "waiting_human"
+    if name in {"userpromptsubmit", "preshelluse", "pretooluse", "tool.execute.before", "sessionstart"}:
+        return "running" if name != "sessionstart" else "idle"
+    if name in {"stop", "afteragentresponse", "posttooluse", "tool.execute.after"}:
+        return "completed"
+    if name in {"sessionend", "session_end"}:
+        return "offline"
+    return "unknown"
+
+
 @app.post("/v1/connectors/events", status_code=202)
 def connector_event(event: ConnectorEventIn):
-    return {"accepted": True, "capsule": connector_registry.record(event)}
+    capsule = connector_registry.record(event)
+    account = str(event.metadata.get("account") or "local")
+    source_id = str(event.metadata.get("source_id") or f"{event.provider}:{account}")
+    presence_registry.upsert_source(
+        source_id=source_id,
+        provider=event.provider,
+        account=account,
+        mode="native-connector",
+        endpoint=None,
+        config={},
+    )
+    presence_registry.update(PresenceUpdate(
+        source_id=source_id,
+        provider=event.provider,
+        account=account,
+        session_id=event.session_id,
+        state=_presence_state_for_event(event.event_name),
+        workspace=event.cwd,
+        last_user=event.latest_user_prompt,
+        last_agent=event.latest_assistant_message,
+        current_action=event.tool_name,
+        waiting_reason="human decision required" if _presence_state_for_event(event.event_name) == "waiting_human" else None,
+        native={"turn_id": event.turn_id, "tool_use_id": event.tool_use_id},
+    ))
+    return {"accepted": True, "capsule": capsule}
+
+
+@app.post("/v1/presence/sources/{source_id}")
+def presence_source_upsert(source_id: str, payload: dict):
+    provider = str(payload.get("provider") or "").strip()
+    account = str(payload.get("account") or "").strip()
+    mode = str(payload.get("mode") or "").strip()
+    if not provider or not account or not mode:
+        raise HTTPException(422, "provider, account and mode are required")
+    return presence_registry.upsert_source(
+        source_id=source_id,
+        provider=provider,
+        account=account,
+        mode=mode,
+        endpoint=payload.get("endpoint"),
+        config=payload.get("config") or {},
+        enabled=bool(payload.get("enabled", True)),
+    )
+
+
+@app.get("/v1/presence/sources")
+def presence_sources():
+    return {"sources": presence_registry.list_sources()}
+
+
+@app.post("/v1/presence/sessions", status_code=202)
+def presence_update(update: PresenceUpdate):
+    return presence_registry.update(update)
+
+
+@app.get("/v1/presence/sessions")
+def presence_sessions(state: str | None = None, limit: int = 200):
+    return {"sessions": presence_registry.sessions(state=state, limit=limit)}
 
 
 @app.get("/v1/connectors/sessions")
