@@ -42,6 +42,7 @@ button,input{font:inherit}.app{max-width:1440px;margin:0 auto;padding:22px 26px 
     <button class="tab" data-view="policies">Policies waiting to exist</button>
     <button class="tab" data-view="sessions">Agent sessions</button>
     <button class="tab" data-view="fleet">Fleet</button>
+    <button class="tab" data-view="integrity">Boundary integrity</button>
   </nav>
 
   <main id="view-now" class="view grid">
@@ -59,6 +60,7 @@ button,input{font:inherit}.app{max-width:1440px;margin:0 auto;padding:22px 26px 
   <main id="view-policies" class="view hidden"><div id="policyGrid" class="policy-grid"></div></main>
   <main id="view-sessions" class="view hidden"><div id="sessionGrid" class="batch-grid"></div></main>
   <main id="view-fleet" class="view hidden"><div id="fleetGrid" class="batch-grid"></div></main>
+  <main id="view-integrity" class="view hidden"><div id="integrityGrid" class="batch-grid"></div></main>
 
   <div class="footer"><span>Every repeated human interruption is a candidate for a better policy.</span><span class="kbd">human://approve · review · clarify · auth · choose · edit · claim</span></div>
 </div>
@@ -95,7 +97,7 @@ async function load(){
     $('#blocking').textContent=items.length;
     $('#queueCount').textContent=`${items.length} waiting`;
     const d=m.last_24h||{}; $('#avoided').textContent=d.interruptions_avoided||0; $('#humanTime').textContent=fmtTime(d.estimated_human_attention_seconds||0);
-    connectorSessions=sessions.sessions||[]; fleetSessions=fleet.sessions||[]; renderNow(); renderBatches(b.batches||[]); await renderPolicies(f.suggestions||[]); renderSessions(); renderFleet();
+    connectorSessions=sessions.sessions||[]; fleetSessions=fleet.sessions||[]; renderNow(); renderBatches(b.batches||[]); await renderPolicies(f.suggestions||[]); renderSessions(); renderFleet(); renderIntegrity(m.integrity_last_24h||{});
   }catch(e){$('#liveText').textContent='reconnecting…'}
 }
 function renderNow(){
@@ -157,6 +159,23 @@ function renderSessions(){
     <div class="actions"><button class="btn" onclick="openSession('${encodeURIComponent(s.provider)}','${encodeURIComponent(s.session_id)}')">Open context</button></div>
   </article>`).join('');
 }
+function renderIntegrity(m){
+  const cards=[
+    ["channel delivered",m.channel_delivered||0,"human surface accepted the projection"],
+    ["channel undeliverable",m.channel_undeliverable||0,"no reachable human surface"],
+    ["resume confirmed",m.resume_confirmed||0,"target acknowledged the same request id"],
+    ["resume unconfirmed",m.resume_delivered_unconfirmed||0,"transport accepted; semantic resume not proven"],
+    ["resume undeliverable",m.resume_undeliverable||0,"decision recorded but callback transport failed"],
+    ["native wait",m.resume_not_applicable||0,"blocking connector returned through its native path"]
+  ];
+  $('#integrityGrid').innerHTML=cards.map(([title,value,detail])=>`<article class="batch-card">
+    <div class="eyebrow">last 24 hours</div>
+    <div class="big">${value}</div>
+    <h3>${esc(title)}</h3>
+    <div class="small">${esc(detail)}</div>
+  </article>`).join('');
+}
+
 function renderFleet(){
   const el=$('#fleetGrid');
   if(!fleetSessions.length){
