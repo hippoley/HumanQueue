@@ -7,13 +7,15 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConnectorEventIn(BaseModel):
-    provider: str
-    event_name: str
-    session_id: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    provider: str = Field(min_length=1)
+    event_name: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
     turn_id: str | None = None
     cwd: str | None = None
     model: str | None = None
