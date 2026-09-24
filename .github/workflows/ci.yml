@@ -17,3 +17,27 @@ jobs:
       - run: humanq connect --help
       - run: humanq mcp --help
       - run: humanq channel --help
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps -w dist
+      - name: Verify packaged runtime assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheels = list(Path("dist").glob("human_queue-*.whl"))
+          assert len(wheels) == 1, wheels
+          with zipfile.ZipFile(wheels[0]) as zf:
+              names = set(zf.namelist())
+          required = {
+              "app/web/index.html",
+              "humanqueue/assets/opencode-human-queue.ts",
+              "humanqueue/connectors/opencode.py",
+              "humanqueue/connectors/claude.py",
+              "humanqueue/channels/telegram.py",
+              "humanqueue/channels/slack.py",
+          }
+          missing = sorted(required - names)
+          assert not missing, f"wheel is missing runtime assets: {missing}"
+          print(f"verified {wheels[0]} with {len(required)} required runtime assets")
+          PY
