@@ -303,182 +303,156 @@ humanq gateway status</div>
 <div id="toast" class="toast" aria-live="polite"></div>
 
 <script>
-(function(){
-const root=document;
-const initial=[
-{id:"db",uri:"human://approve",source:"Codex",ref:"agent-17",title:"Delete stale production cache keys?",summary:"Codex found 1,842 stale keys and prepared a destructive cleanup command.",why:"Destructive production action. The agent can execute immediately after your decision.",risk:"high",unblocks:1,sec:8,priority:98,actions:["Approve","Reject"],context:"redis-cli --scan --pattern 'legacy:*' | xargs redis-cli del"},
-{id:"deploy",uri:"human://approve",source:"GitHub",ref:"deploy/api-2.4.0",title:"Deploy api@2.4.0 to production?",summary:"CI is green. Four downstream jobs are waiting for the production environment review.",why:"A 6-second decision releases four already-completed pieces of work.",risk:"meaningful",unblocks:4,sec:6,priority:94,actions:["Approve","Reject"],context:"environment=production · commit=8f1ab22 · checks=12/12"},
-{id:"refund",uri:"human://review",source:"Support Agent",ref:"ticket-4481",title:"Refund $149 to a repeat customer?",summary:"The customer has two prior successful orders. Policy covers refunds below $100, so this case crossed the current boundary.",why:"The agent exhausted its existing refund policy and needs one judgment.",risk:"meaningful",unblocks:1,sec:12,priority:79,actions:["Approve","Reject","Edit"],context:"customer_risk=low · order_age=3d · requested=$149"},
-{id:"clarify",uri:"human://clarify",source:"Research Agent",ref:"run-218",title:"Which market should the report optimize for?",summary:"The brief says APAC launch but the evidence differs materially between Japan and Singapore.",why:"One clarification now prevents a long research branch from optimizing the wrong market.",risk:"low",unblocks:2,sec:20,priority:67,actions:["Submit"],input:true,context:"blocked branch: market analysis"},
-{id:"auth",uri:"human://auth",source:"n8n",ref:"workflow-61",title:"Reconnect the expired CRM credential",summary:"A scheduled lead-enrichment workflow reached an expired OAuth grant.",why:"Authentication requires you; the remaining workflow can continue automatically.",risk:"low",unblocks:1,sec:15,priority:58,actions:["Mark reconnected","Defer"],context:"credential=salesforce-prod · expired=17m ago"}
-];
-const initialBatches=[
-{id:"refunds",name:"refund-under-20",count:11,sec:54,text:"Eleven low-risk refunds grouped into one review instead of eleven interruptions.",status:"waiting"},
-{id:"retries",name:"duplicate-ci-retries",count:3,sec:18,text:"Three equivalent retry approvals collapsed into a single decision.",status:"waiting"}
-];
-const policies=[
-{name:"refund-under-20-known-customer",agreement:98,samples:48,match:47,conflict:1,save:"19 interruptions / week",action:"approve"},
-{name:"retry-known-flaky-ci-step",agreement:100,samples:26,match:26,conflict:0,save:"11 interruptions / week",action:"retry"}
-];
+(function () {
+  "use strict";
 
-let items=[],batches=[],selected=null,resumed=0,avoided=14,events=[],seq=100;
+  const $ = (id) => document.getElementById(id);
+  const initial = [
+    {id:"db",uri:"human://approve",source:"Codex",ref:"agent-17",title:"Delete stale production cache keys?",summary:"Codex prepared a destructive cleanup command.",why:"A destructive production action is waiting for explicit human authority.",risk:"high",unblocks:1,sec:8,priority:98,actions:["Approve","Reject"],context:"redis-cli --scan --pattern legacy:*"},
+    {id:"deploy",uri:"human://approve",source:"GitHub",ref:"deploy/api-2.4.0",title:"Deploy api@2.4.0 to production?",summary:"CI is green. Four downstream jobs are waiting.",why:"One decision releases four completed pieces of work.",risk:"meaningful",unblocks:4,sec:6,priority:94,actions:["Approve","Reject"],context:"environment=production · checks=12/12"},
+    {id:"refund",uri:"human://review",source:"Support Agent",ref:"ticket-4481",title:"Refund $149 to a repeat customer?",summary:"The request crossed the current $100 refund policy boundary.",why:"The agent exhausted its existing policy and needs one judgment.",risk:"meaningful",unblocks:1,sec:12,priority:79,actions:["Approve","Reject","Edit"],context:"customer_risk=low · requested=$149"},
+    {id:"clarify",uri:"human://clarify",source:"Research Agent",ref:"run-218",title:"Which market should the report optimize for?",summary:"The brief says APAC but Japan and Singapore lead to different plans.",why:"One clarification prevents a long wrong branch.",risk:"low",unblocks:2,sec:20,priority:67,actions:["Submit"],input:true,context:"blocked branch: market analysis"},
+    {id:"auth",uri:"human://auth",source:"n8n",ref:"workflow-61",title:"Reconnect the expired CRM credential",summary:"Lead enrichment reached an expired OAuth grant.",why:"Authentication requires you; the rest can continue automatically.",risk:"low",unblocks:1,sec:15,priority:58,actions:["Mark reconnected","Defer"],context:"credential=salesforce-prod · expired=17m ago"}
+  ];
+  const batchSeed=[
+    {id:"refunds",name:"refund-under-20",count:11,sec:54,text:"Eleven low-risk refunds grouped into one review.",status:"waiting"},
+    {id:"retries",name:"duplicate-ci-retries",count:3,sec:18,text:"Three equivalent retry approvals collapsed into one decision.",status:"waiting"}
+  ];
+  const policySeed=[
+    {name:"refund-under-20-known-customer",agreement:98,samples:48,match:47,conflict:1,save:"19 interruptions / week",action:"approve"},
+    {name:"retry-known-flaky-ci-step",agreement:100,samples:26,match:26,conflict:0,save:"11 interruptions / week",action:"retry"}
+  ];
 
-function clone(x){return JSON.parse(JSON.stringify(x))}
-function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
-function now(){return new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})}
-function log(kind,title,meta,status){
-  events.unshift({id:++seq,time:now(),kind,title,meta,status});
-  events=events.slice(0,30); renderTimeline();
-}
-function resetDemo(){
-  items=clone(initial);batches=clone(initialBatches);selected=items[0];resumed=0;avoided=14;events=[];seq=100;
-  log("system","Demo reset","Five unrelated workflows are waiting for you.","ready");
-  render();
-}
-function totalSec(){return items.reduce((a,x)=>a+x.sec,0)}
-function render(){
-  root.getElementById("blocking").textContent=items.length;
-  root.getElementById("count").textContent=items.length+" waiting";
-  root.getElementById("resumed").textContent=resumed;
-  root.getElementById("avoided").textContent=avoided;
-  root.getElementById("batchCount").textContent="("+batches.filter(b=>b.status==="waiting").length+")";
-  if(!selected||!items.some(x=>x.id===selected.id)) selected=items[0]||null;
-  renderFocus();renderNext();renderBatches();renderPolicies();renderFlow();renderTimeline();
-}
-function renderFocus(){
-  const el=root.getElementById("focus");
-  if(!selected){
-    root.getElementById("focusRank").textContent="# —";
-    el.innerHTML='<div class="empty"><div class="check">✓</div><strong>No machine needs you right now.</strong><br><br>Inject a request above to create another machine→human boundary.</div>';
-    return;
+  let items=[], batches=[], selected=null, resumed=0, avoided=14, events=[], seq=100;
+
+  const clone=(x)=>JSON.parse(JSON.stringify(x));
+  const esc=(v)=>String(v==null?"":v).replace(/[&<>"']/g,(m)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  const clock=()=>new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+
+  function toast(message){
+    const el=$("toast"); if(!el) return;
+    el.textContent=message; el.classList.add("show");
+    clearTimeout(window.__hqToast);
+    window.__hqToast=setTimeout(()=>el.classList.remove("show"),2200);
   }
-  const i=items.findIndex(x=>x.id===selected.id);
-  root.getElementById("focusRank").textContent="#"+(i+1)+" · priority "+selected.priority;
-  const buttons=selected.actions.map((a,n)=>{
-    const cls=n===0?" primary":a==="Reject"?" danger":a==="Defer"?" soft":"";
-    return '<button class="btn'+cls+'" data-action="'+esc(a)+'">'+esc(a)+'</button>'
-  }).join("");
-  const input=selected.input?'<div class="formrow"><input id="humanInput" placeholder="Type the clarification…" aria-label="Human clarification"><button class="btn primary" data-action="Submit">Send answer</button></div>':"";
-  const code='await human.ask({\n  uri: "'+selected.uri+'",\n  source: "'+selected.source.toLowerCase().replaceAll(" ","-")+'",\n  ref: "'+selected.ref+'",\n  title: "'+selected.title.replaceAll('"','\\\"')+'"\n})';
-  el.innerHTML='<div class="uri">'+esc(selected.uri)+'</div><div class="source">'+esc(selected.source)+" / "+esc(selected.ref)+'</div><h2>'+esc(selected.title)+'</h2><div class="summary">'+esc(selected.summary)+'</div><div class="why"><strong>Why now:</strong> '+esc(selected.why)+'</div><div class="pills"><span class="pill '+(selected.risk==="high"?"danger":"")+'">'+esc(selected.risk)+' risk</span><span class="pill good">unblocks '+selected.unblocks+'</span><span class="pill blue">~'+selected.sec+'s human time</span></div>'+input+'<div class="actions">'+(selected.input?"":buttons)+'</div><div class="code">'+esc(selected.context)+"\n\n"+esc(code)+'</div>';
-  el.querySelectorAll("[data-action]").forEach(btn=>btn.addEventListener("click",()=>decide(btn.dataset.action)));
-}
-function renderNext(){
-  const e=root.getElementById("next");
-  e.innerHTML=items.length?items.map(x=>'<div class="item '+(selected&&x.id===selected.id?"active":"")+'" data-id="'+esc(x.id)+'"><div class="itemtop"><span class="itemuri">'+esc(x.uri)+'</span><span class="score">'+x.priority+'</span></div><h3>'+esc(x.title)+'</h3><div class="meta">'+esc(x.source)+" · ~"+x.sec+"s · unblocks "+x.unblocks+"</div></div>").join(""):'<div class="empty">Queue cleared.</div>';
-  e.querySelectorAll("[data-id]").forEach(card=>card.addEventListener("click",()=>{selected=items.find(x=>x.id===card.dataset.id);render()}));
-}
-function renderBatches(){
-  const waiting=batches.filter(b=>b.status==="waiting");
-  root.getElementById("batches").innerHTML=waiting.length?waiting.map(b=>'<article class="card"><div class="eyebrow">batch instead of interrupt</div><div class="big">'+b.count+'</div><h3>'+esc(b.name)+'</h3><div class="small">'+esc(b.text)+" Estimated attention: "+b.sec+'s.</div><div class="actions"><button class="btn primary" data-batch="'+b.id+'" data-baction="approve">Approve batch</button><button class="btn danger" data-batch="'+b.id+'" data-baction="reject">Reject batch</button></div></article>').join(""):'<div class="empty">No batchable interruptions remain.</div>';
-  root.querySelectorAll("[data-batch]").forEach(btn=>btn.addEventListener("click",()=>resolveBatch(btn.dataset.batch,btn.dataset.baction)));
-}
-function renderPolicies(){
-  root.getElementById("policies").innerHTML=policies.map(p=>'<article class="card"><div class="eyebrow">shadow replay · never auto-enabled</div><h3>'+esc(p.name)+'</h3><div class="big">'+p.agreement+'%</div><div class="small">Would match '+p.match+"/"+p.samples+" historical human decisions · "+p.conflict+" conflict"+(p.conflict===1?"":"s")+'.</div><div class="bar"><span style="width:'+p.agreement+'%"></span></div><div class="small">Candidate impact: <strong>'+esc(p.save)+'</strong>.</div><div class="code">proposed: '+esc(p.action)+"\nmode: shadow_only\nenabled: false</div><div class="actions"><button class="btn" data-policy=""+esc(p.name)+"">Replay policy</button></div></article>").join("");
-  root.querySelectorAll("[data-policy]").forEach(btn=>btn.addEventListener("click",()=>{
-    const p=policies.find(x=>x.name===btn.dataset.policy);
-    log("policy","Shadow replay: "+p.name,p.match+"/"+p.samples+" matched · "+p.conflict+" conflicts","shadow");
-    toast("Shadow replay only — nothing was auto-enabled");
-  }));
-}
-function renderTimeline(){
-  const e=root.getElementById("timeline");
-  e.innerHTML=events.length?events.map(ev=>'<div class="event"><div class="time">'+esc(ev.time)+'</div><div><strong>'+esc(ev.title)+'</strong><div class="eventmeta">'+esc(ev.meta)+'</div></div><div class="status">'+esc(ev.status)+'</div></div>').join(""):'<div class="empty">No decisions yet.</div>';
-}
-function renderFlow(){
-  const e=root.getElementById("flow");
-  if(!selected){
-    e.innerHTML='<span class="node">machines</span><span class="arrow">→</span><span class="node hot">human:// queue empty</span><span class="arrow">→</span><span class="node">autonomous work continues</span>';
-    root.getElementById("pipelineState").textContent="no human boundary active";
-    return;
+  function log(title,meta,status){
+    events.unshift({id:++seq,time:clock(),title,meta,status});
+    events=events.slice(0,30);
   }
-  e.innerHTML='<span class="node">'+esc(selected.source)+'</span><span class="arrow">→</span><span class="node hot">'+esc(selected.uri)+'</span><span class="arrow">→</span><span class="node">YOU</span><span class="arrow">→</span><span class="node">'+esc(selected.source)+' resumes</span>';
-  root.getElementById("pipelineState").textContent="waiting for your decision";
-}
-function decide(action){
-  if(!selected)return;
-  if(action==="Defer"){
-    const d=selected;
-    d.priority=Math.max(10,d.priority-24);
-    items=items.filter(x=>x.id!==d.id);items.push(d);selected=items[0]||null;
-    log("decision","Deferred: "+d.title,"Kept in the queue without interrupting you.","deferred");
-    toast("Deferred — request stays alive but loses interrupt priority");render();return;
+  function reset(){
+    items=clone(initial); batches=clone(batchSeed); selected=items[0];
+    resumed=0; avoided=14; events=[]; seq=100;
+    log("Demo ready","Five real-looking machine boundaries are waiting.","ready");
+    render();
   }
-  const item=selected;
-  let humanValue="";
-  const inp=root.getElementById("humanInput");
-  if(inp)humanValue=inp.value.trim();
-  items=items.filter(x=>x.id!==item.id);
-  resumed++;
-  log("decision",action+": "+item.title,(humanValue?"human input: "+humanValue+" · ":"")+item.source+" resumed from "+item.ref,"resumed");
-  root.getElementById("eventline").textContent=action+" → "+item.source+" resumed "+item.ref+" at "+now();
-  selected=items[0]||null;
-  toast(action+": original "+item.source+" workflow resumed");
-  render();
-}
-function resolveBatch(id,action){
-  const b=batches.find(x=>x.id===id);if(!b)return;
-  b.status="done";avoided+=b.count;resumed+=b.count;
-  log("batch",action+" batch: "+b.name,b.count+" machine decisions handled as one human review.","batched");
-  toast(b.count+" separate interruptions collapsed into one batch");
-  render();
-}
-function inject(){
-  const source=root.getElementById("injectSource").value;
-  const uri=root.getElementById("injectType").value;
-  const title=root.getElementById("injectTitle").value.trim()||"New machine request";
-  const id="inj-"+Date.now();
-  const typeMap={
-    "human://approve":{risk:"meaningful",actions:["Approve","Reject"],sec:8},
-    "human://review":{risk:"meaningful",actions:["Approve","Reject","Edit"],sec:14},
-    "human://clarify":{risk:"low",actions:["Submit"],sec:12,input:true},
-    "human://auth":{risk:"low",actions:["Mark reconnected","Defer"],sec:18}
-  };
-  const cfg=typeMap[uri];
-  const item={id,uri,source,ref:"live-"+String(Date.now()).slice(-5),title,summary:"A newly injected workflow reached a boundary that cannot continue without a person.",why:"This request was inserted live to demonstrate how Human Queue arbitrates unrelated machine work.",risk:cfg.risk,unblocks:Math.floor(Math.random()*4)+1,sec:cfg.sec,priority:Math.floor(Math.random()*23)+72,actions:cfg.actions,input:cfg.input,context:"demo=true · injected_at="+new Date().toISOString()};
-  items.push(item);items.sort((a,b)=>b.priority-a.priority);selected=item;
-  log("request","Injected from "+source,title,"queued");
-  toast(source+" entered the global Human Queue");render();
-}
-function simulateConnector(kind){
-  if(kind==="channel"||kind==="telegram"){
-    log("channel",kind==="telegram"?"Telegram callback_query":"Projected bounded dialogue capsule",kind==="telegram"?"long poll → localhost resolve → native resume":"request_id preserved · transcript path excluded · signed action returns to Gateway","projected");
-    toast(kind==="telegram"?"Telegram approval returns through local long-poll worker":"Third-party channel receives a bounded signed projection");
-    document.querySelector('[data-view="timeline"]').click();
-    return;
+  function render(){
+    $("blocking").textContent=items.length;
+    $("count").textContent=items.length+" waiting";
+    $("resumed").textContent=resumed;
+    $("avoided").textContent=avoided;
+    $("batchCount").textContent="("+batches.filter((b)=>b.status==="waiting").length+")";
+    if(!selected || !items.some((x)=>x.id===selected.id)) selected=items[0]||null;
+    renderFocus(); renderQueue(); renderFlow(); renderBatches(); renderPolicies(); renderTimeline();
   }
-  var presets={
-    codex:{uri:"human://approve",source:"Codex",title:"Allow Codex Bash: git push origin main?",summary:"Codex paused at its native PermissionRequest boundary.",why:"User: deploy only after CI is green. Agent: CI passed; preparing git push.",risk:"high",unblocks:1,sec:8,priority:99,actions:["Approve","Reject"],context:"provider=codex · session=thr_demo · turn=turn_12 · resume=PermissionRequest"},
-    cursor:{uri:"human://approve",source:"Cursor",title:"Allow Cursor shell: terraform apply?",summary:"The command matched the conservative high-risk beforeShellExecution gate.",why:"Ordinary Cursor tool calls remain native; this gate only catches explicitly risky shell.",risk:"high",unblocks:1,sec:8,priority:96,actions:["Approve","Reject"],context:"provider=cursor · conversation=conv_demo · generation=gen_7 · fallback=permission:ask"},
-    mcp:{uri:"human://clarify",source:"MCP Agent",title:"Which market should this launch plan optimize for?",summary:"human_ask is waiting inside the same MCP tool invocation.",why:"Returning an answer resumes the exact calling agent conversation.",risk:"low",unblocks:2,sec:15,priority:82,actions:["Submit"],input:true,context:"tool=human_ask · transport=stdio · result→same tools/call"}
-  };
-  var p=presets[kind];if(!p)return;
-  p.id="connector-"+kind+"-"+Date.now();
-  p.ref="native-"+String(Date.now()).slice(-5);
-  items.push(p);items.sort(function(a,b){return b.priority-a.priority});selected=p;
-  log("connector",p.source+" native event",p.title,"waiting");
-  document.querySelector('[data-view="now"]').click();
-  toast(p.source+" → Human Gateway");
-  render();
-}
-function toast(t){
-  const e=root.getElementById("toast");e.textContent=t;e.classList.add("show");
-  clearTimeout(window.__hqToast);window.__hqToast=setTimeout(()=>e.classList.remove("show"),2400);
-}
-root.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
-  root.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===t));
-  root.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
-  root.getElementById("view-"+t.dataset.view).classList.remove("hidden");
-}));
-root.getElementById("resetBtn").addEventListener("click",resetDemo);
-root.getElementById("injectBtn").addEventListener("click",inject);
-root.getElementById("injectTopBtn").addEventListener("click",()=>{
-  root.querySelector('[data-view="now"]').click();
-  root.getElementById("injectBox").scrollIntoView({behavior:"smooth",block:"center"});
-  root.getElementById("injectTitle").focus();
-});
-document.querySelectorAll("[data-sim-connector]").forEach(function(b){b.addEventListener("click",function(){simulateConnector(b.dataset.simConnector)})});
-resetDemo();
+  function renderFocus(){
+    const el=$("focus");
+    if(!selected){
+      $("focusRank").textContent="# —";
+      el.innerHTML='<div class="empty"><div class="check">✓</div><strong>No machine needs you.</strong><br><br>Inject a request to create a new boundary.</div>';
+      return;
+    }
+    const rank=items.findIndex((x)=>x.id===selected.id)+1;
+    $("focusRank").textContent="#"+rank+" · priority "+selected.priority;
+    const input=selected.input?'<div class="formrow"><input id="humanInput" placeholder="Type your answer…" aria-label="Human answer"><button class="btn primary" data-decision="Submit">Send answer</button></div>':"";
+    const buttons=selected.input?"":selected.actions.map((a,i)=>'<button class="btn'+(i===0?" primary":a==="Reject"?" danger":a==="Defer"?" soft":"")+'" data-decision="'+esc(a)+'">'+esc(a)+'</button>').join("");
+    el.innerHTML='<div class="uri">'+esc(selected.uri)+'</div><div class="source">'+esc(selected.source)+' / '+esc(selected.ref)+'</div><h2>'+esc(selected.title)+'</h2><div class="summary">'+esc(selected.summary)+'</div><div class="why"><strong>Why now:</strong> '+esc(selected.why)+'</div><div class="pills"><span class="pill '+(selected.risk==="high"?"danger":"")+'">'+esc(selected.risk)+' risk</span><span class="pill good">unblocks '+selected.unblocks+'</span><span class="pill blue">~'+selected.sec+'s human time</span></div>'+input+'<div class="actions">'+buttons+'</div><div class="code">'+esc(selected.context)+'</div>';
+    el.querySelectorAll("[data-decision]").forEach((b)=>b.addEventListener("click",()=>decide(b.dataset.decision)));
+  }
+  function renderQueue(){
+    const el=$("next");
+    if(!items.length){ el.innerHTML='<div class="empty">Queue cleared.</div>'; return; }
+    el.innerHTML=items.map((x)=>'<div class="item '+(selected&&selected.id===x.id?"active":"")+'" data-request="'+esc(x.id)+'"><div class="itemtop"><span class="itemuri">'+esc(x.uri)+'</span><span class="score">'+x.priority+'</span></div><h3>'+esc(x.title)+'</h3><div class="meta">'+esc(x.source)+' · ~'+x.sec+'s · unblocks '+x.unblocks+'</div></div>').join("");
+    el.querySelectorAll("[data-request]").forEach((card)=>card.addEventListener("click",()=>{selected=items.find((x)=>x.id===card.dataset.request)||null; render();}));
+  }
+  function renderFlow(){
+    if(!selected){
+      $("flow").innerHTML='<span class="node">machines</span><span class="arrow">→</span><span class="node hot">queue clear</span><span class="arrow">→</span><span class="node">autonomous work continues</span>';
+      $("pipelineState").textContent="no human boundary active"; return;
+    }
+    $("flow").innerHTML='<span class="node">'+esc(selected.source)+'</span><span class="arrow">→</span><span class="node hot">'+esc(selected.uri)+'</span><span class="arrow">→</span><span class="node">YOU</span><span class="arrow">→</span><span class="node">'+esc(selected.source)+' resumes</span>';
+    $("pipelineState").textContent="waiting for your decision";
+  }
+  function decide(action){
+    if(!selected) return;
+    if(action==="Defer"){
+      const item=selected; item.priority=Math.max(10,item.priority-24);
+      items=items.filter((x)=>x.id!==item.id).concat(item).sort((a,b)=>b.priority-a.priority);
+      selected=items[0]||null; log("Deferred: "+item.title,"Request remains pending at lower interrupt priority.","deferred");
+      $("eventline").textContent="Deferred → request remains alive in the queue."; toast("Deferred — request remains pending"); render(); return;
+    }
+    const item=selected;
+    const humanInput=$("humanInput");
+    const value=humanInput?humanInput.value.trim():"";
+    items=items.filter((x)=>x.id!==item.id); resumed+=1;
+    log(action+": "+item.title,(value?"human input: "+value+" · ":"")+item.source+" resumed "+item.ref,"resumed");
+    $("eventline").textContent=action+" → "+item.source+" resumed "+item.ref+" at "+clock();
+    selected=items[0]||null; toast(item.source+" resumed from the exact waiting boundary"); render();
+  }
+  function inject(){
+    const source=$("injectSource").value, uri=$("injectType").value;
+    const title=$("injectTitle").value.trim()||"New machine request";
+    const cfg={
+      "human://approve":{risk:"meaningful",actions:["Approve","Reject"],sec:8},
+      "human://review":{risk:"meaningful",actions:["Approve","Reject","Edit"],sec:14},
+      "human://clarify":{risk:"low",actions:["Submit"],sec:12,input:true},
+      "human://auth":{risk:"low",actions:["Mark reconnected","Defer"],sec:18}
+    }[uri];
+    const item={id:"inj-"+Date.now(),uri,source,ref:"live-"+String(Date.now()).slice(-5),title,summary:"A live workflow reached a boundary that cannot continue without a person.",why:"Injected locally to demonstrate the complete request → decision → resume loop.",risk:cfg.risk,unblocks:1,sec:cfg.sec,priority:99,actions:cfg.actions,input:cfg.input,context:"demo=true · local_state=true"};
+    items.unshift(item); selected=item; log("Injected from "+source,title,"queued"); toast(source+" entered HumanQueue"); render();
+  }
+  function renderBatches(){
+    const el=$("batches"); const waiting=batches.filter((b)=>b.status==="waiting");
+    el.innerHTML=waiting.length?waiting.map((b)=>'<article class="card"><div class="eyebrow">batch instead of interrupt</div><div class="big">'+b.count+'</div><h3>'+esc(b.name)+'</h3><div class="small">'+esc(b.text)+' Estimated attention: '+b.sec+'s.</div><div class="actions"><button class="btn primary" data-batch="'+b.id+'">Resolve batch</button></div></article>').join(""):'<div class="empty">No batches waiting.</div>';
+    el.querySelectorAll("[data-batch]").forEach((btn)=>btn.addEventListener("click",()=>{const b=batches.find((x)=>x.id===btn.dataset.batch); if(!b)return; b.status="done"; avoided+=b.count; resumed+=b.count; log("Batch resolved: "+b.name,b.count+" machine boundaries handled together.","batched"); toast("Batch resolved"); render();}));
+  }
+  function renderPolicies(){
+    const el=$("policies");
+    el.innerHTML=policySeed.map((p,i)=>'<article class="card"><div class="eyebrow">shadow replay · never auto-enabled</div><h3>'+esc(p.name)+'</h3><div class="big">'+p.agreement+'%</div><div class="small">'+p.match+'/'+p.samples+' historical decisions matched · '+p.conflict+' conflicts.</div><div class="bar"><span style="width:'+p.agreement+'%"></span></div><div class="small">Candidate impact: <strong>'+esc(p.save)+'</strong>.</div><div class="actions"><button class="btn" data-policy-index="'+i+'">Replay policy</button></div></article>').join("");
+    el.querySelectorAll("[data-policy-index]").forEach((btn)=>btn.addEventListener("click",()=>{const p=policySeed[Number(btn.dataset.policyIndex)]; log("Shadow replay: "+p.name,p.match+"/"+p.samples+" matched · "+p.conflict+" conflicts","shadow"); toast("Shadow replay only — no policy enabled"); renderTimeline();}));
+  }
+  function renderTimeline(){
+    $("timeline").innerHTML=events.length?events.map((e)=>'<div class="event"><div class="time">'+esc(e.time)+'</div><div><strong>'+esc(e.title)+'</strong><div class="eventmeta">'+esc(e.meta)+'</div></div><div class="status">'+esc(e.status)+'</div></div>').join(""):'<div class="empty">No decisions yet.</div>';
+  }
+  function showView(name){
+    document.querySelectorAll(".tab").forEach((x)=>x.classList.toggle("active",x.dataset.view===name));
+    document.querySelectorAll(".view").forEach((v)=>v.classList.add("hidden"));
+    const view=$("view-"+name); if(view)view.classList.remove("hidden");
+  }
+  function simulateConnector(kind){
+    const presets={
+      codex:{uri:"human://approve",source:"Codex",title:"Allow Codex Bash: git push origin main?",risk:"high",actions:["Approve","Reject"],sec:8},
+      cursor:{uri:"human://approve",source:"Cursor",title:"Allow Cursor shell: terraform apply?",risk:"high",actions:["Approve","Reject"],sec:8},
+      mcp:{uri:"human://clarify",source:"MCP Agent",title:"Which market should this launch plan optimize for?",risk:"low",actions:["Submit"],sec:15,input:true}
+    };
+    if(kind==="channel"||kind==="telegram"){log("Channel projection",kind==="telegram"?"Telegram callback returned to local gateway.":"Signed projection preserved canonical request identity.","projected"); toast("Channel projection simulated"); showView("timeline"); renderTimeline(); return;}
+    const p=presets[kind]; if(!p)return;
+    const item={...p,id:"connector-"+Date.now(),ref:"native-"+String(Date.now()).slice(-5),summary:"A native connector reached a real human boundary.",why:"The native runtime is paused until this exact request is resolved.",unblocks:1,priority:99,context:"provider="+kind+" · native_resume=true"};
+    items.unshift(item); selected=item; log(item.source+" native event",item.title,"waiting"); showView("now"); render(); toast(item.source+" → HumanQueue");
+  }
+
+  document.querySelectorAll(".tab").forEach((tab)=>tab.addEventListener("click",()=>showView(tab.dataset.view)));
+  $("resetBtn").addEventListener("click",()=>{reset(); toast("Demo reset");});
+  $("injectBtn").addEventListener("click",inject);
+  $("injectTopBtn").addEventListener("click",()=>{showView("now"); $("injectBox").scrollIntoView({behavior:"smooth",block:"center"}); $("injectTitle").focus();});
+  document.querySelectorAll("[data-sim-connector]").forEach((btn)=>btn.addEventListener("click",()=>simulateConnector(btn.dataset.simConnector)));
+
+  try { reset(); }
+  catch (error) {
+    console.error(error);
+    $("focus").innerHTML='<div class="empty"><strong>Demo initialization failed.</strong><br><br>Open the browser console and report the error shown there.</div>';
+    $("next").innerHTML='<div class="empty">Interactive state unavailable.</div>';
+    $("liveLabel").textContent="demo error";
+  }
 })();
 </script>
 </body>
