@@ -270,6 +270,20 @@ class Store:
 
     def resolve_batch(self, batch_key: str, actor: str, action: str, comment: str | None = None) -> list[AttentionRequest]:
         items = [b for batch in self.batches() if batch["batch_key"] == batch_key for b in batch["items"]]
+
+        # Authorization is a batch precondition, not a per-item side effect.
+        # Otherwise a later unauthorized item could make the API return 403
+        # after earlier items had already been resolved.
+        unauthorized = [
+            item.id
+            for item in items
+            if item.route.actors and actor not in item.route.actors
+        ]
+        if unauthorized:
+            raise PermissionError(
+                "actor is not eligible for every request in this batch"
+            )
+
         out = []
         for item in items:
             req, _ = self.resolve(item.id, actor, {"action": action, "values": {}, "comment": comment})
