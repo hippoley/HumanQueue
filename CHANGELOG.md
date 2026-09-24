@@ -12,7 +12,9 @@
 - Documented responder identity trust boundaries; per-human IAM remains intentionally out of scope for now.
 - Aligned MCP and Gateway public version surfaces with the package version source.
 - Added regression coverage for undeliverable human surfaces, resume transport failures, exact receipt binding, native wait semantics, and version drift.
-- Test suite currently passes 45 tests.
+- Disabled idempotency and supersession when native request/session identity is incomplete.
+- Reject blank Presence / connector provenance instead of persisting ambiguous control-plane identities.
+- Test suite currently passes 50 tests.
 
 ## 0.6.0 — agent presence hub
 
