@@ -105,6 +105,31 @@ Until those are represented explicitly in the canonical model, integrations shou
 
 That distinction is important for systems where a runtime silently falls back to a prompt nobody is watching.
 
+## Resume receipts
+
+The signed callback always includes the canonical `request_id` together with source provenance and the human resolution.
+
+HTTP success alone means only **the callback transport accepted the request**. It does not prove the intended suspended action resumed.
+
+A callback target may provide a stronger receipt:
+
+```json
+{
+  "request_id": "attn_...",
+  "resumed": true
+}
+```
+
+Human Queue treats this as semantic confirmation only when the receipt's `request_id` exactly matches the canonical request being resumed.
+
+The resulting audit semantics are:
+
+- `resume_confirmed` — transport succeeded and the target explicitly acknowledged the same request;
+- `resume_delivered_unconfirmed` — transport succeeded but no exact-request receipt was returned;
+- `resume_undeliverable` — the callback could not be delivered.
+
+This avoids treating “HTTP 200” as proof that the correct waiting session consumed the decision.
+
 ## Safety invariants
 
 - Notification priority is not authorization.
