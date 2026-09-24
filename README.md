@@ -69,13 +69,31 @@ humanq token rotate
 # real editor connectors
 humanq connect codex
 humanq connect cursor
+humanq connect claude
+humanq connect opencode
 humanq sessions
+
+# multi-account presence
+humanq source add openclaw work --endpoint ws://openclaw-work.lan:18789 --credential-env OPENCLAW_WORK_TOKEN
+humanq source add muse local-muse --mode muse-msp
+humanq source list
+humanq presence
+humanq presence --state waiting_human
 
 # semantic human input for MCP-capable agents
 humanq mcp serve
 
 # project requests into your own third-party channel
-humanq channel add webhook ops https://your-channel.example/human\n\n# no public inbound port required\nhumanq channel add telegram phone --bot-token "$BOT_TOKEN" --chat-id "$CHAT_ID"\nhumanq channel run phone\n\nhumanq channel list
+humanq channel add webhook ops https://your-channel.example/human
+
+# no public inbound port required
+humanq channel add telegram phone --bot-token "$BOT_TOKEN" --chat-id "$CHAT_ID"
+humanq channel run phone
+
+humanq channel add slack ops --app-token "$SLACK_APP_TOKEN" --bot-token "$SLACK_BOT_TOKEN" --channel-id "$SLACK_CHANNEL_ID"
+humanq channel run ops
+
+humanq channel list
 ```
 
 Prefer containers?
@@ -284,8 +302,13 @@ These are different from normalization adapters: they observe a real editor sess
 | **Codex** | Native hooks: session, turn, prompt, final response, transcript locator | Native `PermissionRequest` allow/deny | Real connector |
 | **Cursor** | Native hooks: session, prompt, final response, transcript locator | Native `beforeShellExecution` permission | High-risk shell gate only |
 | **MCP** | Tool arguments supplied by the calling agent | `human_ask` tool result returns to the same MCP call | Real stdio bridge |
-| **Generic webhook channel** | Receives bounded ContextCapsule | Signed action callback resolves the Gateway request | Real channel projection |\n| **Telegram** | Receives bounded dialogue + decision buttons | Long-poll callback resolves local Gateway | Real outbound-only channel |
-| Claude Code / OpenCode | — | — | Not implemented yet |
+| **Generic webhook channel** | Receives bounded ContextCapsule | Signed action callback resolves the Gateway request | Real channel projection |
+| **Telegram** | Receives bounded dialogue + decision buttons | Long-poll callback resolves local Gateway | Real outbound-only channel |
+| **Slack** | Receives bounded Block Kit card | Socket Mode action resolves local Gateway | Real outbound-only channel |
+| **Claude Code** | Native hooks: session/prompt/stop + transcript locator | Native PermissionRequest allow/deny | Real connector |
+| **OpenCode V2** | Prompt + session context via plugin API | Permission evaluate hook mutates allow/deny | Real connector |
+| **OpenClaw Gateway** | Gateway WS sessions/active-run/approval APIs | Native approval RPCs | Presence worker design ready; live worker next |
+| **Muse Code** | MSP session/list/read + event-sourced sessions | MSP approval/decide | Presence worker design ready; live worker next |
 
 ```bash
 humanq connect codex
@@ -324,6 +347,43 @@ The Telegram bot token stays in the local `~/.human-queue/config.json` file; `hu
 - GitHub deployment approval payloads
 
 These adapters normalize external events into Human Queue. They are not the same as a native bidirectional editor integration.
+
+---
+
+## Agent Presence Hub
+
+Human Queue now separates **continuous fleet presence** from **human intervention**.
+
+```text
+OpenClaw work account ─┐
+OpenClaw personal ─────┤
+Muse work ─────────────┤
+Codex / Claude / Cursor├──► Presence Hub ───► normalized session state
+OpenCode ──────────────┘            │
+                                    ├──► Human Queue when a person is needed
+                                    └──► MCP status tools for conversational queries
+```
+
+The identity boundary is `source_id + session_id`, so two accounts or gateways can safely expose identical native session IDs.
+
+Normalized states:
+
+```text
+idle · running · waiting_human · waiting_external · completed · failed · offline · unknown
+```
+
+The same state is queryable through the dashboard/API or conversationally through:
+
+```text
+human_presence_list
+human_presence_summary
+```
+
+So an MCP-capable assistant can answer “which agents are still running?” or “what is waiting for me?” without opening each editor.
+
+OpenClaw is the strongest future remote worker target because its Gateway WebSocket exposes live session subscriptions, active-run state and approval RPCs. Muse Code now exposes `muse serve` / MSP with session listing, read/resume and permission decisions. The Presence Hub source/account registry is implemented; the long-lived OpenClaw and Muse supervisor workers are the next step.
+
+See [Agent Presence Hub](docs/presence-hub.md).
 
 ---
 
@@ -405,6 +465,10 @@ GET  /v1/events/stream                 live queue changes
 POST /v1/connectors/events             native connector observations
 GET  /v1/connectors/sessions           observed agent/editor sessions
 GET  /v1/connectors/sessions/{p}/{id}  bounded session context + recent events
+POST /v1/presence/sources/{source_id}  register one provider/account source
+GET  /v1/presence/sources              list connected source accounts
+POST /v1/presence/sessions             ingest normalized session presence
+GET  /v1/presence/sessions             fleet state across all accounts
 POST /channels/{name}/resolve/{id}     signed third-party channel decision
 ```
 
@@ -432,10 +496,10 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 32 passed
+# 41 passed
 ```
 
-The current suite covers queue semantics, gateway authentication, Codex and Cursor native decision round-trips, connector session tracking and dialogue enrichment, MCP initialize/list/call behavior, signed webhook projection, Telegram callback authorization, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
+The current suite covers queue semantics, gateway authentication, Codex/Cursor/Claude native round-trips, OpenCode plugin packaging, connector session tracking, multi-account Presence Hub state, MCP fleet-status tools, signed webhook projection, Telegram and Slack channel rendering/security, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
 
 ---
 
