@@ -301,3 +301,16 @@ def test_native_wait_path_is_not_reported_as_resume_undeliverable(tmp_path: Path
     events = main.store.events(item.id)
     assert any(event["type"] == "resume_not_applicable" for event in events)
     assert not any(event["type"] == "resume_undeliverable" for event in events)
+
+
+def test_mcp_server_reports_package_version():
+    from humanqueue import __version__
+    from humanqueue.mcp_server import handle
+
+    response = handle({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18"},
+    })
+    assert response["result"]["serverInfo"]["version"] == __version__
