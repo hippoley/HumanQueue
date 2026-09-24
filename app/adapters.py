@@ -19,20 +19,21 @@ def from_generic(payload: dict[str, Any]) -> AttentionRequestCreate:
 def from_a2a(payload: dict[str, Any]) -> AttentionRequestCreate:
     # Expected shape: {task: {id,status:{state,message}}, agent?, callback_url?}
     task = payload.get("task", payload)
+    native_id = task.get("id") or payload.get("id")
     status = task.get("status", {})
     state = status.get("state", "input-required")
     kind = RequestKind.authenticate if state == "auth-required" else RequestKind.input
     message = status.get("message") or payload.get("message") or "Agent needs human input"
     return AttentionRequestCreate(
         source="a2a",
-        source_ref=str(task.get("id", payload.get("id", "unknown"))),
+        source_ref=str(native_id or "unidentified"),
         title=f"A2A task needs {state}",
         summary=str(message),
         kind=kind,
         context=payload,
         options=[ActionOption(id="continue", label="Continue", style="safe")],
         signals=AttentionSignals(urgency=0.55, unblock_value=0.8, downstream_blocked=1),
-        supersession_key=f"a2a:{task.get('id', payload.get('id', 'unknown'))}",
+        supersession_key=f"a2a:{native_id}" if native_id is not None else None,
         resume=ResumeTarget(mode="webhook", url=payload["callback_url"]) if payload.get("callback_url") else ResumeTarget(),
     )
 
@@ -59,9 +60,10 @@ def from_mcp(payload: dict[str, Any]) -> AttentionRequestCreate:
 def from_openai(payload: dict[str, Any]) -> AttentionRequestCreate:
     # Expected interruption-like payload. Kept loose on purpose to tolerate SDK evolution.
     tool = payload.get("tool_name") or payload.get("name") or "tool call"
+    native_id = payload.get("run_id") or payload.get("id")
     return AttentionRequestCreate(
         source="openai-agents",
-        source_ref=str(payload.get("run_id") or payload.get("id") or "run"),
+        source_ref=str(native_id or "unidentified"),
         title=f"Approve {tool}",
         summary=str(payload.get("reason") or payload.get("message") or f"Agent paused before {tool}"),
         kind=RequestKind.approval,
@@ -76,7 +78,7 @@ def from_openai(payload: dict[str, Any]) -> AttentionRequestCreate:
             risk_if_wrong=float(payload.get("risk", 0.7)),
             downstream_blocked=int(payload.get("downstream_blocked", 1)),
         ),
-        supersession_key=f"openai:{payload.get('run_id') or payload.get('id') or 'run'}",
+        supersession_key=f"openai:{native_id}" if native_id is not None else None,
     )
 
 
