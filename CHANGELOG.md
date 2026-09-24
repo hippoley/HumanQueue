@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — human-boundary integrity
+
+- Reframed the project around exact-session human boundaries instead of a generic approval inbox.
+- Added a public evidence/falsification thread and an evidence-first GitHub issue form.
+- Added channel delivery audit events: `channel_delivered` and `channel_undeliverable`.
+- Separated human decision state from machine resume state.
+- Added webhook resume receipts: HTTP 2xx is transport delivery only; semantic confirmation requires the same `request_id` plus `resumed: true`.
+- Added `resume_confirmed`, `resume_delivered_unconfirmed`, `resume_undeliverable`, and `resume_not_applicable` audit semantics.
+- Native blocking connectors no longer get misclassified as failed webhook resumes.
+- Documented responder identity trust boundaries; per-human IAM remains intentionally out of scope for now.
+- Aligned MCP and Gateway public version surfaces with the package version source.
+- Added regression coverage for undeliverable human surfaces, resume transport failures, exact receipt binding, native wait semantics, and version drift.
+- Test suite currently passes 45 tests.
+
 ## 0.6.0 — agent presence hub
 
 - Added multi-account Presence Hub registry keyed by `source_id + session_id`.
