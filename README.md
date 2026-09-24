@@ -1,34 +1,102 @@
 # `human://`
 
-### The approval is not the hard part. Getting the answer back to the exact paused agent is.
+### Route human decisions back to the exact agent that is waiting.
 
 **[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Evidence log](https://github.com/hippoley/HumanQueue/issues/1)** · Apache-2.0
 
-A background agent reaches `ask`. The person is on another device. The prompt is attached to a nested session nobody can see. Slack can show the request but cannot resolve it. A callback arrives, but the runtime cannot prove which waiting session — or which human — it belongs to.
+Human Queue is a self-hosted control plane for one failure shape that keeps showing up in real agent runtimes:
 
-Those are not “approval UI” problems. They are **human-boundary routing** problems.
+> a machine reaches a human boundary, the request is visible somewhere — but the answer cannot be reliably correlated back to the exact paused session.
+
+This is not primarily an approval-UI problem. It is a **pending-decision routing** problem.
 
 ```text
-source / account / session
-          │
-          ▼
-     HumanBoundary
-          │
-          ├── bounded context
-          ├── authorized resolver
-          ├── expiry / supersession
-          └── native resume handle
-          │
-          ▼
-  web · phone · Slack · Telegram
-          │
-          ▼
- exact waiting session resumes
+agent/runtime
+   │
+   ▼
+authoritative pending decision
+   │
+   ├── source + account + session identity
+   ├── bounded context
+   ├── authorized resolver
+   ├── dedupe / supersession / expiry
+   └── native resume handle
+   │
+   ▼
+web · phone · Slack · Telegram
+   │
+   ▼
+resolve once → resume exact waiting run
 ```
 
-Human Queue is a self-hosted control plane for that boundary. The queue is only one presentation layer.
+The project is intentionally being shaped against public failure reports, not a feature wishlist. If native runtimes solve these cases cleanly and users no longer need cross-session or cross-runtime routing, Human Queue should stay small.
 
-> If a runtime's native approval UI completely solves your workflow, use it. Human Queue exists only for the cases that survive that fix.
+## Why this exists
+
+The evidence thread tracks concrete failures across Claude Code, OpenCode and other agent runtimes:
+
+- a background or nested session can reach a permission boundary that the operator cannot reliably answer;
+- a transport can display the request but still fail to resume the owning run;
+- a local runtime bug can create a **false human boundary** that should be fixed upstream instead of becoming another queue item;
+- once several sessions or runtimes are active, the hard part becomes identifying which human decision belongs to which paused execution.
+
+That leads to a deliberately narrow primitive:
+
+```text
+detect real human boundary
+→ assign stable identity
+→ expose only bounded context
+→ resolve exactly once
+→ resume the original run
+→ keep an auditable outcome
+```
+
+If your runtime already does that, use its native approval UI.
+
+## Try the core loop
+
+```bash
+git clone https://github.com/hippoley/HumanQueue.git
+cd HumanQueue
+pip install -e .
+humanq demo
+```
+
+Then open `http://127.0.0.1:7482`.
+
+For a real request:
+
+```bash
+curl http://127.0.0.1:7482/v1/human \
+  -H "Content-Type: application/json" \
+  -d '{
+    "uri":"human://approve",
+    "source":"my-agent",
+    "ref":"run-42",
+    "title":"Deploy to production?"
+  }'
+```
+
+The success condition is not “the card appeared in a dashboard.”
+
+It is:
+
+> **the human decision is accepted once, correlated to the right pending boundary, and the exact blocked execution resumes.**
+
+## Reality contract
+
+Human Queue should only grow when one of these is observed in a real workflow:
+
+| Evidence | What it unlocks |
+| --- | --- |
+| runtime-local routing bug only | fix upstream; do not add Human Queue complexity |
+| unreachable background/nested human boundary | connector or pending-decision primitive |
+| duplicate / stale / superseded prompts | stronger correlation + dedupe semantics |
+| operator must answer from another surface | channel projection |
+| several runtimes need one place to resolve real boundaries | cross-runtime control plane |
+| repeated low-risk decisions with stable human behavior | policy candidate, shadow-only first |
+
+The public [evidence log](https://github.com/hippoley/HumanQueue/issues/1) is part of the product. Evidence that removes a roadmap item is as valuable as evidence that adds one.
 
 ### What works today
 
