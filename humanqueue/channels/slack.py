@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.models import AttentionRequest
+from app.protocol import default_options
 from humanqueue.config import channel_configs, gateway_token, gateway_url
 from .webhook import _bounded_context
 
@@ -65,7 +66,8 @@ def render_blocks(request: AttentionRequest) -> list[dict[str, Any]]:
         )}],
     })
     elements = []
-    for option in (request.options or [])[:5]:
+    options = request.options or default_options(request.kind)
+    for option in options[:5]:
         element: dict[str, Any] = {
             "type": "button",
             "text": {"type": "plain_text", "text": str(option.label)[:75]},
