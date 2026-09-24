@@ -39,6 +39,7 @@ Human Queue is a self-hosted control plane for that boundary. The queue is only 
 | Codex native permission round-trip | working |
 | Cursor high-risk shell gate | working |
 | MCP `human_ask` round-trip | working |
+| Native blocking wait semantics | working; audited as `resume_not_applicable`, not webhook failure |
 | Generic signed webhook projection | working |
 | Telegram decision channel | working |
 | Slack Socket Mode channel | implemented; real workspace E2E pending |
@@ -63,6 +64,8 @@ The public [evidence thread](https://github.com/hippoley/HumanQueue/issues/1) al
 **The test:** after native runtimes fix their own approval surfaces, do people still need one reliable way to inspect, route and resolve human boundaries across sessions, agents, accounts or channels?
 
 If the answer is usually “no”, this project should stay small.
+
+> **Responder identity boundary:** `route.actors` is enforced, but Human Queue currently trusts the identity asserted by its authenticated channel or Gateway boundary. Slack/Telegram connector identities are derived from their authenticated interaction payloads; Human Queue does not yet provide an independent per-human IAM layer.
 
 ## Run your own Human Gateway
 
@@ -544,7 +547,7 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 42 passed
+# 44 passed
 ```
 
 The current suite covers queue semantics, gateway authentication, Codex/Cursor/Claude native round-trips, OpenCode plugin packaging, connector session tracking, multi-account Presence Hub state, MCP fleet-status tools, signed webhook projection, Telegram and Slack channel rendering/security, channel-delivery failure auditing, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
