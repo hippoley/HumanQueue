@@ -238,6 +238,14 @@ if decision["action"] == "approve":
 
 For long-running systems, do not block a worker: provide a `resume_url` and Human Queue returns the decision through a signed callback.
 
+A successful HTTP callback proves transport delivery only. A target can optionally confirm semantic resume by returning:
+
+```json
+{"request_id":"attn_...","resumed":true}
+```
+
+Human Queue records that as `resume_confirmed`. A plain 2xx is retained as `resume_delivered_unconfirmed`; a transport failure is `resume_undeliverable`.
+
 ### JavaScript
 
 ```js
@@ -329,6 +337,7 @@ It can still rank, batch or defer requests, but **attention ordering never becom
 - batch resolution
 - audit events and decision history
 - channel delivery evidence (`channel_delivered` / `channel_undeliverable`) without consuming the pending human obligation
+- resume evidence that separates callback transport success from exact-request confirmation
 - delegation frontier for repeated low-risk decisions
 - **policy sandbox** that shadow-replays a proposed policy against historical human choices without enabling it
 
@@ -535,7 +544,7 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 40 passed
+# 42 passed
 ```
 
 The current suite covers queue semantics, gateway authentication, Codex/Cursor/Claude native round-trips, OpenCode plugin packaging, connector session tracking, multi-account Presence Hub state, MCP fleet-status tools, signed webhook projection, Telegram and Slack channel rendering/security, channel-delivery failure auditing, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
