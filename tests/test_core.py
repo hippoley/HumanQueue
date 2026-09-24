@@ -314,3 +314,23 @@ def test_mcp_server_reports_package_version():
         "params": {"protocolVersion": "2025-06-18"},
     })
     assert response["result"]["serverInfo"]["version"] == __version__
+
+
+def test_public_version_surfaces_match_package_version(tmp_path: Path):
+    from app import main
+    from humanqueue import __version__
+    from humanqueue.mcp_server import handle
+
+    main.store = Store(str(tmp_path / "version-surfaces.db"))
+    client = TestClient(main.app)
+
+    assert client.get("/health").json()["version"] == __version__
+    assert client.get("/gateway").json()["version"] == __version__
+
+    response = handle({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18"},
+    })
+    assert response["result"]["serverInfo"]["version"] == __version__
