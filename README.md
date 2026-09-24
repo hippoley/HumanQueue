@@ -344,6 +344,7 @@ It can still rank, batch or defer requests, but **attention ordering never becom
 - resume evidence that separates callback transport success from exact-request confirmation
 - boundary-integrity metrics and dashboard counters for delivery / confirmation failure modes
 - stable native identity required before idempotency or supersession can reuse a human boundary
+- batch authorization is preflighted before any item is resolved, preventing 403-after-partial-approval states
 - delegation frontier for repeated low-risk decisions
 - **policy sandbox** that shadow-replays a proposed policy against historical human choices without enabling it
 
@@ -550,7 +551,7 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 50 passed
+# 51 passed
 ```
 
 The current suite covers queue semantics, gateway authentication, Codex/Cursor/Claude native round-trips, OpenCode plugin packaging, connector session tracking, multi-account Presence Hub state, MCP fleet-status tools, signed webhook projection, Telegram and Slack channel rendering/security, channel-delivery failure auditing, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
