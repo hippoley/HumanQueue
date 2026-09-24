@@ -1,15 +1,15 @@
 # `human://`
 
-### A control plane for the moments your agents cannot continue without you.
+### The approval is not the hard part. Getting the answer back to the exact paused agent is.
 
-**[Try the live interactive demo →](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Read the public evidence log →](https://github.com/hippoley/HumanQueue/issues/1)**
+**[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Evidence log](https://github.com/hippoley/HumanQueue/issues/1)** · Apache-2.0
 
-Agent runtimes already know how to ask for approval. The harder failure appears when the **human boundary is detached from the place where a human can actually answer it**: a nested agent asks inside an invisible session, Slack cannot resolve an approval that Telegram can, a callback loses the exact session/user binding, or a background run has no reliable programmatic resume path.
+A background agent reaches `ask`. The person is on another device. The prompt is attached to a nested session nobody can see. Slack can show the request but cannot resolve it. A callback arrives, but the runtime cannot prove which waiting session — or which human — it belongs to.
 
-Human Queue is experimenting with one narrower primitive:
+Those are not “approval UI” problems. They are **human-boundary routing** problems.
 
 ```text
-runtime / account / session
+source / account / session
           │
           ▼
      HumanBoundary
@@ -20,35 +20,49 @@ runtime / account / session
           └── native resume handle
           │
           ▼
- web / phone / Slack / Telegram / another agent
+  web · phone · Slack · Telegram
           │
           ▼
  exact waiting session resumes
 ```
 
-The queue is only one UI over that contract.
+Human Queue is a self-hosted control plane for that boundary. The queue is only one presentation layer.
 
-**Human Queue is not a replacement for a runtime's native approval UI.** If one runtime fixes its local routing and that completely solves your workflow, you should use the native path.
+> If a runtime's native approval UI completely solves your workflow, use it. Human Queue exists only for the cases that survive that fix.
 
-## Reality before roadmap
+### What works today
 
-This repository is being shaped against public failure reports rather than a feature wishlist.
+| Path | Status |
+| --- | --- |
+| Local Gateway + web queue + SQLite ledger | working |
+| Python / JavaScript / HTTP request path | working |
+| Codex native permission round-trip | working |
+| Cursor high-risk shell gate | working |
+| MCP `human_ask` round-trip | working |
+| Generic signed webhook projection | working |
+| Telegram decision channel | working |
+| Slack Socket Mode channel | implemented; real workspace E2E pending |
+| Claude Code connector | implemented; real-host E2E pending |
+| OpenCode V2 connector | implemented; real-host E2E pending |
+| Cross-account Presence registry | working |
+| OpenClaw live Gateway worker | not implemented yet |
+| Muse MSP live worker | not implemented yet |
 
-Current evidence includes:
+### Seen in the wild
 
-- **Claude Code `--bg`** — a permission hook can fire while the background session still lacks a reliable answer/resume path: [anthropics/claude-code#88698](https://github.com/anthropics/claude-code/issues/88698)
-- **OpenCode nested subagents** — descendant permission requests could be emitted but not reachable from the root TUI; recent reports suggest v2.0.3 may fix the local routing bug: [anomalyco/opencode#13715](https://github.com/anomalyco/opencode/issues/13715)
-- **OpenClaw channel mismatch** — operators have routed approvals from Slack workflows into Telegram because the original channel could not resolve them: [openclaw/openclaw#48529](https://github.com/openclaw/openclaw/issues/48529)
-- **Hermes approval transport** — an operator-selected approval transport can be bypassed by a hard-coded local prompt path, leaving the request to time out when that surface is absent: [NousResearch/hermes-agent#120859](https://github.com/NousResearch/hermes-agent/issues/120859)
-- **Vercel eve HITL authorization** — the difficult question is not only “approve?” but **which human is authorized to answer** after a durable pause: [vercel/eve#1021](https://github.com/vercel/eve/issues/1021)
+This project is being shaped against public failure reports, not a feature wishlist.
 
-The working evidence thread is [#1](https://github.com/hippoley/HumanQueue/issues/1). Reports that **falsify** the project are welcome too.
+- **Claude Code `--bg`** — a permission hook can fire while the background session still lacks a reliable answer/resume path: [#88698](https://github.com/anthropics/claude-code/issues/88698)
+- **OpenCode nested subagents** — descendant asks could exist without a reachable root presentation path; a recent report says v2.0.3 may fix the local case: [#13715](https://github.com/anomalyco/opencode/issues/13715)
+- **OpenClaw Slack → Telegram workaround** — operators have routed approvals to a different channel because the originating surface could not resolve them: [#48529](https://github.com/openclaw/openclaw/issues/48529)
+- **Hermes selected transport bypass** — an approval can be sent to a surface nobody is watching and later be misreported as “human did not respond”: [#120859](https://github.com/NousResearch/hermes-agent/issues/120859)
+- **Vercel eve HITL authorization** — the missing primitive is sometimes not “approve?” but **which human is allowed to answer after the durable pause**: [#1021](https://github.com/vercel/eve/issues/1021)
 
-A useful test is simple:
+The public [evidence thread](https://github.com/hippoley/HumanQueue/issues/1) also records what would falsify the project.
 
-> After each runtime has a reliable native approval surface, do you still need to inspect and resolve human boundaries across multiple sessions, agents, accounts, or channels?
+**The test:** after native runtimes fix their own approval surfaces, do people still need one reliable way to inspect, route and resolve human boundaries across sessions, agents, accounts or channels?
 
-If the answer is usually “no”, Human Queue should stay small or disappear.
+If the answer is usually “no”, this project should stay small.
 
 ## Run your own Human Gateway
 
@@ -137,9 +151,9 @@ bash scripts/docker/setup.sh
 See [Self-hosting](docs/self-host.md) for Docker and remote/VPS deployment.
 
 
-The unit of work is simply:
+The unit of work is deliberately smaller than a workflow:
 
-> software cannot safely or correctly continue until a human contributes something small.
+> **a machine has reached a boundary it cannot safely or correctly cross without a human contribution — and the answer must return to the exact thing that is waiting.**
 
 ---
 
