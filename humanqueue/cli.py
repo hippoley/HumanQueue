@@ -367,6 +367,100 @@ def channel_remove(args: argparse.Namespace) -> None:
     print("removed" if removed else "not found")
 
 
+
+def source_add(args: argparse.Namespace) -> None:
+    cfg = load_config() or ensure_config()
+    source_id = args.id or f"{args.provider}:{args.account}"
+    payload = {
+        "provider": args.provider,
+        "account": args.account,
+        "mode": args.mode or (
+            "gateway-ws" if args.provider == "openclaw"
+            else "muse-msp" if args.provider == "muse"
+            else "native-connector"
+        ),
+        "endpoint": args.endpoint,
+        "enabled": True,
+        "config": {
+            "credential_env": args.credential_env,
+            "host": args.host,
+        },
+    }
+    try:
+        r = httpx.post(
+            gateway_url() + f"/v1/presence/sources/{source_id}",
+            headers=_auth_headers(),
+            json=payload,
+            timeout=3,
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        print(f"Cannot register source with {gateway_url()}: {exc}")
+        raise SystemExit(1)
+    print(f"source {source_id} registered")
+    print(f" provider  {args.provider}")
+    print(f" account   {args.account}")
+    print(f" mode      {payload['mode']}")
+    if args.endpoint:
+        print(f" endpoint  {args.endpoint}")
+    if args.credential_env:
+        print(f" secret    env:{args.credential_env}")
+
+
+def source_list(args: argparse.Namespace) -> None:
+    try:
+        r = httpx.get(
+            gateway_url() + "/v1/presence/sources",
+            headers=_auth_headers(),
+            timeout=3,
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        print(f"Cannot read sources from {gateway_url()}: {exc}")
+        raise SystemExit(1)
+    sources = r.json().get("sources", [])
+    if args.json:
+        print(json.dumps(sources, indent=2, ensure_ascii=False))
+        return
+    if not sources:
+        print("No presence sources registered.")
+        return
+    for row in sources:
+        print(
+            f"{row['id']:<28} {row['provider']:<12} {row['account']:<18} "
+            f"{row['mode']:<18} {row.get('endpoint') or '-'}"
+        )
+
+
+def presence_list(args: argparse.Namespace) -> None:
+    params = {"limit": args.limit}
+    if args.state:
+        params["state"] = args.state
+    try:
+        r = httpx.get(
+            gateway_url() + "/v1/presence/sessions",
+            headers=_auth_headers(),
+            params=params,
+            timeout=3,
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        print(f"Cannot read presence from {gateway_url()}: {exc}")
+        raise SystemExit(1)
+    rows = r.json().get("sessions", [])
+    if args.json:
+        print(json.dumps(rows, indent=2, ensure_ascii=False))
+        return
+    if not rows:
+        print("No agent sessions observed.")
+        return
+    for row in rows:
+        print(
+            f"{row['state']:<16} {row['provider']:<12} {row['account']:<14} "
+            f"{row['session_id']:<28} {(row.get('current_action') or row.get('title') or '-')[:60]}"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="humanq", description="Self-hosted human:// gateway.")
     sub = parser.add_subparsers(dest="command")
@@ -404,6 +498,27 @@ def main() -> None:
     p_sessions.add_argument("--limit", type=int, default=30)
     p_sessions.add_argument("--json", action="store_true")
     p_sessions.set_defaults(func=sessions)
+
+    p_source = sub.add_parser("source", help="register multi-account agent sources")
+    ss = p_source.add_subparsers(dest="source_command")
+    p_source_add = ss.add_parser("add", help="add one account/gateway source")
+    p_source_add.add_argument("provider", choices=["openclaw", "muse", "codex", "claude", "cursor", "opencode"])
+    p_source_add.add_argument("account")
+    p_source_add.add_argument("--id")
+    p_source_add.add_argument("--mode")
+    p_source_add.add_argument("--endpoint")
+    p_source_add.add_argument("--host")
+    p_source_add.add_argument("--credential-env")
+    p_source_add.set_defaults(func=source_add)
+    p_source_list = ss.add_parser("list", help="list registered sources")
+    p_source_list.add_argument("--json", action="store_true")
+    p_source_list.set_defaults(func=source_list)
+
+    p_presence = sub.add_parser("presence", help="show normalized session state across all sources")
+    p_presence.add_argument("--state", choices=["idle","running","waiting_human","waiting_external","completed","failed","offline","unknown"])
+    p_presence.add_argument("--limit", type=int, default=100)
+    p_presence.add_argument("--json", action="store_true")
+    p_presence.set_defaults(func=presence_list)
 
     p_channel = sub.add_parser("channel", help="project Human Queue into a third-party channel")
     chs = p_channel.add_subparsers(dest="channel_command")
