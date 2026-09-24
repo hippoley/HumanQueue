@@ -1,24 +1,54 @@
 # `human://`
 
-### One queue for everything that needs a human.
+### A control plane for the moments your agents cannot continue without you.
 
-**[Try the live interactive demo →](https://hippoley.github.io/human-queue/)**
+**[Try the live interactive demo →](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Read the public evidence log →](https://github.com/hippoley/HumanQueue/issues/1)**
 
-Agents can run in parallel. Workflows can run for hours. CI can deploy itself. The expensive part is what happens when any of them reaches a boundary that still needs **you**.
+Agent runtimes already know how to ask for approval. The harder failure appears when the **human boundary is detached from the place where a human can actually answer it**: a nested agent asks inside an invisible session, Slack cannot resolve an approval that Telegram can, a callback loses the exact session/user binding, or a background run has no reliable programmatic resume path.
 
-`human://` turns every machine→human interruption into one small primitive, ranks only what deserves attention now, lets a person decide with enough context, and resumes the machine that was waiting.
+Human Queue is experimenting with one narrower primitive:
 
 ```text
-Codex      ─┐
-Claude      │    human://approve
-GitHub      │    human://review
-MCP         ├──► human://clarify ───► HUMAN QUEUE ───► decision ───► resume
-A2A         │    human://auth
-n8n         │    human://choose
-Your app   ─┘    human://edit
+runtime / account / session
+          │
+          ▼
+     HumanBoundary
+          │
+          ├── bounded context
+          ├── authorized resolver
+          ├── expiry / supersession
+          └── native resume handle
+          │
+          ▼
+ web / phone / Slack / Telegram / another agent
+          │
+          ▼
+ exact waiting session resumes
 ```
 
-**Not another agent dashboard. Not another approval product.**
+The queue is only one UI over that contract.
+
+**Human Queue is not a replacement for a runtime's native approval UI.** If one runtime fixes its local routing and that completely solves your workflow, you should use the native path.
+
+## Reality before roadmap
+
+This repository is being shaped against public failure reports rather than a feature wishlist.
+
+Current evidence includes:
+
+- **Claude Code `--bg`** — a permission hook can fire while the background session still lacks a reliable answer/resume path: [anthropics/claude-code#88698](https://github.com/anthropics/claude-code/issues/88698)
+- **OpenCode nested subagents** — descendant permission requests could be emitted but not reachable from the root TUI; recent reports suggest v2.0.3 may fix the local routing bug: [anomalyco/opencode#13715](https://github.com/anomalyco/opencode/issues/13715)
+- **OpenClaw channel mismatch** — operators have routed approvals from Slack workflows into Telegram because the original channel could not resolve them: [openclaw/openclaw#48529](https://github.com/openclaw/openclaw/issues/48529)
+- **Hermes approval transport** — an operator-selected approval transport can be bypassed by a hard-coded local prompt path, leaving the request to time out when that surface is absent: [NousResearch/hermes-agent#120859](https://github.com/NousResearch/hermes-agent/issues/120859)
+- **Vercel eve HITL authorization** — the difficult question is not only “approve?” but **which human is authorized to answer** after a durable pause: [vercel/eve#1021](https://github.com/vercel/eve/issues/1021)
+
+The working evidence thread is [#1](https://github.com/hippoley/HumanQueue/issues/1). Reports that **falsify** the project are welcome too.
+
+A useful test is simple:
+
+> After each runtime has a reliable native approval surface, do you still need to inspect and resolve human boundaries across multiple sessions, agents, accounts, or channels?
+
+If the answer is usually “no”, Human Queue should stay small or disappear.
 
 ## Run your own Human Gateway
 
@@ -231,40 +261,34 @@ See [`docs/protocol.md`](docs/protocol.md) for the protocol sketch.
 
 ---
 
-## Why a global queue is different
+## Why this can survive native approval UIs
 
-Without a shared attention layer:
+A local approval prompt solves one important case: **the person is already inside the right runtime, looking at the right session**.
 
-```text
-Codex   → open Codex
-GitHub  → open GitHub
-Jira    → open Jira
-Slack   → open Slack
-n8n     → open n8n
-email   → open email
-```
-
-With `human://`:
+The harder cases appear when that assumption breaks:
 
 ```text
-all machines
-    │
-    ▼
-what actually needs a person?
-    │
-    ├── interrupt now
-    ├── normal queue
-    ├── batch similar decisions
-    └── defer low-value noise
-    │
-    ▼
-human decides
-    │
-    ▼
-original machine resumes
+nested agent asks
+        │
+        ├── root UI cannot see it
+        ├── operator is on another device
+        ├── current channel cannot answer it
+        ├── several sessions are waiting
+        └── callback must prove which session + human it belongs to
+        │
+        ▼
+HumanBoundary keeps provenance + resume identity
+        │
+        ▼
+human decides from an authorized surface
+        │
+        ▼
+native runtime resolves the exact request
 ```
 
-**Attention ordering never becomes implicit permission.** A high-risk item is made more visible, not more autonomous.
+That is why Human Queue keeps **source/account/session identity**, bounded decision context, authorization, supersession and native resume separate from presentation.
+
+It can still rank, batch or defer requests, but **attention ordering never becomes implicit permission**. A high-risk item is made more visible, not more autonomous.
 
 ---
 
