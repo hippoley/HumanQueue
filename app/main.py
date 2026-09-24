@@ -39,7 +39,7 @@ presence_registry = PresenceRegistry(DB_PATH)
 
 app = FastAPI(
     title="human://",
-    version="0.5.0",
+    version="0.6.0",
     description="One queue for everything that needs a human.",
 )
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
@@ -66,14 +66,14 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"ok": True, "name": "human://", "version": "0.5.0"}
+    return {"ok": True, "name": "human://", "version": "0.6.0"}
 
 
 @app.get("/gateway")
 def gateway_info():
     return {
         "name": "human://",
-        "version": "0.5.0",
+        "version": "0.6.0",
         "auth_required": bool(gateway_token()),
         "self_hosted": True,
     }
