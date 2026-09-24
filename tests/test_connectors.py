@@ -568,3 +568,76 @@ def test_mcp_presence_summary(monkeypatch):
     assert structured["counts"]["running"] == 1
     assert structured["counts"]["waiting_human"] == 1
     assert len(structured["needs_attention"]) == 2
+
+
+def test_native_connectors_only_dedupe_with_stable_identity(monkeypatch):
+    from humanqueue.connectors import claude, cursor
+
+    captured: dict[str, list[dict]] = {"codex": [], "claude": [], "cursor": []}
+
+    def fake_queue(source: str):
+        class FakeHumanQueue:
+            def ask(self, *args, **kwargs):
+                captured[source].append(kwargs)
+                return {"action": "approve"}
+        return FakeHumanQueue
+
+    monkeypatch.setattr(codex, "HumanQueue", fake_queue("codex"))
+    monkeypatch.setattr(codex, "observe_event", lambda event: None)
+    monkeypatch.setattr(claude, "HumanQueue", fake_queue("claude"))
+    monkeypatch.setattr(claude, "observe_event", lambda event: None)
+    monkeypatch.setattr(cursor, "HumanQueue", fake_queue("cursor"))
+    monkeypatch.setattr(cursor, "observe_event", lambda event: None)
+
+    # Missing session/turn provenance: still ask the human, but never reuse the
+    # decision through idempotency/supersession.
+    codex.permission_request({
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push"},
+    })
+    claude.permission_request({
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push"},
+    })
+    cursor.shell_permission({
+        "hook_event_name": "beforeShellExecution",
+        "command": "git push origin main",
+        "cwd": "/repo",
+    })
+
+    assert captured["codex"][0]["idempotency_key"] is None
+    assert captured["codex"][0]["supersession_key"] is None
+    assert captured["claude"][0]["idempotency_key"] is None
+    assert captured["claude"][0]["supersession_key"] is None
+    assert captured["cursor"][0]["idempotency_key"] is None
+
+    # Stable native provenance enables dedupe again.
+    codex.permission_request({
+        "session_id": "thr_1",
+        "turn_id": "turn_1",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push"},
+    })
+    claude.permission_request({
+        "session_id": "claude_1",
+        "prompt_id": "prompt_1",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push"},
+    })
+    cursor.shell_permission({
+        "conversation_id": "conv_1",
+        "generation_id": "gen_1",
+        "hook_event_name": "beforeShellExecution",
+        "command": "git push origin main",
+        "cwd": "/repo",
+    })
+
+    assert captured["codex"][1]["idempotency_key"].startswith("codex:")
+    assert captured["codex"][1]["supersession_key"] == "codex:thr_1:turn_1:Bash"
+    assert captured["claude"][1]["idempotency_key"].startswith("claude:")
+    assert captured["claude"][1]["supersession_key"] == "claude:claude_1:prompt_1:Bash"
+    assert captured["cursor"][1]["idempotency_key"].startswith("cursor:")
