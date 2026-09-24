@@ -365,3 +365,28 @@ def test_home_surfaces_boundary_integrity_view(tmp_path: Path):
     assert "Boundary integrity" in response.text
     assert "resume confirmed" in response.text
     assert "channel undeliverable" in response.text
+
+
+def test_missing_native_identity_never_creates_shared_supersession_key(tmp_path: Path):
+    from app.adapters import from_a2a, from_openai
+
+    store = Store(str(tmp_path / "identity-supersession.db"))
+
+    a = from_a2a({"task": {"status": {"state": "input-required", "message": "first"}}})
+    b = from_a2a({"task": {"status": {"state": "input-required", "message": "second"}}})
+    assert a.supersession_key is None
+    assert b.supersession_key is None
+
+    first = store.create(a)
+    second = store.create(b)
+    assert first.id != second.id
+    assert store.get(first.id).status.value == "pending"
+    assert store.get(second.id).status.value == "pending"
+
+    openai_unidentified = from_openai({"tool_name": "shell"})
+    assert openai_unidentified.source_ref == "unidentified"
+    assert openai_unidentified.supersession_key is None
+
+    openai_identified = from_openai({"run_id": "run-123", "tool_name": "shell"})
+    assert openai_identified.source_ref == "run-123"
+    assert openai_identified.supersession_key == "openai:run-123"
