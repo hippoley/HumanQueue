@@ -304,9 +304,9 @@ These are different from normalization adapters: they observe a real editor sess
 | **MCP** | Tool arguments supplied by the calling agent | `human_ask` tool result returns to the same MCP call | Real stdio bridge |
 | **Generic webhook channel** | Receives bounded ContextCapsule | Signed action callback resolves the Gateway request | Real channel projection |
 | **Telegram** | Receives bounded dialogue + decision buttons | Long-poll callback resolves local Gateway | Real outbound-only channel |
-| **Slack** | Receives bounded Block Kit card | Socket Mode action resolves local Gateway | Real outbound-only channel |
-| **Claude Code** | Native hooks: session/prompt/stop + transcript locator | Native PermissionRequest allow/deny | Real connector |
-| **OpenCode V2** | Prompt + session context via plugin API | Permission evaluate hook mutates allow/deny | Real connector |
+| **Slack** | Receives bounded Block Kit card | Socket Mode action resolves local Gateway | Channel implemented; workspace E2E still pending |
+| **Claude Code** | Native hooks: session/prompt/stop + transcript locator | Native PermissionRequest allow/deny | Connector implemented; real-host E2E still pending |
+| **OpenCode V2** | Prompt + session context via plugin API | Permission evaluate hook mutates allow/deny | Plugin implemented; real-host E2E still pending |
 | **OpenClaw Gateway** | Gateway WS sessions/active-run/approval APIs | Native approval RPCs | Presence worker design ready; live worker next |
 | **Muse Code** | MSP session/list/read + event-sourced sessions | MSP approval/decide | Presence worker design ready; live worker next |
 
@@ -496,7 +496,7 @@ Production use still needs hardened identity, inbound signature verification, se
 
 ```bash
 pytest -q
-# 41 passed
+# 39 passed
 ```
 
 The current suite covers queue semantics, gateway authentication, Codex/Cursor/Claude native round-trips, OpenCode plugin packaging, connector session tracking, multi-account Presence Hub state, MCP fleet-status tools, signed webhook projection, Telegram and Slack channel rendering/security, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
