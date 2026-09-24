@@ -293,6 +293,31 @@ def channel_add(args: argparse.Namespace) -> None:
         print(f"  humanq channel run {args.name}")
         return
 
+    if args.type == "slack":
+        app_token = args.app_token or os.environ.get("HUMAN_QUEUE_SLACK_APP_TOKEN")
+        bot_token = args.bot_token or os.environ.get("HUMAN_QUEUE_SLACK_BOT_TOKEN")
+        channel_id = args.channel_id or os.environ.get("HUMAN_QUEUE_SLACK_CHANNEL_ID")
+        if not app_token or not bot_token or not channel_id:
+            raise SystemExit(
+                "slack channel requires --app-token, --bot-token and --channel-id "
+                "(or HUMAN_QUEUE_SLACK_APP_TOKEN / HUMAN_QUEUE_SLACK_BOT_TOKEN / "
+                "HUMAN_QUEUE_SLACK_CHANNEL_ID)"
+            )
+        save_channel(args.name, {
+            "type": "slack",
+            "app_token": app_token,
+            "bot_token": bot_token,
+            "channel_id": str(channel_id),
+            "enabled": True,
+        })
+        print(f"channel {args.name} added")
+        print(" type    slack")
+        print(f" channel {channel_id}")
+        print(" tokens  stored privately in ~/.human-queue/config.json")
+        print("\nStart the outbound-only Socket Mode worker:")
+        print(f"  humanq channel run {args.name}")
+        return
+
     raise SystemExit(f"unsupported channel type: {args.type}")
 
 
@@ -306,6 +331,8 @@ def channel_list(args: argparse.Namespace) -> None:
                 item["secret"] = "***"
             if item.get("bot_token"):
                 item["bot_token"] = "***"
+            if item.get("app_token"):
+                item["app_token"] = "***"
             safe[name] = item
         print(json.dumps(safe, indent=2))
         return
@@ -315,7 +342,9 @@ def channel_list(args: argparse.Namespace) -> None:
     for name, cfg in configs.items():
         state = "enabled" if cfg.get("enabled", True) else "disabled"
         destination = cfg.get("url") or (
-            f"chat:{cfg.get('chat_id')}" if cfg.get("type") == "telegram" else "-"
+            f"chat:{cfg.get('chat_id')}" if cfg.get("type") == "telegram"
+            else f"channel:{cfg.get('channel_id')}" if cfg.get("type") == "slack"
+            else "-"
         )
         print(f"{name:<18} {cfg.get('type','?'):<10} {destination}  {state}")
 
@@ -327,6 +356,9 @@ def channel_run(args: argparse.Namespace) -> None:
     if cfg.get("type") == "telegram":
         from .channels.telegram import run_long_poll
         raise SystemExit(run_long_poll(args.name))
+    if cfg.get("type") == "slack":
+        from .channels.slack import run_socket_mode
+        raise SystemExit(run_socket_mode(args.name))
     raise SystemExit(f"channel type {cfg.get('type')} does not need a local worker")
 
 
@@ -376,12 +408,14 @@ def main() -> None:
     p_channel = sub.add_parser("channel", help="project Human Queue into a third-party channel")
     chs = p_channel.add_subparsers(dest="channel_command")
     p_channel_add = chs.add_parser("add", help="add a third-party channel")
-    p_channel_add.add_argument("type", choices=["webhook", "telegram"])
+    p_channel_add.add_argument("type", choices=["webhook", "telegram", "slack"])
     p_channel_add.add_argument("name")
     p_channel_add.add_argument("target", nargs="?", help="webhook URL")
     p_channel_add.add_argument("--secret")
     p_channel_add.add_argument("--bot-token")
     p_channel_add.add_argument("--chat-id")
+    p_channel_add.add_argument("--app-token")
+    p_channel_add.add_argument("--channel-id")
     p_channel_add.set_defaults(func=channel_add)
     p_channel_list = chs.add_parser("list", help="list configured channels")
     p_channel_list.add_argument("--json", action="store_true")
