@@ -174,7 +174,7 @@ HumanQueue starts where a single foreground session stops being enough: **backgr
 
 <br />
 
-## 60 seconds to the first human boundary
+## Start here
 
 ```bash
 git clone https://github.com/hippoley/HumanQueue.git
@@ -185,242 +185,43 @@ humanq demo
 
 Open `http://127.0.0.1:7482`.
 
-You will see machines that are actually waiting for a human decision — not a generic task inbox.
-
 ```text
 YOU ARE BLOCKING 5 MACHINES.
 
-#1  human://approve
-    Delete production cache keys?
-    high consequence · unblocks 1 · ~8 sec
-
-#2  human://approve
-    Deploy api@2.4.0 to production
-    unblocks 4 · ~6 sec
-
-#3  human://auth
-    Reconnect Salesforce credential
+#1  human://approve    Delete production cache keys?       ~8 sec
+#2  human://approve    Deploy api@2.4.0 to production      ~6 sec
+#3  human://auth       Reconnect Salesforce credential
 ```
 
-The demo is successful only when the decision returns to the correct waiting execution.
+The demo is not complete when a card appears. It is complete when the decision returns to the **correct waiting execution**.
 
-## Built against failures, not a feature wishlist
-
-HumanQueue has a public [evidence log](https://github.com/hippoley/HumanQueue/issues/1). The architecture changes when reality disagrees with it.
-
-| What we observe in a real workflow | What we do |
-| --- | --- |
-| runtime routed its own prompt incorrectly | fix upstream; **do not grow HumanQueue** |
-| background/nested request has no reachable responder | strengthen pending-decision + connector path |
-| stale or duplicate prompt can still be answered | strengthen correlation / supersession |
-| operator must answer from another device/channel | project the same canonical decision outward |
-| several runtimes expose real human boundaries | normalize them into one control plane |
-| repeated low-risk decisions become predictable | shadow a policy candidate; never silently enable it |
-
-That gives this project a falsifiable thesis:
-
-> **If native runtimes make every human boundary reachable and resumable, and cross-runtime operators don't need a shared control plane, HumanQueue should stay small.**
-
-That's a feature, not a failure.
-
-## The contract
-
-A HumanQueue integration should be able to prove five things:
-
-**1. The boundary is real.** The machine genuinely cannot or should not continue alone.
-
-**2. Identity survives transport.** A Slack card, Telegram button or web UI never becomes the source of truth.
-
-**3. Old decisions die.** Superseded, expired and already-resolved requests cannot revive stale execution.
-
-**4. Resolution is exact.** The answer maps back to the native request that created the boundary.
-
-**5. Failure stays safe.** If HumanQueue disappears, a connector falls back to the runtime's native approval path rather than silently allowing an action.
-
-### What works today
-
-| Path | Status |
-| --- | --- |
-| Local Gateway + web queue + SQLite ledger | working |
-| Python / JavaScript / HTTP request path | working |
-| Codex native permission round-trip | working |
-| Cursor high-risk shell gate | working |
-| MCP `human_ask` round-trip | working |
-| Generic signed webhook projection | working |
-| Telegram decision channel | working |
-| Slack Socket Mode channel | implemented; real workspace E2E pending |
-| Claude Code connector | implemented; real-host E2E pending |
-| OpenCode V2 connector | implemented; real-host E2E pending |
-| Cross-account Presence registry | working |
-| OpenClaw live Gateway worker | not implemented yet |
-| Muse MSP live worker | not implemented yet |
-
-### Seen in the wild
-
-This project is being shaped against public failure reports, not a feature wishlist.
-
-- **Claude Code `--bg`** — a permission hook can fire while the background session still lacks a reliable answer/resume path: [#88698](https://github.com/anthropics/claude-code/issues/88698)
-- **OpenCode nested subagents** — descendant asks could exist without a reachable root presentation path; a recent report says v2.0.3 may fix the local case: [#13715](https://github.com/anomalyco/opencode/issues/13715)
-- **OpenClaw Slack → Telegram workaround** — operators have routed approvals to a different channel because the originating surface could not resolve them: [#48529](https://github.com/openclaw/openclaw/issues/48529)
-- **Hermes selected transport bypass** — an approval can be sent to a surface nobody is watching and later be misreported as “human did not respond”: [#120859](https://github.com/NousResearch/hermes-agent/issues/120859)
-- **Vercel eve HITL authorization** — the missing primitive is sometimes not “approve?” but **which human is allowed to answer after the durable pause**: [#1021](https://github.com/vercel/eve/issues/1021)
-
-The public [evidence thread](https://github.com/hippoley/HumanQueue/issues/1) also records what would falsify the project.
-
-**The test:** after native runtimes fix their own approval surfaces, do people still need one reliable way to inspect, route and resolve human boundaries across sessions, agents, accounts or channels?
-
-If the answer is usually “no”, this project should stay small.
-
-## Run your own Human Gateway
-
-Human Queue is **self-host first**. Hosted infrastructure is optional.
-
-macOS / Linux / WSL:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/hippoley/human-queue/main/scripts/install.sh | bash
-humanq gateway run
-```
-
-Then open your own queue:
-
-```bash
-humanq dashboard
-```
-
-First-run onboarding creates a private gateway token and persistent state under `~/.human-queue/`:
-
-```text
-~/.human-queue/
-├── config.json
-└── human-queue.db
-```
-
-Connect any agent or workflow to **your** gateway:
-
-```bash
-curl http://127.0.0.1:7482/v1/human \
-  -H "Authorization: Bearer hq_xxx" \
-  -H "Content-Type: application/json" \
-  -d '{"uri":"human://approve","source":"my-agent","ref":"run-42","title":"Deploy to production?"}'
-```
-
-The request appears immediately in your local dashboard. Your decision can be polled by the caller or sent back through a signed resume webhook.
-
-Useful local commands:
+For an empty self-hosted gateway:
 
 ```bash
 humanq onboard
 humanq gateway run
-humanq gateway status
 humanq dashboard
-humanq doctor
-humanq token rotate
-
-# real editor connectors
-humanq connect codex
-humanq connect cursor
-humanq connect claude
-humanq connect opencode
-humanq sessions
-
-# multi-account presence
-humanq source add openclaw work --endpoint ws://openclaw-work.lan:18789 --credential-env OPENCLAW_WORK_TOKEN
-humanq source add muse local-muse --mode muse-msp
-humanq source list
-humanq presence
-humanq presence --state waiting_human
-
-# semantic human input for MCP-capable agents
-humanq mcp serve
-
-# project requests into your own third-party channel
-humanq channel add webhook ops https://your-channel.example/human
-
-# no public inbound port required
-humanq channel add telegram phone --bot-token "$BOT_TOKEN" --chat-id "$CHAT_ID"
-humanq channel run phone
-
-humanq channel add slack ops --app-token "$SLACK_APP_TOKEN" --bot-token "$SLACK_BOT_TOKEN" --channel-id "$SLACK_CHANNEL_ID"
-humanq channel run ops
-
-humanq channel list
 ```
 
-Prefer containers?
+> Self-hosting, Docker, remote deployment and connector setup: [docs/self-host.md](docs/self-host.md)
 
-```bash
-git clone https://github.com/hippoley/human-queue.git
-cd human-queue
-bash scripts/docker/setup.sh
-```
+<br />
 
-See [Self-hosting](docs/self-host.md) for Docker and remote/VPS deployment.
+## The protocol surface
 
+Seven verbs cover the current human boundary:
 
-The unit of work is deliberately smaller than a workflow:
-
-> **a machine has reached a boundary it cannot safely or correctly cross without a human contribution — and the answer must return to the exact thing that is waiting.**
-
----
-
-## Try the seeded demo in 60 seconds
-
-```bash
-git clone https://github.com/hippoley/human-queue.git
-cd human-queue
-pip install -e .
-humanq demo
-```
-
-Your browser opens at `http://127.0.0.1:7482` with a live demo containing:
-
-- Codex waiting before a destructive shell action
-- GitHub waiting at a production deployment gate
-- a support agent asking about a $149 refund
-- MCP asking for a missing identifier
-- n8n waiting on OAuth
-- several tiny refunds quietly moved into one batch
-- historical human decisions replayed as a **policy candidate**, never auto-enabled
-
-The first screen is intentionally simple:
-
-```text
-YOU ARE BLOCKING 5 MACHINES.
-
-#1  human://approve
-    Delete production cache keys?
-    high consequence · unblocks 1 · ~8 sec
-
-#2  human://approve
-    Deploy api@2.4.0 to production
-    unblocks 4 · ~6 sec
-
-#3  human://auth
-    Reconnect Salesforce credential
-```
-
-The goal is not to make you process approvals faster. The goal is to make fewer things deserve to interrupt you at all.
-
----
-
-## The primitive
-
-The public surface is deliberately tiny:
-
-| URI | Meaning |
+| URI | Human contribution |
 | --- | --- |
-| `human://approve` | approve or reject a consequential action |
-| `human://review` | inspect output and accept / change / reject |
-| `human://clarify` | provide missing information |
-| `human://auth` | complete an out-of-band authentication step |
+| `human://approve` | authorize or reject a consequential action |
+| `human://review` | inspect and accept / change / reject output |
+| `human://clarify` | supply missing information |
+| `human://auth` | complete out-of-band authentication |
 | `human://choose` | choose among explicit alternatives |
-| `human://edit` | modify content before the machine continues |
+| `human://edit` | modify content before execution continues |
 | `human://claim` | take ownership of a paused workflow |
 
-Everything underneath — source-specific adapters, priority, batching, quorum, audit, callbacks — stays behind that boundary.
-
-### Python
+Everything else — adapters, priority, batching, quorum, channels, callbacks — stays behind the boundary.
 
 ```python
 from humanqueue import HumanQueue
@@ -429,13 +230,11 @@ human = HumanQueue()
 
 decision = human.ask(
     "human://approve",
-    source="my-agent",
-    ref="run-42",
-    title="Deploy to production?",
-    why_now="CI passed and four downstream jobs are blocked.",
+    source="release-agent",
+    ref="deploy-2841",
+    title="Deploy api@2.4.0 to production?",
     risk=.85,
     downstream=4,
-    seconds=8,
     wait=True,
 )
 
@@ -443,75 +242,63 @@ if decision["action"] == "approve":
     deploy()
 ```
 
-For long-running systems, do not block a worker: provide a `resume_url` and Human Queue returns the decision through a signed callback.
+For asynchronous systems, provide a resume target instead of blocking the worker. See [the protocol](docs/protocol.md).
 
-### JavaScript
+<br />
 
-```js
-import { HumanQueue } from './sdk/js/humanqueue.mjs';
+## Reality, not roadmap
 
-const human = new HumanQueue();
-const request = await human.ask('human://review', {
-  source: 'release-bot',
-  ref: 'release-2841',
-  title: 'Review generated release notes',
-  seconds: 20,
-});
+HumanQueue is being shaped against public failure reports.
 
-const decision = await human.wait(request.id);
-```
+| Observed boundary | What it teaches us |
+| --- | --- |
+| [Claude Code background permission](https://github.com/anthropics/claude-code/issues/88698) | seeing a request is not the same as having a reliable answer/resume path |
+| [OpenCode nested subagent](https://github.com/anomalyco/opencode/issues/13715) | descendant asks need a reachable presentation path; native fixes may eliminate the need |
+| [OpenClaw cross-channel workaround](https://github.com/openclaw/openclaw/issues/48529) | operators route decisions elsewhere when the originating surface cannot resolve them |
+| [Hermes transport bypass](https://github.com/NousResearch/hermes-agent/issues/120859) | a decision can be delivered to a surface nobody is watching |
+| [Vercel eve HITL authorization](https://github.com/vercel/eve/issues/1021) | durable pause also needs to know which human is authorized to resume it |
 
-### Plain HTTP
+The [public evidence log](https://github.com/hippoley/HumanQueue/issues/1) records evidence **for and against** the project.
 
-```bash
-curl -X POST http://127.0.0.1:7482/v1/human \
-  -H 'content-type: application/json' \
-  -d '{
-    "uri":"human://approve",
-    "source":"codex",
-    "ref":"session-7",
-    "title":"Run destructive command?",
-    "why_now":"Execution is paused at the shell boundary.",
-    "risk":0.98,
-    "unblock":0.95,
-    "seconds":8
-  }'
-```
+> **If native runtimes make every human boundary reachable and resumable, and cross-runtime operators do not need a shared control plane, HumanQueue should stay small.**
 
-See [`docs/protocol.md`](docs/protocol.md) for the protocol sketch.
+<br />
 
----
+## Current reality
 
-## Why this can survive native approval UIs
+| Path | State |
+| --- | --- |
+| Gateway · web queue · SQLite ledger | **working** |
+| Python · JavaScript · HTTP | **working** |
+| Codex native permission round-trip | **working** |
+| Cursor high-risk shell gate | **working** |
+| MCP `human_ask` round-trip | **working** |
+| Signed webhook projection | **working** |
+| Telegram decision channel | **working** |
+| Slack Socket Mode | implemented · workspace E2E pending |
+| Claude Code | implemented · real-host E2E pending |
+| OpenCode V2 | implemented · real-host E2E pending |
+| Cross-account Presence registry | **working** |
+| OpenClaw live Gateway worker | not implemented |
+| Muse MSP live worker | not implemented |
 
-A local approval prompt solves one important case: **the person is already inside the right runtime, looking at the right session**.
+No “supported” badge is granted for code that has not crossed its real host.
 
-The harder cases appear when that assumption breaks:
+<br />
 
-```text
-nested agent asks
-        │
-        ├── root UI cannot see it
-        ├── operator is on another device
-        ├── current channel cannot answer it
-        ├── several sessions are waiting
-        └── callback must prove which session + human it belongs to
-        │
-        ▼
-HumanBoundary keeps provenance + resume identity
-        │
-        ▼
-human decides from an authorized surface
-        │
-        ▼
-native runtime resolves the exact request
-```
+## Safety invariants
 
-That is why Human Queue keeps **source/account/session identity**, bounded decision context, authorization, supersession and native resume separate from presentation.
+**Visibility is not permission.** Priority changes where a request appears, never whether it is approved.
 
-It can still rank, batch or defer requests, but **attention ordering never becomes implicit permission**. A high-risk item is made more visible, not more autonomous.
+**The surface is not the source of truth.** Slack, Telegram and the web UI project a canonical pending decision; they do not own it.
 
----
+**Old decisions die.** Superseded, expired and resolved boundaries cannot revive stale execution.
+
+**Failure falls back safely.** A connector that cannot reach HumanQueue returns to the runtime's native approval path rather than silently allowing an action.
+
+**Automation is earned.** Historical decisions may produce a shadow policy candidate; HumanQueue never silently turns repeated approval into autonomy.
+
+<br />
 
 ## What is implemented
 
@@ -595,156 +382,6 @@ These adapters normalize external events into Human Queue. They are not the same
 
 ---
 
-## Agent Presence Hub
-
-Human Queue now separates **continuous fleet presence** from **human intervention**.
-
-```text
-OpenClaw work account ─┐
-OpenClaw personal ─────┤
-Muse work ─────────────┤
-Codex / Claude / Cursor├──► Presence Hub ───► normalized session state
-OpenCode ──────────────┘            │
-                                    ├──► Human Queue when a person is needed
-                                    └──► MCP status tools for conversational queries
-```
-
-The identity boundary is `source_id + session_id`, so two accounts or gateways can safely expose identical native session IDs.
-
-Normalized states:
-
-```text
-idle · running · waiting_human · waiting_external · completed · failed · offline · unknown
-```
-
-The same state is queryable through the dashboard/API or conversationally through:
-
-```text
-human_presence_list
-human_presence_summary
-```
-
-So an MCP-capable assistant can answer “which agents are still running?” or “what is waiting for me?” without opening each editor.
-
-OpenClaw is the strongest future remote worker target because its Gateway WebSocket exposes live session subscriptions, active-run state and approval RPCs. Muse Code now exposes `muse serve` / MSP with session listing, read/resume and permission decisions. The Presence Hub source/account registry is implemented; the long-lived OpenClaw and Muse supervisor workers are the next step.
-
-See [Agent Presence Hub](docs/presence-hub.md).
-
----
-
-## The part that matters long-term
-
-A queue is only phase one.
-
-```text
-1. WHERE DO I NEED TO LOOK?
-                  ↓
-2. WHAT DESERVES MY ATTENTION?
-                  ↓
-3. WHY DOES THIS STILL NEED ME?
-```
-
-Every repeated interruption is evidence that the boundary may belong in a policy instead.
-
-Human Queue therefore keeps explicit `policy_key` histories and can replay a candidate policy in shadow mode:
-
-```text
-refund-under-20-known-customer
-
-historical decisions       48
-would match humans          47
-conflicts                    1
-observed attention          7m 12s
-mode               shadow_only
-policy enabled           false
-```
-
-The system can show the opportunity. A person still decides whether that policy should exist.
-
----
-
-## Run it
-
-### Local
-
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e .
-humanq demo
-```
-
-Run an empty server instead:
-
-```bash
-humanq serve --host 0.0.0.0 --port 7482
-```
-
-The default database lives at `~/.human-queue/human-queue.db`. Override it with `HUMAN_QUEUE_DB`.
-
-### Docker
-
-```bash
-docker compose up --build
-```
-
-Open `http://127.0.0.1:7482`.
-
----
-
-## API map
-
-```text
-POST /v1/human                         small human:// envelope
-POST /v1/requests                      full canonical request
-POST /v1/import                        adapter normalization
-GET  /v1/queue                         active global queue
-GET  /v1/batches                       batched human work
-GET  /v1/requests/{id}                 request + event history
-POST /v1/requests/{id}/resolve         human decision
-POST /v1/requests/{id}/claim           ownership
-GET  /v1/metrics                       attention metrics
-GET  /v1/delegation-frontier           policy candidates
-GET  /v1/policy-sandbox/{policy_key}   shadow replay
-GET  /v1/events/stream                 live queue changes
-POST /v1/connectors/events             native connector observations
-GET  /v1/connectors/sessions           observed agent/editor sessions
-GET  /v1/connectors/sessions/{p}/{id}  bounded session context + recent events
-POST /v1/presence/sources/{source_id}  register one provider/account source
-GET  /v1/presence/sources              list connected source accounts
-POST /v1/presence/sessions             ingest normalized session presence
-GET  /v1/presence/sessions             fleet state across all accounts
-POST /channels/{name}/resolve/{id}     signed third-party channel decision
-```
-
-FastAPI also exposes interactive API docs at `/docs`.
-
----
-
-## Safety model
-
-`human://` schedules attention. It does **not** silently take consequential decisions away from people.
-
-- priority controls visibility, not approval
-- defer means “do not interrupt now,” not “discard”
-- batch means “review together,” not “approve together automatically”
-- policy suggestions remain suggestions
-- sandbox replay never enables a policy
-- stale requests can be superseded so people do not approve obsolete state
-- signed resume callbacks preserve the source→human→source chain
-
-Production use still needs hardened identity, inbound signature verification, secret management, tenant isolation, escalation workers, and real bidirectional connectors.
-
----
-
-## Tests
-
-```bash
-pytest -q
-# 39 passed
-```
-
-The current suite covers queue semantics, gateway authentication, Codex/Cursor/Claude native round-trips, OpenCode plugin packaging, connector session tracking, multi-account Presence Hub state, MCP fleet-status tools, signed webhook projection, Telegram and Slack channel rendering/security, duplicate-resolution protection, policy replay, batching, supersession, quorum, and the cross-platform demo seed.
 
 ---
 
@@ -775,6 +412,7 @@ If the boundary survives the local fix — across sessions, accounts, devices or
 The best contribution is evidence that changes the architecture, including evidence that removes something from the roadmap.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 
 ## License
 
