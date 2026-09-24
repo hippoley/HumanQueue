@@ -449,3 +449,95 @@ def test_telegram_rejects_callback_from_other_chat(monkeypatch):
     )
     assert ok is False
     assert "not authorized" in message
+
+
+def test_claude_permission_round_trip_allow(monkeypatch):
+    from humanqueue.connectors import claude
+
+    class FakeHumanQueue:
+        def ask(self, *args, **kwargs):
+            assert args[0] == "human://approve"
+            assert kwargs["source"] == "claude-code"
+            return {"action": "approve"}
+
+    monkeypatch.setattr(claude, "HumanQueue", FakeHumanQueue)
+    monkeypatch.setattr(claude, "observe_event", lambda event: None)
+
+    result = claude.permission_request({
+        "session_id": "claude_1",
+        "prompt_id": "prompt_1",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push"},
+        "cwd": "/repo",
+    })
+    decision = result["hookSpecificOutput"]["decision"]
+    assert decision["behavior"] == "allow"
+
+
+def test_claude_permission_falls_back_to_native_prompt(monkeypatch):
+    from humanqueue.connectors import claude
+
+    class FakeHumanQueue:
+        def ask(self, *args, **kwargs):
+            raise TimeoutError("gateway unavailable")
+
+    monkeypatch.setattr(claude, "HumanQueue", FakeHumanQueue)
+    monkeypatch.setattr(claude, "observe_event", lambda event: None)
+
+    assert claude.permission_request({
+        "session_id": "claude_1",
+        "prompt_id": "prompt_1",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push"},
+    }) == {}
+
+
+def test_opencode_installer_writes_global_plugin(tmp_path: Path):
+    from humanqueue.connectors.opencode import install_opencode_plugin, uninstall_opencode_plugin
+
+    result = install_opencode_plugin(tmp_path)
+    target = Path(result["plugin_path"])
+    assert target.exists()
+    content = target.read_text(encoding="utf-8")
+    assert 'Plugin.define' in content
+    assert 'ctx.permission.hook("evaluate"' in content
+    assert 'event.effect !== "ask"' in content
+
+    removed = uninstall_opencode_plugin(tmp_path)
+    assert removed["removed"] is True
+    assert not target.exists()
+
+
+def test_slack_decision_value_and_bounded_blocks(tmp_path: Path):
+    from app.models import AttentionRequestCreate, RequestKind
+    from app.store import Store
+    from humanqueue.channels.slack import parse_decision_value, render_blocks
+
+    assert parse_decision_value("attn_1|approve") == ("attn_1", "approve")
+    assert parse_decision_value("broken") is None
+
+    store = Store(str(tmp_path / "slack.db"))
+    item = store.create(AttentionRequestCreate(
+        source="claude-code",
+        source_ref="permission-1",
+        title="Allow git push?",
+        summary="Claude Code is waiting.",
+        kind=RequestKind.approval,
+        context={
+            "session_context": {
+                "provider": "claude-code",
+                "session_id": "claude_1",
+                "latest_user_prompt": "Push only after CI passes.",
+                "latest_assistant_message": "CI passed.",
+                "transcript_locator": "/private/full.jsonl",
+            }
+        },
+    ))
+    blocks = render_blocks(item)
+    encoded = str(blocks)
+    assert "Push only after CI passes." in encoded
+    assert "CI passed." in encoded
+    assert "/private/full.jsonl" not in encoded
+    assert "humanq_decision" in encoded
