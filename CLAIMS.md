@@ -26,6 +26,7 @@ A green checkbox here means only what the evidence column says it means.
 | OpenClaw live Presence worker | **not implemented** | architecture only | Do not infer support from source registration |
 | Muse MSP live Presence worker | **not implemented** | architecture only | MSP is also a provider-preview surface |
 | OpenClaw Slack approval gap requires Human Queue | **falsified for that local case** | OpenClaw PR #58155 merged native Slack exec approvals | Historical workaround should not be cited as a current need |
+| Multi-agent HITL requires an external Human Queue | **falsified for at least one local case** | Mastra #18766 resolved the reported 8-agent nested-HITL shape with Supervisor Agent | A correct runtime-local supervisor can preserve suspend/resume without a cross-runtime control plane |
 | Cross-runtime Presence Hub is independently valuable after native fixes | **hypothesis** | no direct operator adoption evidence yet | OpenClaw ownership bugs are provenance evidence, not validation of a separate Presence product |
 | One cross-runtime HumanBoundary contract is useful beyond native UIs | **hypothesis under test** | public evidence thread + external probes | Needs real operator adoption / integration evidence |
 
