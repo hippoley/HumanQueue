@@ -357,6 +357,23 @@ class Store:
             status_rows = c.execute("SELECT status,COUNT(*) n FROM requests GROUP BY status").fetchall()
             surface_rows = c.execute("SELECT surface_mode,COUNT(*) n FROM requests WHERE status IN (?,?) GROUP BY surface_mode", (RequestStatus.pending.value, RequestStatus.claimed.value)).fetchall()
             recent = c.execute("SELECT payload,status,resolution,created_at,updated_at,surface_mode FROM requests WHERE created_at>=?", (day,)).fetchall()
+            integrity_rows = c.execute(
+                """
+                SELECT type, COUNT(*) n
+                FROM events
+                WHERE created_at>=?
+                  AND type IN (
+                    'channel_delivered',
+                    'channel_undeliverable',
+                    'resume_confirmed',
+                    'resume_delivered_unconfirmed',
+                    'resume_undeliverable',
+                    'resume_not_applicable'
+                  )
+                GROUP BY type
+                """,
+                (day,),
+            ).fetchall()
         attention_seconds = 0
         resolved = 0
         batched = 0
@@ -386,6 +403,7 @@ class Store:
                 "interruptions_avoided": batched + deferred,
                 "avg_time_to_resolution_seconds": round(sum(decision_seconds)/len(decision_seconds), 1) if decision_seconds else None,
             },
+            "integrity_last_24h": {r["type"]: r["n"] for r in integrity_rows},
         }
 
     def frontier(self, min_samples: int = 5, min_agreement: float = 0.9) -> list[dict[str, Any]]:
