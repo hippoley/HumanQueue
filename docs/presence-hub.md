@@ -7,6 +7,8 @@ Human Queue separates two concerns that should not be conflated:
 
 The Presence Hub is designed to run on one private-network host next to the Human Gateway.
 
+> **Implementation status:** the normalized Presence registry, local connector lifecycle projection, CLI source registration, dashboard Fleet view, and MCP presence tools are implemented. The long-lived OpenClaw Gateway worker and Muse MSP worker are **not implemented or end-to-end validated yet**.
+
 ## Topology
 
 ```text
@@ -50,6 +52,11 @@ source_id = provider + account + gateway/host identity
 
 This prevents two OpenClaw gateways, two Muse accounts, or two local profiles from colliding even if their native session ids happen to match.
 
+
+Identity is only authoritative when the provider actually supplies enough provenance. Human Queue must not repair an ownerless event by guessing a default agent or bare `main` session.
+
+OpenClaw [#126360](https://github.com/openclaw/openclaw/issues/126360) is a current example: some first-party/global paths still emit requests without an authoritative agent/session owner under explicit multi-agent ownership. Until the upstream runtime fixes those paths, a Presence connector should preserve them as unknown / unowned rather than presenting guessed state as authoritative.
+
 ## Normalized presence state
 
 Every connector maps its native lifecycle onto:
@@ -91,7 +98,7 @@ The `native` object is intentionally provider-specific. Product logic should dep
 
 ## OpenClaw
 
-OpenClaw is the ideal remote Presence Connector because its Gateway WebSocket is already the authoritative control plane.
+OpenClaw is a strong candidate remote Presence Connector because its Gateway WebSocket exposes the control-plane data needed for sessions, runs, approvals and bounded history. The Human Queue live worker is still planned, not implemented.
 
 A production worker should:
 
@@ -116,7 +123,7 @@ operator.write      only when Human Queue is allowed to send/steer sessions
 
 ## Muse Code
 
-Muse Code should be connected through the Muse Session Protocol rather than screen scraping.
+Muse Code should be connected through the Muse Session Protocol rather than screen scraping. The Human Queue Muse worker is still planned, not implemented.
 
 Current Muse Code provides:
 
