@@ -23,11 +23,15 @@ def _headers() -> dict[str, str]:
 
 def _event_ref(event: dict[str, Any]) -> str:
     session = event.get("session_id") or "unknown"
-    turn = event.get("turn_id") or "turn"
+    turn = event.get("turn_id") or event.get("tool_use_id") or "turn"
     tool = event.get("tool_name") or "tool"
     raw = json.dumps(event.get("tool_input"), sort_keys=True, default=str)
     digest = hashlib.sha256(raw.encode()).hexdigest()[:12]
     return f"{session}:{turn}:{tool}:{digest}"
+
+
+def _event_identity_is_stable(event: dict[str, Any]) -> bool:
+    return bool(event.get("session_id") and (event.get("turn_id") or event.get("tool_use_id")))
 
 
 def capsule_from_event(event: dict[str, Any]) -> ContextCapsule:
@@ -103,6 +107,8 @@ def permission_request(event: dict[str, Any]) -> dict[str, Any]:
 
     capsule = capsule_from_event(event)
     ref = _event_ref(event)
+    stable_identity = _event_identity_is_stable(event)
+    native_turn = event.get("turn_id") or event.get("tool_use_id")
 
     client = HumanQueue()
     timeout = float(os.environ.get("HUMAN_QUEUE_HOOK_WAIT_SECONDS", "570"))
@@ -120,8 +126,11 @@ def permission_request(event: dict[str, Any]) -> dict[str, Any]:
             risk=0.85,
             seconds=8,
             downstream=1,
-            idempotency_key="codex:" + ref,
-            supersession_key=f"codex:{event.get('session_id')}:{event.get('turn_id')}:{tool_name}",
+            idempotency_key=("codex:" + ref) if stable_identity else None,
+            supersession_key=(
+                f"codex:{event.get('session_id')}:{native_turn}:{tool_name}"
+                if stable_identity else None
+            ),
             wait=True,
             wait_timeout=timeout,
             poll_interval=0.8,
