@@ -543,9 +543,29 @@ The current suite covers queue semantics, gateway authentication, Codex/Cursor/C
 
 ## Contributing
 
-The best connector contribution is not “support another logo.” It is a clean answer to:
+Do not start with “support another logo.”
+
+Start with one real boundary that failed in a real workflow:
+
+```text
+runtime + version
+what was waiting
+which session actually owned the request
+where the human expected to answer
+whether that surface was reachable
+whether a native programmatic resolve path existed
+what workaround you used
+```
+
+Then ask:
 
 > **Where does this machine genuinely stop because only a human can safely move it forward?**
+
+If the answer is “the runtime just routed its own prompt incorrectly,” fix the runtime upstream. That is a successful outcome for this project too.
+
+If the boundary survives the local fix — across sessions, accounts, devices or channels — add it to the [evidence thread](https://github.com/hippoley/HumanQueue/issues/1) before proposing a connector.
+
+The best contribution is evidence that changes the architecture, including evidence that removes something from the roadmap.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
