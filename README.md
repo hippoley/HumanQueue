@@ -1,34 +1,97 @@
 # `human://`
 
-## Your agent isn't stuck. Its human answer got lost.
+<div align="center">
 
-**HumanQueue routes a human decision back to the exact agent, session and run that is waiting.**
+# The human control plane for autonomous systems.
 
-[**Try the live demo →**](https://hippoley.github.io/PAJ-Eval/human-queue/) · [Evidence from real agent failures](https://github.com/hippoley/HumanQueue/issues/1) · Apache-2.0
+### Machines can run anywhere. Human judgment needs an address.
+
+[**Live Demo**](https://hippoley.github.io/PAJ-Eval/human-queue/) · [**Evidence**](https://github.com/hippoley/HumanQueue/issues/1) · **Protocol** · Apache-2.0
+
+</div>
+
+---
+
+Software used to wait for commands.
+
+Agents don't.
+
+They plan, browse, write, deploy, delegate, spawn other agents and keep working while you are somewhere else. As autonomy scales, the scarce resource stops being machine execution.
+
+It becomes **human judgment at the exact moment a machine cannot safely continue alone.**
+
+Today that judgment is fragmented across terminals, IDEs, browser tabs, chat threads, permission dialogs and background sessions.
+
+HumanQueue gives it one address:
 
 ```text
-Claude Code ─┐
-Codex ───────┤
-Cursor ──────┤     one pending human boundary
-OpenCode ────┼──► human:// ───► web / phone / Slack / Telegram
-MCP ─────────┤                         │
-your agent ──┘                         ▼
-                              exact waiting run resumes
+                              human://
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        │                        │                        │
+   Claude Code                Codex                  OpenCode
+   Cursor / IDEs              MCP                     your runtime
+        │                        │                        │
+        └────────────── human boundary appears ──────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │   PENDING DECISION      │
+                    │                         │
+                    │ identity   context      │
+                    │ authority  lifecycle    │
+                    │ resume     audit        │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    ▼            ▼            ▼
+                   web         phone       chat
+                    │            │            │
+                    └────────────┼────────────┘
+                                 ▼
+                         human judgment
+                                 │
+                                 ▼
+                       exact run continues
 ```
 
-Agents are getting better at working without you.
+## Autonomy needs a return path to humans.
 
-That creates a surprisingly boring failure mode: **they get stuck waiting for you somewhere you aren't looking.**
+A machine asking for approval is the smallest version of the problem.
 
-A background agent asks permission. A nested session needs clarification. A production workflow pauses for review. The request may even reach Slack or your phone — but the answer still has to return to the **right pending execution**, once, without reviving stale work or approving the wrong session.
+The larger problem is architectural: once software can act asynchronously across many sessions, runtimes and machines, **where does human authority live?**
 
-That is the problem HumanQueue is built around.
+A human boundary needs more than a button. It needs a stable identity, bounded context, an authorized resolver, lifecycle semantics, and a return path to the exact execution that yielded control.
 
-### Not another approval dashboard
+That is the primitive behind `human://`.
 
-The UI is the easy part.
+```text
+machine yields control
+        ↓
+human://approve
+human://review
+human://clarify
+human://auth
+human://choose
+        ↓
+decision travels
+        ↓
+machine resumes
+```
 
-The primitive is:
+HumanQueue is an attempt to make that boundary **addressable, transportable and auditable** without turning the notification surface into the source of truth.
+
+## One protocol. Any surface. Exact return.
+
+The invariant is simple:
+
+> **A human decision must return to the exact machine state that requested it — once.**
+
+So HumanQueue keeps the canonical boundary separate from wherever the human happens to answer it.
+
+Slack is a surface. A phone is a surface. A web console is a surface.
+
+None of them owns the decision.
 
 ```text
 (source, account, session, native request)
@@ -36,13 +99,8 @@ The primitive is:
                   ▼
         authoritative pending decision
                   │
-       ┌──────────┼──────────┐
-       │          │          │
-    identity   bounded    resolver
-              context      auth
-       │          │          │
-       └──────────┼──────────┘
-                  ▼
+       identity · bounded context
+       resolver · lifecycle
        dedupe · supersede · expire
                   │
                   ▼
@@ -52,10 +110,12 @@ The primitive is:
           native resume handle
                   │
                   ▼
-          exact run continues
+          exact execution resumes
 ```
 
-If your runtime already does this reliably, **use its native UI**. HumanQueue is for the cases that survive that fix: background sessions, nested agents, multiple runtimes, another device, another channel, or an operator who needs one trustworthy place to answer.
+This is deliberately **not another approval dashboard**.
+
+If one runtime already keeps every human boundary reachable and resumable, use its native UI. HumanQueue matters when autonomy escapes a single foreground session: background agents, nested workers, multiple runtimes, another device, another operator, or a fleet that needs one trustworthy human control surface.
 
 ## 60 seconds to the first human boundary
 
