@@ -51,6 +51,10 @@ def _event_ref(event: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:20]
 
 
+def _event_identity_is_stable(event: dict[str, Any]) -> bool:
+    return _session_id(event) != "unknown" and _turn_id(event) is not None
+
+
 def observe_event(event: dict[str, Any]) -> None:
     session = _session_id(event)
     if session == "unknown":
@@ -114,6 +118,8 @@ def shell_permission(event: dict[str, Any]) -> dict[str, Any]:
         native_handle=handle,
     )
 
+    stable_identity = _event_identity_is_stable(event)
+
     client = HumanQueue()
     timeout = float(os.environ.get("HUMAN_QUEUE_HOOK_WAIT_SECONDS", "570"))
     try:
@@ -130,7 +136,7 @@ def shell_permission(event: dict[str, Any]) -> dict[str, Any]:
             risk=0.9,
             seconds=8,
             downstream=1,
-            idempotency_key="cursor:" + _event_ref(event),
+            idempotency_key=("cursor:" + _event_ref(event)) if stable_identity else None,
             wait=True,
             wait_timeout=timeout,
             poll_interval=0.8,
