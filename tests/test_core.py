@@ -180,3 +180,44 @@ def test_standard_resolve_rejects_duplicate_terminal_decision(tmp_path: Path):
         json={"actor": "alice", "action": "approve"},
     )
     assert second.status_code == 409
+
+
+def test_resolve_is_exactly_once_after_finalization(tmp_path: Path):
+    s = Store(str(tmp_path / "exactly-once.db"))
+    item = s.create(req(idempotency_key="run-42"))
+    first, finalized = s.resolve(item.id, "operator", {"action": "approve", "values": {}})
+    assert finalized is True
+    assert first is not None
+    assert first.status.value == "resolved"
+
+    second, finalized_again = s.resolve(item.id, "operator", {"action": "reject", "values": {}})
+    assert finalized_again is True
+    assert second is not None
+    assert second.status.value == "resolved"
+    assert second.resolution["action"] == "approve"
+
+    resolved_events = [e for e in s.events(item.id) if e["type"] == "resolved"]
+    assert len(resolved_events) == 1
+
+
+def test_superseded_request_cannot_be_resolved(tmp_path: Path):
+    s = Store(str(tmp_path / "supersession.db"))
+    old = s.create(req(source_ref="run-old", supersession_key="deploy-prod"))
+    new = s.create(req(source_ref="run-new", supersession_key="deploy-prod"))
+
+    stale = s.get(old.id)
+    assert stale is not None
+    assert stale.status.value == "superseded"
+    assert stale.superseded_by == new.id
+
+    result, finalized = s.resolve(old.id, "operator", {"action": "approve", "values": {}})
+    assert result is not None
+    assert result.status.value == "superseded"
+    assert finalized is False
+
+
+def test_idempotency_key_is_scoped_by_source(tmp_path: Path):
+    s = Store(str(tmp_path / "source-idem.db"))
+    a = s.create(req(source="codex", idempotency_key="permission-7"))
+    b = s.create(req(source="claude", idempotency_key="permission-7"))
+    assert a.id != b.id
