@@ -281,3 +281,23 @@ def test_resume_receipt_must_bind_to_exact_request_id():
     confirmed, receipt = _receipt_confirmation("attn_exact", stale)
     assert confirmed is False
     assert receipt["request_id"] == "attn_stale"
+
+
+def test_native_wait_path_is_not_reported_as_resume_undeliverable(tmp_path: Path):
+    from app import main
+
+    main.store = Store(str(tmp_path / "native-wait-resume.db"))
+    client = TestClient(main.app)
+    item = main.store.create(req())
+
+    resolved = client.post(
+        f"/v1/requests/{item.id}/resolve",
+        json={"actor": "alice", "action": "approve"},
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["request"]["status"] == "resolved"
+    assert resolved.json()["resume"]["reason"] == "no_resume_target"
+
+    events = main.store.events(item.id)
+    assert any(event["type"] == "resume_not_applicable" for event in events)
+    assert not any(event["type"] == "resume_undeliverable" for event in events)
