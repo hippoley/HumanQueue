@@ -157,6 +157,24 @@ def connect(args: argparse.Namespace) -> None:
         print(" gate       high-risk beforeShellExecution")
         print(" roundtrip  native permission allow/deny/ask")
         return
+    if args.provider == "claude":
+        from .connectors.claude import install_claude_hooks
+        result = install_claude_hooks()
+        print("human:// connected to Claude Code")
+        print(f" settings   {result['settings_path']}")
+        print(f" detected   {'yes' if result['claude_detected'] else 'not on PATH'}")
+        print(" events     PermissionRequest + session/prompt/stop observers")
+        print(" roundtrip  native allow/deny")
+        return
+    if args.provider == "opencode":
+        from .connectors.opencode import install_opencode_plugin
+        result = install_opencode_plugin()
+        print("human:// connected to OpenCode V2")
+        print(f" plugin     {result['plugin_path']}")
+        print(" observe    prompt admission + permission boundary")
+        print(" roundtrip  ctx.permission.hook evaluate → allow/deny")
+        print("\nRestart OpenCode so the global plugin is loaded.")
+        return
     raise SystemExit(f"unsupported connector: {args.provider}")
 
 
@@ -171,6 +189,16 @@ def disconnect(args: argparse.Namespace) -> None:
         result = uninstall_cursor_hooks()
         print(json.dumps(result, indent=2))
         return
+    if args.provider == "claude":
+        from .connectors.claude import uninstall_claude_hooks
+        result = uninstall_claude_hooks()
+        print(json.dumps(result, indent=2))
+        return
+    if args.provider == "opencode":
+        from .connectors.opencode import uninstall_opencode_plugin
+        result = uninstall_opencode_plugin()
+        print(json.dumps(result, indent=2))
+        return
     raise SystemExit(f"unsupported connector: {args.provider}")
 
 
@@ -180,6 +208,9 @@ def connector_hook(args: argparse.Namespace) -> None:
         raise SystemExit(hook_main(args.mode))
     if args.mode.startswith("cursor-"):
         from .connectors.cursor import hook_main
+        raise SystemExit(hook_main(args.mode))
+    if args.mode.startswith("claude-"):
+        from .connectors.claude import hook_main
         raise SystemExit(hook_main(args.mode))
     raise SystemExit(f"unknown hook mode: {args.mode}")
 
@@ -330,11 +361,11 @@ def main() -> None:
     p_dashboard.set_defaults(func=dashboard)
 
     p_connect = sub.add_parser("connect", help="install an editor/agent connector")
-    p_connect.add_argument("provider", choices=["codex", "cursor"])
+    p_connect.add_argument("provider", choices=["codex", "cursor", "claude", "opencode"])
     p_connect.set_defaults(func=connect)
 
     p_disconnect = sub.add_parser("disconnect", help="remove an editor/agent connector")
-    p_disconnect.add_argument("provider", choices=["codex", "cursor"])
+    p_disconnect.add_argument("provider", choices=["codex", "cursor", "claude", "opencode"])
     p_disconnect.set_defaults(func=disconnect)
 
     p_sessions = sub.add_parser("sessions", help="show sessions observed from connected agents")
