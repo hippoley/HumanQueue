@@ -6,6 +6,7 @@ import sys
 import httpx
 from typing import Any
 
+from humanqueue import __version__
 from humanqueue.client import HumanQueue
 from humanqueue.config import gateway_token, gateway_url
 
@@ -180,7 +181,7 @@ def handle(message: dict[str, Any]) -> dict[str, Any] | None:
             "result": {
                 "protocolVersion": version,
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "human-queue", "version": "0.5.0"},
+                "serverInfo": {"name": "human-queue", "version": __version__},
             },
         }
 
