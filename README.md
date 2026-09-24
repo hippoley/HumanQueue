@@ -2,7 +2,7 @@
 
 ### The approval is not the hard part. Getting the answer back to the exact paused agent is.
 
-**[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Evidence log](https://github.com/hippoley/HumanQueue/issues/1)** · **[Security model](SECURITY.md)** · Apache-2.0
+**[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Evidence log](https://github.com/hippoley/HumanQueue/issues/1)** · **[Claims & evidence](CLAIMS.md)** · **[Security model](SECURITY.md)** · Apache-2.0
 
 A background agent reaches `ask`. The person is on another device. The prompt is attached to a nested session nobody can see. Slack can show the request but cannot resolve it. A callback arrives, but the runtime cannot prove which waiting session — or which human — it belongs to.
 
