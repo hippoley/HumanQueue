@@ -40,9 +40,9 @@ button{cursor:pointer}
 .tab{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 13px;color:var(--muted)}
 .tab.active{background:var(--ink);border-color:var(--ink);color:white}
 .badge{margin-left:auto;font:650 10px/1 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.grid{display:grid;grid-template-columns:minmax(290px,.58fr) minmax(0,1.42fr);gap:14px;align-items:stretch}
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(340px,.65fr);gap:18px;align-items:stretch}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:19px;overflow:hidden}
-.focus{min-height:555px}
+.focus{min-height:590px}
 .hd{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line)}
 .label{text-transform:uppercase;letter-spacing:.12em;font:650 10px/1 ui-monospace,monospace;color:var(--muted)}
 .rank{font:700 11px/1 ui-monospace,monospace;background:var(--soft);border-radius:8px;padding:7px 9px}
@@ -83,7 +83,7 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
 .small{font-size:12px;line-height:1.5;color:var(--muted)}
 .bar{height:9px;border-radius:99px;background:var(--soft);overflow:hidden;margin:13px 0}
 .bar span{display:block;height:100%;background:var(--acid)}
-.pipeline{margin-top:14px;background:var(--deep);color:white;border-radius:16px;padding:20px}
+.pipeline{margin-top:18px;background:var(--deep);color:white;border-radius:18px;padding:24px 26px}
 .pipelineTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .pipeline h3{margin:0;font-size:24px}
 .flow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font:650 12px/1.4 ui-monospace,monospace}
@@ -142,25 +142,25 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
 
 <main id="view-now" class="view">
   <div class="grid">
-    <aside class="panel">
-      <div class="hd"><div class="label">01 · choose boundary</div><div id="count" class="rank">5 waiting</div></div>
-      <div id="next"></div>
-    </aside>
-
     <section class="panel focus">
-      <div class="hd"><div class="label">02 · make the judgment</div><div id="focusRank" class="rank">#1</div></div>
+      <div class="hd"><div class="label">human boundary</div><div id="focusRank" class="rank">#1</div></div>
       <div class="body" id="focus"></div>
     </section>
+
+    <aside class="panel">
+      <div class="hd"><div class="label">global queue</div><div id="count" class="rank">5 waiting</div></div>
+      <div id="next"></div>
+    </aside>
   </div>
 
   <section class="pipeline">
-    <div class="pipelineTop"><h3>03 · Exact resume</h3><div class="label" id="pipelineState">waiting for human</div></div>
+    <div class="pipelineTop"><h3>Live resume path</h3><div class="label" id="pipelineState">waiting for human</div></div>
     <div class="flow" id="flow"></div>
-    <div class="eventline" id="eventline">Choose a boundary above. Your decision returns to the exact machine that yielded control.</div>
+    <div class="eventline" id="eventline">Make one decision above. HumanQueue returns it to the exact machine state that asked.</div>
   </section>
 
   <section class="inject" id="injectBox">
-    <div class="eyebrow">create another boundary</div>
+    <div class="eyebrow">inject a machine boundary</div>
     <div class="injectGrid">
       <select id="injectSource">
         <option>Claude Code</option><option>Codex</option><option>GitHub</option><option>MCP</option><option>n8n</option><option>Support Agent</option>
