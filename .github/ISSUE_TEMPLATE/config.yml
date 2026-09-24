@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Public evidence log
+    url: https://github.com/hippoley/HumanQueue/issues/1
+    about: Read the current evidence and falsification thread before proposing a new integration.
