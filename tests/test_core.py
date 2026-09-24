@@ -424,3 +424,39 @@ def test_blank_identity_is_rejected_at_presence_and_connector_boundaries(tmp_pat
         },
     )
     assert connector.status_code == 422
+
+
+def test_batch_authorization_fails_before_any_item_is_resolved(tmp_path: Path):
+    store = Store(str(tmp_path / "batch-auth-preflight.db"))
+
+    first = store.create(req(
+        source_ref="batch-a",
+        batch_key="mixed-auth",
+        route=RoutePolicy(mode="single", actors=["alice"]),
+        signals=AttentionSignals(
+            urgency=.1,
+            unblock_value=.1,
+            risk_if_wrong=.1,
+            human_effort_seconds=10,
+        ),
+    ))
+    second = store.create(req(
+        source_ref="batch-b",
+        batch_key="mixed-auth",
+        route=RoutePolicy(mode="single", actors=["bob"]),
+        signals=AttentionSignals(
+            urgency=.1,
+            unblock_value=.1,
+            risk_if_wrong=.1,
+            human_effort_seconds=10,
+        ),
+    ))
+
+    import pytest
+    with pytest.raises(PermissionError):
+        store.resolve_batch("mixed-auth", "alice", "approve")
+
+    assert store.get(first.id).status.value == "pending"
+    assert store.get(second.id).status.value == "pending"
+    assert not any(e["type"] == "resolved" for e in store.events(first.id))
+    assert not any(e["type"] == "resolved" for e in store.events(second.id))
