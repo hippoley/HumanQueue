@@ -6,7 +6,7 @@ A green checkbox here means only what the evidence column says it means.
 
 | Claim | Status | Evidence | Current limit |
 | --- | --- | --- | --- |
-| Canonical human:// request lifecycle works locally | **verified in CI** | queue / resolve / quorum / supersession tests | Does not prove any external runtime consumes a decision |
+| Canonical local blocking path works from the packaged wheel | **packaged-wheel E2E verified** | clean venv installs built wheel, onboards, starts Gateway, blocks in `HumanBoundary.ask(wait=True)`, resolves the same request, then proves the original caller continues | Does not prove an external provider runtime consumes the decision |
 | Gateway API is bearer-token protected | **verified in CI** | gateway auth tests | Gateway token is an administrative credential, not per-human IAM |
 | Channel delivery failures are observable | **verified in CI** | `channel_delivered` / `channel_undeliverable` audit tests | Delivery evidence does not change request lifecycle yet |
 | Webhook resume transport is distinct from semantic resume | **verified in CI** | exact-request receipt + transport-error tests | Semantic confirmation is opt-in for webhook targets |
