@@ -5,6 +5,7 @@ import json
 import os
 import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -246,6 +247,124 @@ def install_codex_hooks() -> dict[str, Any]:
         "installed_events": ["PermissionRequest", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"],
         "requires_trust_review": True,
     }
+
+
+def codex_readiness() -> dict[str, Any]:
+    """Report what is proven locally before claiming a real Codex host round-trip."""
+
+    path = Path.home() / ".codex" / "hooks.json"
+    result: dict[str, Any] = {
+        "provider": "codex",
+        "codex_detected": False,
+        "codex_path": None,
+        "codex_version": None,
+        "gateway_online": False,
+        "gateway_url": gateway_url(),
+        "gateway_version": None,
+        "hooks_path": str(path),
+        "hooks_file_present": path.exists(),
+        "permission_hook_present": False,
+        "observer_events_present": [],
+        "hook_command_matches_current_runtime": False,
+        "trust_status": "unknown",
+        "real_host_e2e_verified": False,
+        "ready_for_real_host_probe": False,
+        "problems": [],
+    }
+
+    codex_path = shutil.which("codex")
+    if codex_path:
+        result["codex_detected"] = True
+        result["codex_path"] = codex_path
+        try:
+            completed = subprocess.run(
+                [codex_path, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            version = (completed.stdout or completed.stderr or "").strip()
+            result["codex_version"] = version or None
+            if completed.returncode != 0:
+                result["problems"].append("codex --version failed")
+        except Exception as exc:
+            result["problems"].append(f"cannot execute Codex: {exc}")
+    else:
+        result["problems"].append("codex binary is not on PATH")
+
+    try:
+        response = httpx.get(gateway_url() + "/health", timeout=1.5)
+        response.raise_for_status()
+        health = response.json()
+        result["gateway_online"] = bool(health.get("ok"))
+        result["gateway_version"] = health.get("version")
+    except Exception as exc:
+        result["problems"].append(f"human:// Gateway is offline: {exc}")
+
+    if path.exists():
+        try:
+            config = json.loads(path.read_text(encoding="utf-8"))
+            hooks = config.get("hooks") or {}
+        except Exception as exc:
+            hooks = {}
+            result["problems"].append(f"cannot parse {path}: {exc}")
+
+        expected_permission_command = _humanq_command("codex-permission")
+        permission_entries = hooks.get("PermissionRequest") or []
+        for group in permission_entries:
+            for handler in group.get("hooks") or []:
+                command = str(handler.get("command") or "")
+                if "humanqueue connector hook codex-permission" in command.replace("-m ", ""):
+                    result["permission_hook_present"] = True
+                    if command == expected_permission_command:
+                        result["hook_command_matches_current_runtime"] = True
+
+        for event_name in ("SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
+            found = False
+            for group in hooks.get(event_name) or []:
+                for handler in group.get("hooks") or []:
+                    command = str(handler.get("command") or "")
+                    if "humanqueue connector hook codex-observe" in command.replace("-m ", ""):
+                        found = True
+                        break
+                if found:
+                    break
+            if found:
+                result["observer_events_present"].append(event_name)
+
+        if not result["permission_hook_present"]:
+            result["problems"].append("human:// PermissionRequest hook is not installed")
+        elif not result["hook_command_matches_current_runtime"]:
+            result["problems"].append(
+                "installed human:// hook points at a different Python runtime; reconnect Codex"
+            )
+
+        missing_observers = sorted(
+            set(("SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"))
+            - set(result["observer_events_present"])
+        )
+        if missing_observers:
+            result["problems"].append(
+                "missing observer hooks: " + ", ".join(missing_observers)
+            )
+
+        # Codex intentionally gates user hooks behind a trust review. The public
+        # installer API cannot safely infer that the exact current hash is trusted,
+        # so do not manufacture a green state here.
+        if result["permission_hook_present"]:
+            result["trust_status"] = "manual_review_required_or_unknown"
+    else:
+        result["problems"].append("~/.codex/hooks.json does not exist; run humanq connect codex")
+
+    result["ready_for_real_host_probe"] = bool(
+        result["codex_detected"]
+        and result["gateway_online"]
+        and result["permission_hook_present"]
+        and result["hook_command_matches_current_runtime"]
+        and len(result["observer_events_present"]) == 4
+    )
+    return result
 
 
 def uninstall_codex_hooks() -> dict[str, Any]:
