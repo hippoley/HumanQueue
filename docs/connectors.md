@@ -51,7 +51,7 @@ Check everything that can be established **before** the final native-host proof:
 humanq verify codex
 ```
 
-The verifier reports the Codex binary/version, Gateway health, installed PermissionRequest + observer hooks, whether the hook command still points at the Python runtime that installed it, and the remaining trust/real-host gap. It never marks the native host E2E as proven by configuration alone.
+The verifier reports the Codex binary/version, Gateway health, installed PermissionRequest + observer hooks, whether the hook command still points at the Python runtime that installed it, **and Codex's own `hooks/list` result** including trust status/current hash. A local JSON file alone cannot make trust green. Even a Codex-reported `trusted` hook still does not mark native host E2E as proven until a real PermissionRequest consumes the decision.
 
 View observed sessions:
 
