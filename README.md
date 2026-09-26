@@ -193,7 +193,7 @@ If a runtime cannot establish the authoritative source/session/request, `human:/
 
 ## Connect a real runtime
 
-The quickest useful test is not “can I render a queue?” It is “can one real runtime pause and then consume the human answer correctly?”
+The quickest useful test is not “can I render a queue?” It is “can one real runtime pause and then consume the human answer correctly?” The ↗ links below open a shareable browser probe for that integration shape; they are simulations, while the evidence state remains explicit in the last column.
 
 ```bash
 humanq connect codex
@@ -206,11 +206,11 @@ humanq sessions
 
 | Surface | Human → machine return | Current state |
 | --- | --- | --- |
-| **Codex** | native `PermissionRequest` allow/deny | **working** |
-| **Cursor** | native high-risk `beforeShellExecution` permission | **working** |
-| **MCP** | `human_ask` returns to the same tool call | **working** |
-| **Signed webhook** | canonical decision callback | **working** |
-| **Telegram** | long-poll callback resolves the local boundary | **working** |
+| [**Codex ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=codex) | native `PermissionRequest` allow/deny | **working** |
+| [**Cursor ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=cursor) | native high-risk `beforeShellExecution` permission | **working** |
+| [**MCP ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=mcp) | `human_ask` returns to the same tool call | **working** |
+| [**Signed webhook ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=channel) | canonical decision callback | **working** |
+| [**Telegram ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=telegram) | long-poll callback resolves the local boundary | **working** |
 | **Slack Socket Mode** | interactive action resolves the boundary | implemented · workspace E2E pending |
 | **Claude Code** | native `PermissionRequest` return | implemented · real-host E2E pending |
 | **OpenCode V2** | permission evaluate hook | implemented · real-host E2E pending |
