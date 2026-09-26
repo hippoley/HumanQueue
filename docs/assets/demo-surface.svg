@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+<title id="title">human:// seeded demo surface</title>
+<desc id="desc">A faithful illustration of the current human:// web UI: blocked machine count, queue tabs, a focused human boundary, decision controls, and the next waiting requests.</desc>
+<style>
+  .bg{fill:#f4f1eb}.card{fill:#fbfaf6;stroke:#d7d1c6;stroke-width:1.4}.soft{fill:#ece7dd}.deep{fill:#171815}.acid{fill:#c9ff4b}.signal{fill:#ff5a36}.ok{fill:#176b45}.ink{fill:#11110f}.muted{fill:#6f6b63}.line{stroke:#d7d1c6;stroke-width:1.4}.sans{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+  @media (prefers-color-scheme: dark){.bg{fill:#10110f}.card{fill:#171815;stroke:#34372f}.soft{fill:#242620}.ink{fill:#f4f1eb}.muted{fill:#aaa69d}.line{stroke:#34372f}}
+</style>
+
+<rect width="1200" height="720" rx="28" class="bg"/>
+<g transform="translate(34 30)">
+  <rect x="0" y="0" width="1132" height="660" rx="22" fill="none" stroke="#d7d1c6"/>
+  <g transform="translate(24 20)">
+    <rect x="0" y="0" width="104" height="34" rx="7" class="acid"/>
+    <text x="13" y="23" class="mono ink" font-size="17" font-weight="800">human://</text>
+    <circle cx="920" cy="16" r="6" fill="#2faa67"/>
+    <text x="936" y="21" class="mono muted" font-size="11" letter-spacing="1.4">CONTROL PLANE ONLINE</text>
+  </g>
+  <line x1="24" y1="72" x2="1108" y2="72" class="line"/>
+
+  <g transform="translate(24 100)">
+    <text x="0" y="0" class="mono signal" font-size="11" letter-spacing="1.5">MACHINE → HUMAN → MACHINE</text>
+    <text x="0" y="58" class="sans ink" font-size="52" font-weight="820" letter-spacing="-3.4">YOU ARE BLOCKING</text>
+    <text x="0" y="112" class="sans ink" font-size="52" font-weight="820" letter-spacing="-3.4">5 MACHINES.</text>
+    <text x="0" y="148" class="sans muted" font-size="14">The approval is not the hard part. The return path is.</text>
+
+    <g transform="translate(752 0)">
+      <rect x="0" y="0" width="160" height="118" rx="14" class="acid"/>
+      <text x="16" y="22" class="mono ink" font-size="9" letter-spacing="1">INTERRUPTIONS AVOIDED</text>
+      <text x="16" y="72" class="sans ink" font-size="38" font-weight="800">12</text>
+      <text x="16" y="99" class="sans ink" font-size="10">batched / deferred</text>
+      <rect x="174" y="0" width="160" height="118" rx="14" class="deep"/>
+      <text x="190" y="22" class="mono" fill="#b7b4ab" font-size="9" letter-spacing="1">HUMAN TIME / 24H</text>
+      <text x="190" y="72" class="sans" fill="#fff" font-size="38" font-weight="800">42s</text>
+      <text x="190" y="99" class="sans" fill="#c7c4bc" font-size="10">explicit judgment</text>
+    </g>
+  </g>
+
+  <line x1="24" y1="278" x2="1108" y2="278" class="line"/>
+
+  <g transform="translate(24 296)">
+    <rect x="0" y="0" width="112" height="30" rx="15" class="deep"/>
+    <text x="14" y="20" class="sans" fill="#fff" font-size="11" font-weight="700">Needs you now</text>
+    <rect x="120" y="0" width="74" height="30" rx="15" fill="none" stroke="#d7d1c6"/>
+    <text x="137" y="20" class="sans muted" font-size="11">Batches</text>
+    <rect x="202" y="0" width="164" height="30" rx="15" fill="none" stroke="#d7d1c6"/>
+    <text x="216" y="20" class="sans muted" font-size="11">Policies waiting to exist</text>
+    <rect x="374" y="0" width="106" height="30" rx="15" fill="none" stroke="#d7d1c6"/>
+    <text x="390" y="20" class="sans muted" font-size="11">Agent sessions</text>
+    <rect x="488" y="0" width="60" height="30" rx="15" fill="none" stroke="#d7d1c6"/>
+    <text x="505" y="20" class="sans muted" font-size="11">Fleet</text>
+    <rect x="556" y="0" width="128" height="30" rx="15" fill="none" stroke="#d7d1c6"/>
+    <text x="571" y="20" class="sans muted" font-size="11">Boundary integrity</text>
+  </g>
+
+  <g transform="translate(24 342)">
+    <rect x="0" y="0" width="708" height="282" rx="18" class="card"/>
+    <line x1="0" y1="46" x2="708" y2="46" class="line"/>
+    <text x="16" y="28" class="mono muted" font-size="10" letter-spacing="1.2">HIGHEST-VALUE HUMAN INTERVENTION</text>
+    <rect x="614" y="11" width="74" height="24" rx="7" class="soft"/>
+    <text x="629" y="27" class="mono ink" font-size="10" font-weight="700">#1 · 0.97</text>
+
+    <text x="20" y="76" class="mono signal" font-size="11" font-weight="800">human://approve</text>
+    <text x="20" y="101" class="mono muted" font-size="10" letter-spacing="1">GITHUB / RELEASE-2841</text>
+    <text x="20" y="140" class="sans ink" font-size="27" font-weight="790" letter-spacing="-1.2">Deploy api@2.4.0 to production?</text>
+    <text x="20" y="165" class="sans muted" font-size="12">CI passed. Four downstream jobs are blocked.</text>
+
+    <rect x="20" y="184" width="652" height="45" rx="10" class="soft"/>
+    <rect x="20" y="184" width="4" height="45" rx="2" class="signal"/>
+    <text x="34" y="203" class="sans ink" font-size="11" font-weight="700">Why now:</text>
+    <text x="91" y="203" class="sans muted" font-size="11">release gate reached after successful verification.</text>
+    <text x="34" y="219" class="mono muted" font-size="9">source: github · ref: release-2841 · exact boundary attached</text>
+
+    <rect x="20" y="244" width="82" height="26" rx="13" fill="#fff0ec" stroke="#f2b2a3"/>
+    <text x="33" y="261" class="sans" fill="#8b2d1a" font-size="9">meaningful risk</text>
+    <rect x="110" y="244" width="73" height="26" rx="13" fill="#eef8f1" stroke="#b7dbc4"/>
+    <text x="124" y="261" class="sans ok" font-size="9">unblocks 4</text>
+    <rect x="192" y="244" width="90" height="26" rx="13" fill="#fff" stroke="#d7d1c6"/>
+    <text x="206" y="261" class="sans muted" font-size="9">~8s human time</text>
+
+    <rect x="485" y="239" width="86" height="34" rx="9" fill="#fff" stroke="#c53f27"/>
+    <text x="505" y="261" class="sans" fill="#a52d1a" font-size="11" font-weight="700">Reject</text>
+    <rect x="580" y="239" width="92" height="34" rx="9" class="deep"/>
+    <text x="597" y="261" class="sans" fill="#fff" font-size="11" font-weight="700">Approve</text>
+
+    <rect x="750" y="0" width="358" height="282" rx="18" class="card"/>
+    <line x1="750" y1="46" x2="1108" y2="46" class="line"/>
+    <text x="766" y="28" class="mono muted" font-size="10" letter-spacing="1.2">NEXT</text>
+    <text x="1037" y="28" class="mono muted" font-size="10" font-weight="700">5 WAITING</text>
+
+    <g transform="translate(766 65)">
+      <text x="0" y="0" class="mono signal" font-size="9" font-weight="800">human://approve</text>
+      <text x="252" y="0" class="mono muted" font-size="9">0.88</text>
+      <text x="0" y="24" class="sans ink" font-size="14" font-weight="720">Delete production cache keys?</text>
+      <text x="0" y="43" class="sans muted" font-size="10">codex · ~8s · unblocks 1</text>
+    </g>
+    <line x1="766" y1="126" x2="1092" y2="126" class="line"/>
+    <g transform="translate(766 148)">
+      <text x="0" y="0" class="mono signal" font-size="9" font-weight="800">human://auth</text>
+      <text x="252" y="0" class="mono muted" font-size="9">0.71</text>
+      <text x="0" y="24" class="sans ink" font-size="14" font-weight="720">Reconnect Salesforce credential</text>
+      <text x="0" y="43" class="sans muted" font-size="10">n8n · ~20s · unblocks 3</text>
+    </g>
+    <line x1="766" y1="209" x2="1092" y2="209" class="line"/>
+    <g transform="translate(766 231)">
+      <text x="0" y="0" class="mono signal" font-size="9" font-weight="800">human://clarify</text>
+      <text x="252" y="0" class="mono muted" font-size="9">0.62</text>
+      <text x="0" y="24" class="sans ink" font-size="14" font-weight="720">Which customer account?</text>
+      <text x="0" y="43" class="sans muted" font-size="10">mcp · ~6s · unblocks 1</text>
+    </g>
+  </g>
+</g>
+
+<rect x="888" y="648" width="244" height="42" rx="12" class="acid"/>
+<text x="910" y="674" class="mono ink" font-size="12" font-weight="800">CLICK IMAGE → OPEN LIVE DEMO ↗</text>
+</svg>

@@ -26,7 +26,7 @@ jobs:
           readme = Path("README.md").read_text(encoding="utf-8")
           assets = [
               "docs/assets/human-boundary-hero.svg",
-              "docs/assets/boundary-card.svg",
+              "docs/assets/demo-surface.svg",
               "docs/assets/exact-resume.svg",
           ]
           for asset in assets:
@@ -36,6 +36,7 @@ jobs:
               ET.parse(path)
 
           assert "cd human-queue" not in readme, "README contains stale clone directory"
+          assert 'href="https://hippoley.github.io/PAJ-Eval/human-queue/"' in readme, "README lost clickable live-demo visual"
           print("README visual assets verified")
           PY
       - name: Build wheel
