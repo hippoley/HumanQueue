@@ -36,7 +36,7 @@ jobs:
               ET.parse(path)
 
           assert "cd human-queue" not in readme, "README contains stale clone directory"
-          assert 'href="https://hippoley.github.io/PAJ-Eval/human-queue/"' in readme, "README lost clickable live-demo visual"
+          assert 'href="https://hippoley.github.io/PAJ-Eval/human/"' in readme, "README lost clickable live-demo visual"
           print("README visual assets verified")
           PY
       - name: Verify public demo source
