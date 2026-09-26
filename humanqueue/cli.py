@@ -201,7 +201,10 @@ def verify(args: argparse.Namespace) -> None:
         + (", ".join(status["observer_events_present"]) if status["observer_events_present"] else "missing")
     )
     print(f" runtime      {'matches' if status['hook_command_matches_current_runtime'] else 'mismatch/unknown'}")
+    print(f" discovered   {'yes' if status['native_hook_discovered'] else 'no'} by Codex app-server")
     print(f" hook trust   {status['trust_status']}")
+    if status.get("native_current_hash"):
+        print(f" hook hash    {status['native_current_hash']}")
     print(" host E2E     NOT YET PROVEN")
 
     if status["problems"]:
