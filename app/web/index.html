@@ -28,7 +28,7 @@ button,input{font:inherit}.app{max-width:1440px;margin:0 auto;padding:22px 26px 
     <div>
       <div class="eyebrow">machine → human → machine</div>
       <h1>YOU ARE BLOCKING <b id="blocking">0</b> MACHINES.</h1>
-      <div class="hero-copy"><strong>The approval is not the hard part. Getting the answer back to the exact paused agent is.</strong> Human Queue keeps the request, decision surface and resume identity tied together so a machine can continue from the boundary that actually stopped it.</div>
+      <div class="hero-copy"><strong>The approval is not the hard part. Getting the answer back to the exact paused agent is.</strong> human:// keeps the request, decision surface and resume identity tied together so a machine can continue from the boundary that actually stopped it.</div>
     </div>
     <div class="stats">
       <div class="stat light"><div class="k">interruptions avoided / 24h</div><div class="v" id="avoided">0</div><div class="s">batched or deferred instead of interrupting you</div></div>
@@ -82,7 +82,7 @@ async function j(url,opts={}){
   opts.headers={...(opts.headers||{}),...(gatewayToken?{authorization:"Bearer "+gatewayToken}:{})};
   let r=await fetch(url,opts);
   if(r.status===401){
-    const t=prompt("Human Queue gateway token");
+    const t=prompt("human:// gateway token");
     if(t){gatewayToken=t.trim();sessionStorage.setItem("humanq-token",gatewayToken);return j(url,opts)}
   }
   if(!r.ok) throw new Error(await r.text());
@@ -208,7 +208,7 @@ async function openSession(provider,sessionId){
       <h2 style="font-size:32px">${esc(s.last_user_prompt||'Observed agent session')}</h2>
       <div class="summary">${esc(s.last_assistant_message||'No assistant message captured yet.')}</div>
       <div class="signals"><span class="pill">turn: ${esc(s.last_turn_id||'—')}</span><span class="pill">transcript pointer: ${esc(s.transcript_path?'available':'none')}</span></div>
-      <div class="why"><strong>Privacy:</strong> Human Queue stores this bounded capsule. The transcript path is only a locator; the full transcript is not copied into the queue by default.</div>
+      <div class="why"><strong>Privacy:</strong> human:// stores this bounded capsule. The transcript path is only a locator; the full transcript is not copied into the queue by default.</div>
       <div class="codehint">${esc(s.transcript_path||'no transcript locator')}</div>
       <div style="margin-top:18px">${events||'<div class="empty">No events.</div>'}</div>
     </div>
