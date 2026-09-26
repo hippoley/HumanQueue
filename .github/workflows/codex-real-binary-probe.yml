@@ -1,0 +1,47 @@
+name: codex real binary probe
+
+on:
+  push:
+    branches:
+      - codex-real-binary-probe
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install official Codex CLI
+        run: |
+          npm install -g @openai/codex@latest
+          which codex
+          codex --version
+          codex app-server --help
+      - name: Install human://
+        run: python -m pip install .
+      - name: Initialize human:// and connect Codex
+        run: |
+          humanq onboard --force
+          humanq connect codex
+      - name: Start Gateway and inspect readiness
+        run: |
+          humanq gateway run > /tmp/humanq-gateway.log 2>&1 &
+          echo $! > /tmp/humanq-gateway.pid
+          for i in {1..50}; do
+            if curl -fsS http://127.0.0.1:7482/health; then break; fi
+            sleep .2
+          done
+          humanq verify codex --json | tee /tmp/humanq-codex-readiness.json
+      - name: Let the real Codex binary discover and trust the hook
+        run: python scripts/codex_appserver_probe.py
+      - name: Gateway logs
+        if: always()
+        run: |
+          cat /tmp/humanq-gateway.log || true
+          if [ -f /tmp/humanq-gateway.pid ]; then kill "$(cat /tmp/humanq-gateway.pid)" || true; fi
