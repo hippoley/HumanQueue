@@ -1,6 +1,6 @@
 # Agent Presence Hub
 
-Human Queue separates two concerns that should not be conflated:
+human:// separates two concerns that should not be conflated:
 
 1. **Presence** — continuously know what every connected agent session is doing.
 2. **Intervention** — when a session truly needs a person, pause and resolve that exact boundary.
@@ -31,7 +31,7 @@ private LAN / Tailscale / trusted network
                      |
         +------------+------------+
         |                         |
-   Human Queue UI            MCP status tools
+   human:// UI            MCP status tools
                                |
                          ask by conversation
 ```
@@ -42,7 +42,7 @@ Each connector is isolated as a worker. A broken provider, account, credential, 
 
 A session is not globally identified by only a provider-native session id.
 
-Human Queue uses:
+human:// uses:
 
 ```text
 source_id = provider + account + gateway/host identity
@@ -53,7 +53,7 @@ source_id = provider + account + gateway/host identity
 This prevents two OpenClaw gateways, two Muse accounts, or two local profiles from colliding even if their native session ids happen to match.
 
 
-Identity is only authoritative when the provider actually supplies enough provenance. Human Queue must not repair an ownerless event by guessing a default agent or bare `main` session.
+Identity is only authoritative when the provider actually supplies enough provenance. human:// must not repair an ownerless event by guessing a default agent or bare `main` session.
 
 OpenClaw [#126360](https://github.com/openclaw/openclaw/issues/126360) is a current example: some first-party/global paths still emit requests without an authoritative agent/session owner under explicit multi-agent ownership. Until the upstream runtime fixes those paths, a Presence connector should preserve them as unknown / unowned rather than presenting guessed state as authoritative.
 
@@ -98,7 +98,7 @@ The `native` object is intentionally provider-specific. Product logic should dep
 
 ## OpenClaw
 
-OpenClaw is a strong candidate remote Presence Connector because its Gateway WebSocket exposes the control-plane data needed for sessions, runs, approvals and bounded history. The Human Queue live worker is still planned, not implemented.
+OpenClaw is a strong candidate remote Presence Connector because its Gateway WebSocket exposes the control-plane data needed for sessions, runs, approvals and bounded history. The human:// live worker is still planned, not implemented.
 
 A production worker should:
 
@@ -118,12 +118,12 @@ Recommended scopes:
 ```text
 operator.read       presence and bounded history
 operator.approvals  pending approval projection + resolve
-operator.write      only when Human Queue is allowed to send/steer sessions
+operator.write      only when human:// is allowed to send/steer sessions
 ```
 
 ## Muse Code
 
-Muse Code should be connected through the Muse Session Protocol rather than screen scraping. The Human Queue Muse worker is still planned, not implemented.
+Muse Code should be connected through the Muse Session Protocol rather than screen scraping. The human:// Muse worker is still planned, not implemented.
 
 Current Muse Code provides:
 
@@ -163,18 +163,18 @@ Provider-native state remains available in the bounded connector registry.
 Slack, Telegram, mobile UI, email and other surfaces are **views of the Gateway**, not separate state stores.
 
 ```text
-Presence Hub / Human Queue
+Presence Hub / human://
           |
    +------+------+------+
    |      |      |      |
   Web  Telegram Slack  MCP
 ```
 
-A third-party surface must never directly mutate an editor session. It resolves one canonical Human Queue request; the native connector performs the provider-specific resume.
+A third-party surface must never directly mutate an editor session. It resolves one canonical human:// request; the native connector performs the provider-specific resume.
 
 ## Query it conversationally
 
-The Human Queue MCP server exposes:
+The human:// MCP server exposes:
 
 ```text
 human_ask
@@ -227,7 +227,7 @@ provider credentials
     stay inside connector worker
 
 Gateway token
-    authenticates local Human Queue API
+    authenticates local human:// API
 
 channel token / hqc secret
     authenticates one human-facing projection
