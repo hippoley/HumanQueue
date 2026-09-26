@@ -6,24 +6,28 @@
 
 **Autonomous work can run anywhere. Human judgment still needs an address — and a return path.**
 
-[**Open the live demo ↗**](https://hippoley.github.io/PAJ-Eval/human-queue/) ·
-[**Run it locally ↓**](#60-second-local-proof) ·
-[**Connect an agent ↓**](#connect-a-real-runtime) ·
-[**Read the protocol ↓**](docs/protocol.md)
+[**See it live ↗**](https://hippoley.github.io/PAJ-Eval/human-queue/) ·
+[**60-second proof ↓**](#try-it-in-60-seconds) ·
+[**Why it exists ↓**](#why-this-exists-if-native-approval-already-works) ·
+[**Connect a runtime ↓**](#connect-a-real-runtime)
 
 ![CI](https://github.com/hippoley/HumanQueue/actions/workflows/ci.yml/badge.svg)
+
+Self-host first · Python ≥3.10 · FastAPI · SQLite · Apache-2.0
 
 </div>
 
 <br />
 
 <p align="center">
-  <img src="docs/assets/human-boundary-hero.svg" alt="Multiple autonomous agents converge on a human boundary, reach the right human, and resume the exact waiting execution." width="100%" />
+  <a href="https://hippoley.github.io/PAJ-Eval/human-queue/">
+    <img src="docs/assets/human-boundary-hero.svg" alt="Multiple autonomous agents converge on a human boundary, reach the right human, and resume the exact waiting execution." width="100%" />
+  </a>
 </p>
 
 <br />
 
-A queue is only one presentation layer.
+A queue is only one presentation layer. The contract underneath it is the product.
 
 The actual unit of work is smaller and stricter:
 
@@ -33,49 +37,37 @@ The actual unit of work is smaller and stricter:
 
 <br />
 
-## Start with the path you care about
-
-| I want to… | Go here | What you should learn |
-| --- | --- | --- |
-| **see it before installing** | [Open the live demo](https://hippoley.github.io/PAJ-Eval/human-queue/) | what a human actually sees and resolves |
-| **prove the loop locally** | [60-second local proof](#60-second-local-proof) | request → decision → exact return path |
-| **wire a real runtime** | [Connect a real runtime](#connect-a-real-runtime) | Codex / Cursor / Claude / OpenCode / MCP |
-| **understand the primitive** | [The HumanBoundary](#the-humanboundary) | why this is not just an approval inbox |
-| **challenge the idea** | [Reality, not roadmap](#reality-not-roadmap) | what upstream fixes already made unnecessary |
-| **audit the claims** | [Claims & evidence](CLAIMS.md) | verified vs implemented vs still hypothetical |
-
-<br />
-
----
-
-<br />
-
-## See the interaction before reading the architecture
-
-A human should not have to reconstruct a paused agent from a notification title.
-
-The decision surface should answer four things immediately:
-
-1. **what stopped;**
-2. **why it stopped now;**
-3. **what exact machine state owns the request;**
-4. **what happens after I answer.**
-
 <p align="center">
-  <img src="docs/assets/boundary-card.svg" alt="A human decision card with bounded context, decision controls, and an exact resume receipt." width="100%" />
+  <strong>See the surface</strong> ·
+  <a href="#try-it-in-60-seconds">run the loop</a> ·
+  <a href="#the-humanboundary">understand the primitive</a> ·
+  <a href="#connect-a-real-runtime">wire a runtime</a> ·
+  <a href="#reality-not-roadmap">audit the evidence</a>
 </p>
 
-### In the demo, do this
+<br />
 
-**① Pick one waiting machine** → open the highest-value boundary.
+---
 
-**② Read “Why it stopped”** → inspect only the context needed for this decision.
+<br />
 
-**③ Approve / reject / clarify** → the surface records one human contribution.
+## Open the product surface
 
-**④ Watch the return path** → the same request is tied back to the native waiting session/action.
+The README should not make you imagine the UI. The seeded demo already has one.
 
-That last step is the point of the project. A pretty approval card without a trustworthy return path is not enough.
+<a href="https://hippoley.github.io/PAJ-Eval/human-queue/">
+  <img src="docs/assets/demo-surface.svg" alt="The current human:// seeded demo surface with blocked-machine count, boundary queue, decision context and explicit approve/reject controls." width="100%" />
+</a>
+
+<p align="center">
+  <strong>① choose a boundary</strong> → <strong>② inspect why now</strong> → <strong>③ decide</strong> → <strong>④ verify the exact return</strong>
+</p>
+
+A human should be able to answer four questions without reconstructing a terminal session from memory: **what stopped, why now, who owns the request, and where the answer goes back**.
+
+> **The screen is not the proof. The return path is.**
+
+[Open the live seeded demo ↗](https://hippoley.github.io/PAJ-Eval/human-queue/)
 
 <br />
 
@@ -83,7 +75,7 @@ That last step is the point of the project. A pretty approval card without a tru
 
 <br />
 
-## 60-second local proof
+## Try it in 60 seconds
 
 ### 1. Run the seeded demo
 
@@ -139,6 +131,27 @@ See [Self-hosting](docs/self-host.md) for Docker, remote/VPS deployment, gateway
 
 <br />
 
+## Why this exists if native approval already works
+
+Use the runtime's native UI when it already solves the whole boundary. `human://` is for the cases that remain after that local UX is fixed.
+
+| Native UI is enough when… | `human://` becomes relevant when… |
+| --- | --- |
+| one foreground session owns the request | several sessions / agents / accounts may wait at once |
+| the operator is already in that runtime | the human is on another device or channel |
+| the native surface can both show **and resolve** the request | a surface can notify but cannot resolve the exact native request |
+| local identity is authoritative | provenance must survive a cross-channel hop |
+| resume is implicit and local | the return path itself needs to be observable / auditable |
+
+**If the left column describes your workflow, do not add `human://`.** The project should disappear wherever a runtime-local fix is cleaner.
+
+<br />
+
+---
+
+<br />
+
+
 ## The HumanBoundary
 
 A `HumanBoundary` is the addressable machine → human → machine handoff.
@@ -177,6 +190,46 @@ If a runtime cannot establish the authoritative source/session/request, `human:/
 ---
 
 <br />
+
+## Connect a real runtime
+
+The quickest useful test is not “can I render a queue?” It is “can one real runtime pause and then consume the human answer correctly?”
+
+```bash
+humanq connect codex
+humanq connect cursor
+humanq connect claude
+humanq connect opencode
+
+humanq sessions
+```
+
+| Surface | Human → machine return | Current state |
+| --- | --- | --- |
+| **Codex** | native `PermissionRequest` allow/deny | **working** |
+| **Cursor** | native high-risk `beforeShellExecution` permission | **working** |
+| **MCP** | `human_ask` returns to the same tool call | **working** |
+| **Signed webhook** | canonical decision callback | **working** |
+| **Telegram** | long-poll callback resolves the local boundary | **working** |
+| **Slack Socket Mode** | interactive action resolves the boundary | implemented · workspace E2E pending |
+| **Claude Code** | native `PermissionRequest` return | implemented · real-host E2E pending |
+| **OpenCode V2** | permission evaluate hook | implemented · real-host E2E pending |
+| **OpenClaw Gateway** | approval RPC / presence worker | live worker not implemented |
+| **Muse Code** | MSP approval / session worker | live worker not implemented |
+
+A native connector stores a **bounded `ContextCapsule`**. Full editor transcripts are not copied into the boundary store by default; a transcript path may be retained as an on-demand locator.
+
+If the connector cannot reach `human://`, consequential actions fall back to the runtime's native approval behavior rather than silently failing open.
+
+[Connector runtime →](docs/connectors.md)
+
+<br />
+
+---
+
+<br />
+
+
 
 ## Use it from code
 
@@ -267,63 +320,6 @@ For asynchronous systems, provide a resume target instead of blocking a worker. 
 
 <br />
 
-## Connect a real runtime
-
-The quickest useful test is not “can I render a queue?” It is “can one real runtime pause and then consume the human answer correctly?”
-
-```bash
-humanq connect codex
-humanq connect cursor
-humanq connect claude
-humanq connect opencode
-
-humanq sessions
-```
-
-| Surface | Human → machine return | Current state |
-| --- | --- | --- |
-| **Codex** | native `PermissionRequest` allow/deny | **working** |
-| **Cursor** | native high-risk `beforeShellExecution` permission | **working** |
-| **MCP** | `human_ask` returns to the same tool call | **working** |
-| **Signed webhook** | canonical decision callback | **working** |
-| **Telegram** | long-poll callback resolves the local boundary | **working** |
-| **Slack Socket Mode** | interactive action resolves the boundary | implemented · workspace E2E pending |
-| **Claude Code** | native `PermissionRequest` return | implemented · real-host E2E pending |
-| **OpenCode V2** | permission evaluate hook | implemented · real-host E2E pending |
-| **OpenClaw Gateway** | approval RPC / presence worker | live worker not implemented |
-| **Muse Code** | MSP approval / session worker | live worker not implemented |
-
-A native connector stores a **bounded `ContextCapsule`**. Full editor transcripts are not copied into the boundary store by default; a transcript path may be retained as an on-demand locator.
-
-If the connector cannot reach `human://`, consequential actions fall back to the runtime's native approval behavior rather than silently failing open.
-
-[Connector runtime →](docs/connectors.md)
-
-<br />
-
----
-
-<br />
-
-## Native approval UI vs `human://`
-
-Use the runtime's native UI when it already solves the whole boundary.
-
-| Native UI is enough when… | `human://` becomes relevant when… |
-| --- | --- |
-| one foreground session owns the request | several sessions / agents / accounts may wait at once |
-| the operator is already in that runtime | the human is on another device or channel |
-| the native surface can both show **and resolve** the request | a surface can notify but cannot resolve the exact native request |
-| local identity is authoritative | provenance must survive a cross-channel hop |
-| resume is implicit and local | the return path itself needs to be observable / auditable |
-
-This distinction is intentional. The project should disappear from workflows where a runtime-local fix is cleaner.
-
-<br />
-
----
-
-<br />
 
 ## Reality, not roadmap
 
