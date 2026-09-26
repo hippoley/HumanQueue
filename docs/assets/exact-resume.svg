@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+<title id="title">human:// exact resume lifecycle</title>
+<desc id="desc">A six-stage lifecycle from native pause through identity and projection to human decision and exact resume confirmation.</desc>
+<style>
+  .bg{fill:#f6f3ec}.card{fill:#fffdf8;stroke:#d9d3c8;stroke-width:1.4}.ink{fill:#171715}.muted{fill:#706b62}.lime{fill:#d7ff63}.orange{fill:#ff6647}.line{stroke:#9d978e;stroke-width:2}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}.sans{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  @media (prefers-color-scheme: dark){.bg{fill:#0f100e}.card{fill:#171815;stroke:#34372f}.ink{fill:#f1efe9}.muted{fill:#aaa69d}.line{stroke:#60655a}}
+</style>
+<rect width="1200" height="360" rx="26" class="bg"/>
+<text x="44" y="48" class="mono muted" font-size="14" letter-spacing="2">ONE BOUNDARY · ONE DECISION · ONE RETURN PATH</text>
+
+<line x1="130" y1="194" x2="1070" y2="194" class="line"/>
+<g transform="translate(40 112)"><rect width="170" height="132" rx="17" class="card"/><circle cx="24" cy="26" r="8" class="orange"/><text x="43" y="31" class="mono muted" font-size="11">01</text><text x="20" y="67" class="sans ink" font-size="18" font-weight="750">native pause</text><text x="20" y="94" class="mono muted" font-size="11">agent cannot</text><text x="20" y="112" class="mono muted" font-size="11">safely continue</text></g>
+<g transform="translate(230 112)"><rect width="170" height="132" rx="17" class="card"/><circle cx="24" cy="26" r="8" class="lime"/><text x="43" y="31" class="mono muted" font-size="11">02</text><text x="20" y="67" class="sans ink" font-size="18" font-weight="750">bind identity</text><text x="20" y="94" class="mono muted" font-size="11">source/session/</text><text x="20" y="112" class="mono muted" font-size="11">native request</text></g>
+<g transform="translate(420 112)"><rect width="170" height="132" rx="17" class="card"/><circle cx="24" cy="26" r="8" class="lime"/><text x="43" y="31" class="mono muted" font-size="11">03</text><text x="20" y="67" class="sans ink" font-size="18" font-weight="750">project context</text><text x="20" y="94" class="mono muted" font-size="11">web / phone /</text><text x="20" y="112" class="mono muted" font-size="11">chat surface</text></g>
+<g transform="translate(610 112)"><rect width="170" height="132" rx="17" class="card"/><circle cx="24" cy="26" r="8" class="orange"/><text x="43" y="31" class="mono muted" font-size="11">04</text><text x="20" y="67" class="sans ink" font-size="18" font-weight="750">human decides</text><text x="20" y="94" class="mono muted" font-size="11">authorized</text><text x="20" y="112" class="mono muted" font-size="11">resolver only</text></g>
+<g transform="translate(800 112)"><rect width="170" height="132" rx="17" class="card"/><circle cx="24" cy="26" r="8" class="lime"/><text x="43" y="31" class="mono muted" font-size="11">05</text><text x="20" y="67" class="sans ink" font-size="18" font-weight="750">resume exact</text><text x="20" y="94" class="mono muted" font-size="11">same waiting</text><text x="20" y="112" class="mono muted" font-size="11">action</text></g>
+<g transform="translate(990 112)"><rect width="170" height="132" rx="17" class="card"/><circle cx="24" cy="26" r="8" class="lime"/><text x="43" y="31" class="mono muted" font-size="11">06</text><text x="20" y="67" class="sans ink" font-size="18" font-weight="750">prove return</text><text x="20" y="94" class="mono muted" font-size="11">receipt / native</text><text x="20" y="112" class="mono muted" font-size="11">round-trip</text></g>
+
+<text x="43" y="307" class="mono muted" font-size="12">visibility ≠ authority</text>
+<text x="415" y="307" class="mono muted" font-size="12">delivery ≠ semantic resume</text>
+<text x="814" y="307" class="mono muted" font-size="12">unknown ownership stays unknown</text>
+</svg>
