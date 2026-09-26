@@ -22,6 +22,6 @@ def require_gateway_token(request: Request) -> None:
     if not supplied or not hmac.compare_digest(supplied, expected):
         raise HTTPException(
             status_code=401,
-            detail="Human Queue gateway token required",
+            detail="human:// gateway token required",
             headers={"WWW-Authenticate": "Bearer"},
         )
