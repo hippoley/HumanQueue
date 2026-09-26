@@ -129,7 +129,7 @@ def shell_permission(event: dict[str, Any]) -> dict[str, Any]:
             ref=_event_ref(event),
             title=f"Allow Cursor shell command: {command}"[:240],
             summary="Cursor paused a high-risk shell command before execution.",
-            why_now="The command matched the Human Queue high-risk shell gate.",
+            why_now="The command matched the human:// high-risk shell gate.",
             context=capsule.to_dict(),
             urgency=0.8,
             unblock=0.95,
@@ -144,14 +144,14 @@ def shell_permission(event: dict[str, Any]) -> dict[str, Any]:
     except Exception:
         return {
             "permission": "ask",
-            "user_message": "Human Queue unavailable; falling back to Cursor approval.",
+            "user_message": "human:// unavailable; falling back to Cursor approval.",
         }
 
     action = str(decision.get("action") or "").lower()
     if action in {"approve", "allow", "accept", "continue"}:
         return {"permission": "allow"}
     if action in {"reject", "deny", "decline", "cancel"}:
-        message = str(decision.get("comment") or "Denied in Human Queue.")
+        message = str(decision.get("comment") or "Denied in human://.")
         return {
             "permission": "deny",
             "user_message": message,
