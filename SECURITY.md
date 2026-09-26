@@ -1,6 +1,6 @@
 # Security
 
-Human Queue sits on a sensitive boundary: it carries human decisions back into paused software.
+human:// sits on a sensitive boundary: it carries human decisions back into paused software.
 
 The security model is therefore intentionally narrower than “the user clicked Approve.”
 
@@ -23,7 +23,7 @@ Channel identity is only as strong as the channel that supplies it.
 - Generic webhook channels are trusted through their per-channel HMAC secret.
 - Direct Gateway API calls are trusted at the Gateway bearer-token boundary.
 
-`route.actors` constrains accepted actor identifiers, but Human Queue does not currently operate an independent per-human identity provider or IAM directory.
+`route.actors` constrains accepted actor identifiers, but human:// does not currently operate an independent per-human identity provider or IAM directory.
 
 A string such as `slack:U123` is meaningful only when it came through the authenticated Slack connector path.
 
@@ -31,12 +31,12 @@ A string such as `slack:U123` is meaningful only when it came through the authen
 
 A signed resume callback binds:
 
-- canonical Human Queue `request_id`;
+- canonical human:// `request_id`;
 - source;
 - source reference;
 - human resolution.
 
-The callback signature proves that Human Queue produced the payload when a resume secret is configured.
+The callback signature proves that human:// produced the payload when a resume secret is configured.
 
 HTTP 2xx proves transport delivery only.
 
@@ -51,11 +51,11 @@ For semantic confirmation, the target can return:
 }
 ```
 
-Human Queue accepts this as confirmed only when the returned `request_id` exactly matches the request being resumed.
+human:// accepts this as confirmed only when the returned `request_id` exactly matches the request being resumed.
 
 ## Identity integrity
 
-Human Queue does not use placeholder identity as authority.
+human:// does not use placeholder identity as authority.
 
 When a source cannot provide a stable request/session/turn identity:
 
@@ -69,7 +69,7 @@ This deliberately favors duplicate human requests over cross-session decision re
 
 ## Fail-closed rules
 
-Human Queue should never convert infrastructure failure into implicit permission.
+human:// should never convert infrastructure failure into implicit permission.
 
 The following must not mean “approve”:
 
@@ -83,7 +83,7 @@ The following must not mean “approve”:
 - resume transport failure;
 - unconfirmed HTTP callback.
 
-Native connectors should fall back to the host runtime's own permission path when Human Queue cannot produce a valid decision.
+Native connectors should fall back to the host runtime's own permission path when human:// cannot produce a valid decision.
 
 ## Secrets
 
@@ -98,11 +98,11 @@ Never put these in issues, logs, screenshots, demo fixtures, or test snapshots:
 - provider API keys;
 - full private transcripts.
 
-Human Queue deliberately projects bounded context into external channels. Connector-private fields such as transcript locators should remain inside the trusted local control plane unless explicitly required.
+human:// deliberately projects bounded context into external channels. Connector-private fields such as transcript locators should remain inside the trusted local control plane unless explicitly required.
 
 ## Supported security claims
 
-Human Queue currently provides:
+human:// currently provides:
 
 - Gateway bearer-token protection;
 - per-channel signed webhook callbacks;
@@ -113,7 +113,7 @@ Human Queue currently provides:
 - auditable delivery and resume outcome events;
 - exact-request semantic resume receipts for webhook targets that opt in.
 
-Human Queue does **not** currently claim:
+human:// does **not** currently claim:
 
 - independent end-user authentication;
 - enterprise RBAC;
