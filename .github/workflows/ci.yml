@@ -58,6 +58,9 @@ jobs:
           assert 'native_resume=true' not in demo
           assert demo.count('class="journeyStep"') == 4
           assert demo.count('class="viewIntro"') >= 5
+          assert 'scroll-snap-type:x proximity' in demo
+          assert '.stats{display:none}' in demo
+          assert 'flex-wrap:nowrap;overflow-x:auto' in demo
           assert 'reached a real human boundary' not in demo
           print("public demo source verified")
           PY
