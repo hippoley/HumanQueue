@@ -56,6 +56,8 @@ jobs:
           assert 'new URLSearchParams(location.search).get("scenario")' in demo
           assert 'native_resume=simulated' in demo
           assert 'native_resume=true' not in demo
+          assert demo.count('class="journeyStep"') == 4
+          assert demo.count('class="viewIntro"') >= 5
           assert 'reached a real human boundary' not in demo
           print("public demo source verified")
           PY
