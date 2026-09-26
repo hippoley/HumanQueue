@@ -445,7 +445,7 @@ humanq gateway status</div>
     };
     if(kind==="channel"||kind==="telegram"){log("Channel projection",kind==="telegram"?"Telegram callback returned to local gateway.":"Signed projection preserved canonical request identity.","projected"); toast("Channel projection simulated"); showView("timeline"); renderTimeline(); return;}
     const p=presets[kind]; if(!p)return;
-    const item={...p,id:"connector-"+Date.now(),ref:"native-"+String(Date.now()).slice(-5),summary:"A native connector reached a real human boundary.",why:"The native runtime is paused until this exact request is resolved.",unblocks:1,priority:99,context:"provider="+kind+" · native_resume=true"};
+    const item={...p,id:"connector-"+Date.now(),ref:"native-"+String(Date.now()).slice(-5),summary:"A connector-shaped demo event reached a human boundary.",why:"The native runtime is paused until this exact request is resolved.",unblocks:1,priority:99,context:"provider="+kind+" · demo=true · native_resume=simulated"};
     items.unshift(item); selected=item; log(item.source+" native event",item.title,"waiting"); showView("now"); render(); toast(item.source+" → human://");
   }
 
