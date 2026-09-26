@@ -15,7 +15,7 @@ A green checkbox here means only what the evidence column says it means.
 | Blank Presence / connector provenance is rejected | **verified in CI** | API boundary regression test | This does not make upstream provider ownership authoritative |
 | Boundary-integrity counters are observable | **verified in CI** | `integrity_last_24h` + dashboard tests | Metrics measure human:// events, not every provider-internal failure |
 | MCP `human_ask` blocks and returns one structured decision | **verified in CI** | MCP protocol tests | Depends on the MCP host keeping the tool invocation alive |
-| Codex native PermissionRequest adapter | **implemented + tested** | connector round-trip tests | Host/version-specific real-world behavior can still drift |
+| Codex native PermissionRequest hook process | **packaged-hook E2E verified; real-host pending** | clean-wheel subprocess consumes PermissionRequest stdin, blocks on the real Gateway, preserves native session/turn identity, and emits Codex-shaped allow + deny stdout | Codex binary trust/loading and host consumption of the hook decision are not yet proven |
 | Cursor high-risk shell gate | **implemented + tested** | allow/fallback tests | Intentionally not a universal Cursor approval replacement |
 | Claude Code PermissionRequest adapter | **implemented; real-host E2E pending** | connector tests + packaged runtime | Claude `--bg` has public evidence that a returned hook decision may not resume the background session |
 | OpenCode V2 permission plugin | **implemented; real-host E2E pending** | plugin packaging / source tests | Upstream permission semantics remain authoritative |
