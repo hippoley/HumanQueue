@@ -4,11 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f4f1eb">
+<meta name="description" content="Interactive human:// demo: route human decisions back to the exact paused agent, session, and request.">
+<meta property="og:title" content="human:// — human-boundary control plane">
+<meta property="og:description" content="Try the machine → human → exact-resume loop in your browser.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
 <title>human:// — exact-session human boundary demo</title>
 <style>
 :root{
   --bg:#f4f1eb;--ink:#11110f;--muted:#6e6a62;--line:#d8d2c7;--card:#fbfaf6;
-  --acid:#ceff4d;--signal:#ff5b38;--deep:#171815;--ok:#19724b;--soft:#ebe6dc;
+  --acid:#ceff4d;--signal:#ff5b38;--accent:#ff5b38;--deep:#171815;--ok:#19724b;--soft:#ebe6dc;
   --warn:#8a5a00;--blue:#3165d4
 }
 *{box-sizing:border-box}
@@ -23,13 +28,15 @@ button{cursor:pointer}
 .topright{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .live{display:flex;gap:8px;align-items:center;text-transform:uppercase;font:650 10px/1 ui-monospace,monospace;letter-spacing:.1em;color:var(--muted)}
 .dot{width:8px;height:8px;background:var(--acid);border-radius:50%;box-shadow:0 0 0 4px rgba(199,255,56,.12)}
-.ghost{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 12px;color:var(--muted)}
+.ghost{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 12px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center}
 .primaryTop{border:1px solid var(--ink);background:var(--ink);color:white;border-radius:999px;padding:9px 13px;font-weight:700}
 .hero{display:grid;grid-template-columns:1.38fr .62fr;gap:28px;padding:38px 0 28px;border-bottom:1px solid var(--line)}
 .eyebrow{font:700 11px/1 ui-monospace,monospace;color:var(--accent);text-transform:uppercase;letter-spacing:.14em}
 .hero h1{font-size:clamp(50px,7vw,104px);line-height:.86;letter-spacing:-.078em;margin:13px 0 20px;max-width:970px}
 .hero p{margin:0;max-width:790px;color:var(--muted);font-size:18px;line-height:1.5}
 .hero strong{color:var(--ink)}
+.tryline{margin-top:20px;display:inline-flex;gap:9px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:9px 12px;color:var(--muted);font-size:12px}
+.tryline b{font:800 10px/1 ui-monospace,monospace;letter-spacing:.1em;color:var(--signal)}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:end}
 .stat{min-height:122px;border-radius:15px;padding:18px;background:var(--deep);color:white;display:flex;flex-direction:column;justify-content:space-between}
 .stat.acid{background:var(--card);color:var(--ink);border:1px solid var(--line)}
@@ -110,9 +117,11 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
 <body>
 <div class="wrap">
 <header class="top">
-  <div class="brand"><span>human://</span></div>
+  <a class="brand" href="https://github.com/hippoley/HumanQueue" aria-label="human:// source repository"><span>human://</span></a>
   <div class="topright">
     <div class="live"><i class="dot"></i><span id="liveLabel">interactive public demo</span></div>
+    <a class="ghost" href="https://github.com/hippoley/HumanQueue">Source ↗</a>
+    <a class="ghost" href="https://github.com/hippoley/HumanQueue/blob/main/CLAIMS.md">Evidence ↗</a>
     <button class="ghost" id="resetBtn">Reset demo</button>
     <button class="primaryTop" id="injectTopBtn">+ Inject machine request</button>
   </div>
@@ -123,6 +132,7 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
     <div class="eyebrow">machine → human → machine</div>
     <h1>YOU ARE BLOCKING <b id="blocking">5</b> MACHINES.</h1>
     <p><strong>The approval is not the hard part. Getting the answer back to the exact paused agent is.</strong> This demo makes the human boundary, decision and resume path visible as separate steps instead of treating a button click as proof the right workflow continued.</p>
+    <div class="tryline"><b>TRY IT</b><span>pick #1 → approve or reject → watch “Live resume path” → inject your own boundary</span></div>
   </div>
   <div class="stats">
     <div class="stat acid"><div class="k">interruptions avoided</div><div class="v" id="avoided">14</div><div class="s">batched or deferred instead of interrupting you one-by-one</div></div>
@@ -137,7 +147,7 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
   <button class="tab" data-view="timeline">Decision timeline</button>
   <button class="tab" data-view="connectors">Connector Lab</button>
   <button class="tab" data-view="deploy">Deploy yours</button>
-  <span class="badge">No login · all interactions are local demo state</span>
+  <span class="badge">Static demo · interactions stay in this browser</span>
 </nav>
 
 <main id="view-now" class="view">
@@ -183,7 +193,7 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
 <main id="view-connectors" class="view hidden">
   <div class="cards">
     <article class="card">
-      <div class="eyebrow">real · native round-trip</div>
+      <div class="eyebrow">implemented · native round-trip</div>
       <h3>Codex PermissionRequest</h3>
       <div class="small">Session + turn + tool boundary enter the Gateway. Your decision returns as native allow/deny to the same waiting Codex tool call.</div>
       <div class="code">humanq connect codex
@@ -193,7 +203,7 @@ PermissionRequest → human://approve
       <div class="actions"><button class="btn primary" data-sim-connector="codex">Simulate Codex gate</button></div>
     </article>
     <article class="card">
-      <div class="eyebrow">real · conservative gate</div>
+      <div class="eyebrow">implemented · conservative gate</div>
       <h3>Cursor high-risk shell</h3>
       <div class="small">Conversation is observed continuously, while only explicit high-risk beforeShellExecution commands are routed for human approval.</div>
       <div class="code">humanq connect cursor
@@ -203,7 +213,7 @@ beforeShellExecution
       <div class="actions"><button class="btn primary" data-sim-connector="cursor">Simulate Cursor shell</button></div>
     </article>
     <article class="card">
-      <div class="eyebrow">real · semantic input</div>
+      <div class="eyebrow">implemented · semantic input</div>
       <h3>MCP human_ask</h3>
       <div class="small">Clarification, choice, review or edit blocks inside the same MCP tool call and returns the human result to that exact invocation.</div>
       <div class="code">humanq mcp serve
@@ -214,7 +224,7 @@ human_ask({
       <div class="actions"><button class="btn primary" data-sim-connector="mcp">Simulate human_ask</button></div>
     </article>
     <article class="card">
-      <div class="eyebrow">real · channel projection</div>
+      <div class="eyebrow">implemented · channel projection</div>
       <h3>Signed Webhook Channel</h3>
       <div class="small">A bounded dialogue capsule can appear in another UI. The signed action comes back to the Gateway; the channel never owns a second queue.</div>
       <div class="code">humanq channel add webhook ops \
@@ -224,7 +234,7 @@ X-Human-Channel-Signature: sha256=…</div>
       <div class="actions"><button class="btn" data-sim-connector="channel">Simulate channel projection</button></div>
     </article>
     <article class="card">
-      <div class="eyebrow">real · outbound-only channel</div>
+      <div class="eyebrow">implemented · outbound-only channel</div>
       <h3>Telegram long-poll</h3>
       <div class="small">human:// pushes bounded approval cards to your Telegram chat. A local worker receives callback_query events and resolves localhost — no public inbound Gateway port required.</div>
       <div class="code">humanq channel add telegram phone \
@@ -244,7 +254,7 @@ humanq channel run phone</div>
       <span class="node">Web / channel</span><span class="arrow">→</span>
       <span class="node">native resume</span>
     </div>
-    <div class="eventline">Implemented: Codex native approval · Cursor high-risk shell · MCP human_ask · signed webhook · Telegram long-poll. Claude Code / OpenCode are not marked supported yet.</div>
+    <div class="eventline">Implemented: Codex native approval · Cursor high-risk shell · MCP human_ask · signed webhook · Telegram long-poll. Slack / Claude Code / OpenCode are implemented but still await workspace or real-host E2E evidence. The buttons above simulate those connector shapes inside this static demo.</div>
   </section>
 </main>
 
@@ -254,7 +264,7 @@ humanq channel run phone</div>
       <div class="eyebrow">01 · install</div>
       <h3>Your machine becomes the Human Gateway</h3>
       <div class="small">No hosted account required. State and audit history can remain on your hardware.</div>
-      <div class="code">curl -fsSL https://raw.githubusercontent.com/hippoley/human:///main/scripts/install.sh | bash
+      <div class="code">curl -fsSL https://raw.githubusercontent.com/hippoley/HumanQueue/main/scripts/install.sh | bash
 
 humanq gateway run</div>
     </article>
@@ -296,7 +306,7 @@ humanq gateway status</div>
 
 <div class="footer">
   <span>Every repeated human interruption is a candidate for a better policy.</span>
-  <span>human://approve · review · clarify · auth · choose · edit · claim</span>
+  <span><a href="https://github.com/hippoley/HumanQueue" style="color:inherit">source</a> · <a href="https://github.com/hippoley/HumanQueue/blob/main/CLAIMS.md" style="color:inherit">evidence</a> · human://approve · review · clarify · auth · choose · edit · claim</span>
 </div>
 </div>
 <div id="toast" class="toast" aria-live="polite"></div>
