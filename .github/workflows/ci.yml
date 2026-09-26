@@ -36,8 +36,20 @@ jobs:
               ET.parse(path)
 
           assert "cd human-queue" not in readme, "README contains stale clone directory"
-          assert 'href="https://hippoley.github.io/PAJ-Eval/human-queue/"' in readme, "README lost clickable live-demo visual"
+          assert 'href="https://hippoley.github.io/PAJ-Eval/human/"' in readme, "README lost clickable live-demo visual"
           print("README visual assets verified")
+          PY
+      - name: Verify public demo source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          demo = Path("docs/index.html").read_text(encoding="utf-8")
+          assert "https://raw.githubusercontent.com/hippoley/HumanQueue/main/scripts/install.sh" in demo
+          assert "hippoley/human:///" not in demo
+          assert "https://github.com/hippoley/HumanQueue" in demo
+          assert "Static demo · interactions stay in this browser" in demo
+          print("public demo source verified")
           PY
       - name: Build wheel
         run: python -m pip wheel . --no-deps -w dist

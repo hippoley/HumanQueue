@@ -50,7 +50,7 @@ jobs:
         run: |
           echo "GitHub Pages is not enabled for this repository."
           echo "Skipping deployment instead of failing the repository."
-          echo "The current public interactive demo remains hosted under PAJ-Eval."
+          echo "The current public interactive demo remains mirrored at https://hippoley.github.io/PAJ-Eval/human/ until standalone Pages is enabled."
 
       - uses: actions/configure-pages@v5
         if: steps.pages.outputs.enabled == 'true'
