@@ -460,3 +460,7 @@ def test_batch_authorization_fails_before_any_item_is_resolved(tmp_path: Path):
     assert store.get(second.id).status.value == "pending"
     assert not any(e["type"] == "resolved" for e in store.events(first.id))
     assert not any(e["type"] == "resolved" for e in store.events(second.id))
+
+def test_human_boundary_is_public_alias():
+    import humanqueue
+    assert humanqueue.HumanBoundary is humanqueue.HumanQueue

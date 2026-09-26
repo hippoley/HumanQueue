@@ -11,7 +11,7 @@ $pip = Join-Path $venv "Scripts\pip.exe"
 $humanq = Join-Path $venv "Scripts\humanq.exe"
 
 & $pip install --upgrade pip
-& $pip install "git+https://github.com/hippoley/human-queue.git"
+& $pip install "git+https://github.com/hippoley/HumanQueue.git"
 
 Write-Host ""
 Write-Host "Installed human://"

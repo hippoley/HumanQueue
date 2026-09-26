@@ -1,6 +1,6 @@
 # Contributing
 
-Human Queue is developed **evidence first**.
+human:// is developed **evidence first**.
 
 Do not start with “please support another agent/runtime/channel.” Start with a real workflow where a human boundary failed or became operationally expensive.
 
@@ -17,7 +17,7 @@ A useful report answers:
 7. **Native resolve path** — could software programmatically resolve the exact waiting request?
 8. **Resume identity** — after the answer, how was the exact waiting session/action resumed?
 9. **Workaround** — polling, TUI scraping, Telegram, Slack, parent escalation, auto-deny, etc.
-10. **What would make Human Queue unnecessary?** — name the local/runtime fix if one exists.
+10. **What would make human:// unnecessary?** — name the local/runtime fix if one exists.
 
 If the problem disappears after a runtime-local fix, upstream that fix. That is a successful result for this project.
 
@@ -70,7 +70,7 @@ Keep provider-specific semantics inside connectors/adapters. The canonical model
 
 Ranking, batching and notification priority may change **when or where** a request is surfaced. They must never become implicit permission.
 
-For connector PRs, include at least one failure-path test proving that an unreachable Human Queue does **not** silently allow a consequential action.
+For connector PRs, include at least one failure-path test proving that an unreachable human:// does **not** silently allow a consequential action.
 
 Run:
 

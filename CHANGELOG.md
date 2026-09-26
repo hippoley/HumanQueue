@@ -2,6 +2,10 @@
 
 ## Unreleased — human-boundary integrity
 
+- Promoted `human://` from protocol syntax to the public project brand; the queue is now explicitly one presentation layer.
+- Added `HumanBoundary` as the preferred Python/JavaScript primitive while keeping `HumanQueue` backward compatible.
+- Defined a compatibility contract for `humanq`, `human-queue`, `humanqueue`, `HUMAN_QUEUE_*`, and `~/.human-queue/`.
+- Added a brand architecture document so protocol, primitive, product category and compatibility names no longer drift.
 - Reframed the project around exact-session human boundaries instead of a generic approval inbox.
 - Added a public evidence/falsification thread and an evidence-first GitHub issue form.
 - Added channel delivery audit events: `channel_delivered` and `channel_undeliverable`.

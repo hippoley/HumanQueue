@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "human-queue"
 version = "0.6.0"
-description = "Self-hosted control plane for routing human decisions back to the exact paused agent."
+description = "human:// — self-hosted control plane for human boundaries between autonomous systems and people."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -16,7 +16,7 @@ dependencies = [
   "httpx>=0.27",
   "slack-sdk>=3.36",
 ]
-keywords = ["agents", "human-in-the-loop", "approvals", "control-plane", "mcp"]
+keywords = ["agents", "human-in-the-loop", "human-boundary", "agent-infrastructure", "control-plane", "mcp"]
 
 [project.urls]
 Homepage = "https://github.com/hippoley/HumanQueue"

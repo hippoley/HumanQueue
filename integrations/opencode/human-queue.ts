@@ -66,12 +66,12 @@ async function recordSession(input: {
 async function waitForDecision(requestID: string) {
   while (true) {
     const response = await hq("/v1/requests/" + encodeURIComponent(requestID))
-    if (!response.ok) throw new Error("Human Queue returned " + response.status)
+    if (!response.ok) throw new Error("human:// returned " + response.status)
     const body = await response.json()
     const request = body.request
     if (request.status === "resolved") return request.resolution || {}
     if (["cancelled", "expired", "superseded"].includes(request.status)) {
-      throw new Error("Human Queue request ended with " + request.status)
+      throw new Error("human:// request ended with " + request.status)
     }
     await Bun.sleep(800)
   }
@@ -158,10 +158,10 @@ export default Plugin.define({
 
         if (["approve", "allow", "accept", "continue"].includes(action)) {
           event.effect = "allow"
-          event.message = "Approved in Human Queue"
+          event.message = "Approved in human://"
         } else if (["reject", "deny", "decline", "cancel"].includes(action)) {
           event.effect = "deny"
-          event.message = String(decision.comment || "Denied in Human Queue")
+          event.message = String(decision.comment || "Denied in human://")
         }
       } catch {
         // Preserve OpenCode's original "ask" effect, which falls back to the

@@ -1,81 +1,109 @@
 # `human://`
 
-### The approval is not the hard part. Getting the answer back to the exact paused agent is.
+### The control plane for human boundaries.
 
-**[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Evidence log](https://github.com/hippoley/HumanQueue/issues/1)** · **[Claims & evidence](CLAIMS.md)** · **[Security model](SECURITY.md)** · Apache-2.0
-
-A background agent reaches `ask`. The person is on another device. The prompt is attached to a nested session nobody can see. Slack can show the request but cannot resolve it. A callback arrives, but the runtime cannot prove which waiting session — or which human — it belongs to.
-
-Those are not “approval UI” problems. They are **human-boundary routing** problems.
+**Your agents got faster. You didn't.**
 
 ```text
-source / account / session
-          │
-          ▼
-     HumanBoundary
-          │
-          ├── bounded context
-          ├── authorized resolver
-          ├── expiry / supersession
-          └── native resume handle
-          │
-          ▼
-  web · phone · Slack · Telegram
-          │
-          ▼
- exact waiting session resumes
+identify exact waiting agent/session
+        ↓
+carry bounded decision context
+        ↓
+reach the right human
+        ↓
+record one authorized decision
+        ↓
+return it to the exact paused action
+        ↓
+prove exact-request resume when the runtime can acknowledge it
 ```
 
-Human Queue is a self-hosted control plane for that boundary. The queue is only one presentation layer.
+**[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/)** · **[Evidence log](https://github.com/hippoley/HumanQueue/issues/1)** · **[Claims & evidence](CLAIMS.md)** · **[Security model](SECURITY.md)** · **[Brand contract](docs/brand.md)** · Apache-2.0
 
-> If a runtime's native approval UI completely solves your workflow, use it. Human Queue exists only for the cases that survive that fix.
+A queue is one UI. The product is the boundary underneath it.
 
-### What works today
+```text
+Claude / worker-8
+blocked 43s
 
-| Path | Status |
+Why it stopped
+terraform wants to modify production state
+
+What happened before
+"...plan completed, 2 resources replace..."
+
+[ inspect ] [ reject ] [ approve ]
+
+decision returned
+→ claude / session-91 / tool-14
+
+exact waiting action resumed ✓
+```
+
+A local approval prompt works when the right human is already looking at the right session. The harder case is asynchronous: a nested or background agent pauses, the human is somewhere else, the request crosses a channel, and the answer still has to return to **one exact execution** without stale or duplicate authority.
+
+That is a **HumanBoundary**:
+
+```text
+source / account / agent / session / request
+                  │
+                  ▼
+             HumanBoundary
+                  │
+                  ├── bounded context
+                  ├── authorized resolver
+                  ├── expiry / supersession
+                  ├── decision ledger
+                  └── native resume handle
+                  │
+                  ▼
+       web · phone · Slack · Telegram
+                  │
+                  ▼
+        exact waiting action resumes
+```
+
+> If a runtime's native human-boundary path completely solves your workflow, use it. `human://` exists for the cases that survive the native fix.
+
+## We tried to kill this idea
+
+The project is deliberately tested against cases where it should **not** exist.
+
+| Reality check | Result |
 | --- | --- |
-| Local Gateway + web queue + SQLite ledger | working |
-| Python / JavaScript / HTTP request path | working |
-| Codex native permission round-trip | working |
-| Cursor high-risk shell gate | working |
-| MCP `human_ask` round-trip | working |
-| Native blocking wait semantics | working; audited as `resume_not_applicable`, not webhook failure |
-| Generic signed webhook projection | working |
-| Telegram decision channel | working |
-| Slack Socket Mode channel | implemented; real workspace E2E pending |
-| Claude Code connector | implemented; real-host E2E pending |
-| OpenCode V2 connector | implemented; real-host E2E pending |
-| Cross-account Presence registry | working |
-| OpenClaw live Gateway worker | not implemented yet |
-| Muse MSP live worker | not implemented yet |
+| OpenClaw Slack approval gap | fixed upstream by native Slack exec approvals → `human://` not needed for that local case |
+| Mastra nested HITL | Supervisor Agent resolves the reported local topology → `human://` not needed there |
+| Claude background workers | approval can exist while context/history/resume remain fragmented → boundary still under test |
 
-### Seen in the wild
+The question is not “can we build another approval inbox?” It is:
 
-This project is being shaped against public failure reports, not a feature wishlist.
+> **After native runtimes fix their own approval UX, is there still a cross-session / cross-agent / cross-channel boundary that needs stable identity, human authority and exact resume?**
 
-- **Claude Code `--bg`** — a permission hook can fire while the background session still lacks a reliable answer/resume path: [#88698](https://github.com/anthropics/claude-code/issues/88698)
-- **OpenCode nested subagents** — descendant asks could exist without a reachable root presentation path; a recent report says v2.0.3 may fix the local case: [#13715](https://github.com/anomalyco/opencode/issues/13715)
-- **OpenClaw Slack approvals — historical evidence, now fixed upstream** — Slack-primary operators previously routed approvals through Telegram because Slack could not resolve them. OpenClaw later landed native Slack exec approvals in [PR #58155](https://github.com/openclaw/openclaw/pull/58155), closing [#48529](https://github.com/openclaw/openclaw/issues/48529). This is a useful falsification datapoint: a runtime-local fix can remove an apparent need for Human Queue.
-- **OpenClaw multi-agent ownership — still open, but upstream-owned** — [#126360](https://github.com/openclaw/openclaw/issues/126360) still has source-backed failures where first-party/global paths lack an authoritative agent/session owner. Human Queue treats this as a provenance constraint: ambiguous ownership must remain unknown, not guessed. It is not by itself evidence that a separate Presence Hub is needed.
-- **Hermes selected transport bypass** — an approval can be sent to a surface nobody is watching and later be misreported as “human did not respond”: [#120859](https://github.com/NousResearch/hermes-agent/issues/120859)
-- **Vercel eve HITL authorization** — the missing primitive is sometimes not “approve?” but **which human is allowed to answer after the durable pause**: [#1021](https://github.com/vercel/eve/issues/1021)
+If the answer is usually no, this project should stay small.
 
-The public [evidence thread](https://github.com/hippoley/HumanQueue/issues/1) also records what would falsify the project.
+## Brand and compatibility
 
-**The test:** after native runtimes fix their own approval surfaces, do people still need one reliable way to inspect, route and resolve human boundaries across sessions, agents, accounts or channels?
+| Layer | Name |
+| --- | --- |
+| Public brand / protocol language | **`human://`** |
+| Core primitive | **`HumanBoundary`** |
+| Product category | **human-boundary control plane** |
+| CLI | `humanq` — retained for compatibility |
+| Python distribution | `human-queue` — retained for compatibility |
+| Python import | `humanqueue` — retained for compatibility |
+| Legacy SDK class | `HumanQueue` — supported alias of `HumanBoundary` |
+| Environment / local state | `HUMAN_QUEUE_*` and `~/.human-queue/` — retained for compatibility |
 
-If the answer is usually “no”, this project should stay small.
-
-> **Responder identity boundary:** `route.actors` is enforced, but Human Queue currently trusts the identity asserted by its authenticated channel or Gateway boundary. Slack/Telegram connector identities are derived from their authenticated interaction payloads; Human Queue does not yet provide an independent per-human IAM layer.
+New examples prefer `HumanBoundary`; existing integrations do not need to rename anything.
 
 ## Run your own Human Gateway
 
-Human Queue is **self-host first**. Hosted infrastructure is optional.
+human:// is **self-host first**. Hosted infrastructure is optional.
 
 macOS / Linux / WSL:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hippoley/human-queue/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hippoley/HumanQueue/main/scripts/install.sh | bash
 humanq gateway run
 ```
 
@@ -147,7 +175,7 @@ humanq channel list
 Prefer containers?
 
 ```bash
-git clone https://github.com/hippoley/human-queue.git
+git clone https://github.com/hippoley/HumanQueue.git
 cd human-queue
 bash scripts/docker/setup.sh
 ```
@@ -164,7 +192,7 @@ The unit of work is deliberately smaller than a workflow:
 ## Try the seeded demo in 60 seconds
 
 ```bash
-git clone https://github.com/hippoley/human-queue.git
+git clone https://github.com/hippoley/HumanQueue.git
 cd human-queue
 pip install -e .
 humanq demo
@@ -220,9 +248,9 @@ Everything underneath — source-specific adapters, priority, batching, quorum, 
 ### Python
 
 ```python
-from humanqueue import HumanQueue
+from humanqueue import HumanBoundary
 
-human = HumanQueue()
+human = HumanBoundary()
 
 decision = human.ask(
     "human://approve",
@@ -240,7 +268,7 @@ if decision["action"] == "approve":
     deploy()
 ```
 
-For long-running systems, do not block a worker: provide a `resume_url` and Human Queue returns the decision through a signed callback.
+For long-running systems, do not block a worker: provide a `resume_url` and human:// returns the decision through a signed callback.
 
 A successful HTTP callback proves transport delivery only. A target can optionally confirm semantic resume by returning:
 
@@ -248,14 +276,14 @@ A successful HTTP callback proves transport delivery only. A target can optional
 {"request_id":"attn_...","resumed":true}
 ```
 
-Human Queue records that as `resume_confirmed`. A plain 2xx is retained as `resume_delivered_unconfirmed`; a transport failure is `resume_undeliverable`.
+human:// records that as `resume_confirmed`. A plain 2xx is retained as `resume_delivered_unconfirmed`; a transport failure is `resume_undeliverable`.
 
 ### JavaScript
 
 ```js
-import { HumanQueue } from './sdk/js/humanqueue.mjs';
+import { HumanBoundary } from './sdk/js/humanqueue.mjs';
 
-const human = new HumanQueue();
+const human = new HumanBoundary();
 const request = await human.ask('human://review', {
   source: 'release-bot',
   ref: 'release-2841',
@@ -312,7 +340,7 @@ human decides from an authorized surface
 native runtime resolves the exact request
 ```
 
-That is why Human Queue keeps **source/account/session identity**, bounded decision context, authorization, supersession and native resume separate from presentation.
+That is why human:// keeps **source/account/session identity**, bounded decision context, authorization, supersession and native resume separate from presentation.
 
 It can still rank, batch or defer requests, but **attention ordering never becomes implicit permission**. A high-risk item is made more visible, not more autonomous.
 
@@ -373,7 +401,7 @@ humanq sessions
 
 A connector stores a bounded `ContextCapsule` in the Gateway. Full editor transcripts are not copied into the queue by default; the transcript path is retained only as an on-demand locator.
 
-If a native editor connector cannot reach Human Queue or times out, it falls back to the editor's native approval path rather than silently allowing the action.
+If a native editor connector cannot reach human:// or times out, it falls back to the editor's native approval path rather than silently allowing the action.
 
 See [Connector runtime](docs/connectors.md).
 
@@ -389,7 +417,7 @@ humanq channel add telegram phone
 humanq channel run phone
 ```
 
-New Human Queue requests are sent to that chat with inline decision buttons. The worker accepts callbacks only from the configured chat, resolves the canonical Gateway request, clears the buttons after a successful decision, and the native editor connector resumes the original waiting workflow.
+New human:// requests are sent to that chat with inline decision buttons. The worker accepts callbacks only from the configured chat, resolves the canonical Gateway request, clears the buttons after a successful decision, and the native editor connector resumes the original waiting workflow.
 
 The Telegram bot token stays in the local `~/.human-queue/config.json` file; `humanq channel list --json` redacts it.
 
@@ -401,13 +429,13 @@ The Telegram bot token stays in the local `~/.human-queue/config.json` file; `hu
 - OpenAI-style tool interruption payloads
 - GitHub deployment approval payloads
 
-These adapters normalize external events into Human Queue. They are not the same as a native bidirectional editor integration.
+These adapters normalize external events into human://. They are not the same as a native bidirectional editor integration.
 
 ---
 
 ## Agent Presence Hub
 
-Human Queue now separates **continuous fleet presence** from **human intervention**.
+human:// now separates **continuous fleet presence** from **human intervention**.
 
 ```text
 OpenClaw work account ─┐
@@ -415,7 +443,7 @@ OpenClaw personal ─────┤
 Muse work ─────────────┤
 Codex / Claude / Cursor├──► Presence Hub ───► normalized session state
 OpenCode ──────────────┘            │
-                                    ├──► Human Queue when a person is needed
+                                    ├──► human:// when a person is needed
                                     └──► MCP status tools for conversational queries
 ```
 
@@ -456,7 +484,7 @@ A queue is only phase one.
 
 Every repeated interruption is evidence that the boundary may belong in a policy instead.
 
-Human Queue therefore keeps explicit `policy_key` histories and can replay a candidate policy in shadow mode:
+human:// therefore keeps explicit `policy_key` histories and can replay a candidate policy in shadow mode:
 
 ```text
 refund-under-20-known-customer

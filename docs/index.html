@@ -156,7 +156,7 @@ h2{font-size:44px;line-height:1.01;letter-spacing:-.055em;margin:12px 0}
   <section class="pipeline">
     <div class="pipelineTop"><h3>Live resume path</h3><div class="label" id="pipelineState">waiting for human</div></div>
     <div class="flow" id="flow"></div>
-    <div class="eventline" id="eventline">Make one decision above. HumanQueue returns it to the exact machine state that asked.</div>
+    <div class="eventline" id="eventline">Make one decision above. human:// returns it to the exact machine state that asked.</div>
   </section>
 
   <section class="inject" id="injectBox">
@@ -226,7 +226,7 @@ X-Human-Channel-Signature: sha256=…</div>
     <article class="card">
       <div class="eyebrow">real · outbound-only channel</div>
       <h3>Telegram long-poll</h3>
-      <div class="small">Human Queue pushes bounded approval cards to your Telegram chat. A local worker receives callback_query events and resolves localhost — no public inbound Gateway port required.</div>
+      <div class="small">human:// pushes bounded approval cards to your Telegram chat. A local worker receives callback_query events and resolves localhost — no public inbound Gateway port required.</div>
       <div class="code">humanq channel add telegram phone \
   --bot-token "$BOT_TOKEN" \
   --chat-id "$CHAT_ID"
@@ -254,7 +254,7 @@ humanq channel run phone</div>
       <div class="eyebrow">01 · install</div>
       <h3>Your machine becomes the Human Gateway</h3>
       <div class="small">No hosted account required. State and audit history can remain on your hardware.</div>
-      <div class="code">curl -fsSL https://raw.githubusercontent.com/hippoley/human-queue/main/scripts/install.sh | bash
+      <div class="code">curl -fsSL https://raw.githubusercontent.com/hippoley/human:///main/scripts/install.sh | bash
 
 humanq gateway run</div>
     </article>
@@ -407,7 +407,7 @@ humanq gateway status</div>
       "human://auth":{risk:"low",actions:["Mark reconnected","Defer"],sec:18}
     }[uri];
     const item={id:"inj-"+Date.now(),uri,source,ref:"live-"+String(Date.now()).slice(-5),title,summary:"A live workflow reached a boundary that cannot continue without a person.",why:"Injected locally to demonstrate the complete request → decision → resume loop.",risk:cfg.risk,unblocks:1,sec:cfg.sec,priority:99,actions:cfg.actions,input:cfg.input,context:"demo=true · local_state=true"};
-    items.unshift(item); selected=item; log("Injected from "+source,title,"queued"); toast(source+" entered HumanQueue"); render();
+    items.unshift(item); selected=item; log("Injected from "+source,title,"queued"); toast(source+" entered human://"); render();
   }
   function renderBatches(){
     const el=$("batches"); const waiting=batches.filter((b)=>b.status==="waiting");
@@ -436,7 +436,7 @@ humanq gateway status</div>
     if(kind==="channel"||kind==="telegram"){log("Channel projection",kind==="telegram"?"Telegram callback returned to local gateway.":"Signed projection preserved canonical request identity.","projected"); toast("Channel projection simulated"); showView("timeline"); renderTimeline(); return;}
     const p=presets[kind]; if(!p)return;
     const item={...p,id:"connector-"+Date.now(),ref:"native-"+String(Date.now()).slice(-5),summary:"A native connector reached a real human boundary.",why:"The native runtime is paused until this exact request is resolved.",unblocks:1,priority:99,context:"provider="+kind+" · native_resume=true"};
-    items.unshift(item); selected=item; log(item.source+" native event",item.title,"waiting"); showView("now"); render(); toast(item.source+" → HumanQueue");
+    items.unshift(item); selected=item; log(item.source+" native event",item.title,"waiting"); showView("now"); render(); toast(item.source+" → human://");
   }
 
   document.querySelectorAll(".tab").forEach((tab)=>tab.addEventListener("click",()=>showView(tab.dataset.view)));

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="https://github.com/hippoley/human-queue.git"
+REPO="https://github.com/hippoley/HumanQueue.git"
 HOME_DIR="${HUMAN_QUEUE_HOME:-$HOME/.human-queue}"
 VENV="$HOME_DIR/runtime"
 BIN_DIR="${HOME}/.local/bin"

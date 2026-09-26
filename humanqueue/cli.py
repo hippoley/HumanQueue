@@ -145,7 +145,7 @@ def connect(args: argparse.Namespace) -> None:
         print(" events     PermissionRequest + session/prompt/stop observers")
         print(" roundtrip  native allow/deny")
         print("\nCodex requires review of new non-managed hooks.")
-        print("Open Codex and run /hooks once to trust the Human Queue hook definition.")
+        print("Open Codex and run /hooks once to trust the human:// hook definition.")
         return
     if args.provider == "cursor":
         from .connectors.cursor import install_cursor_hooks
@@ -482,7 +482,7 @@ def main() -> None:
     p_status = gs.add_parser("status", help="check gateway health")
     p_status.set_defaults(func=gateway_status)
 
-    p_dashboard = sub.add_parser("dashboard", help="open the local Human Queue UI")
+    p_dashboard = sub.add_parser("dashboard", help="open the local human:// UI")
     p_dashboard.add_argument("--no-open", action="store_true")
     p_dashboard.set_defaults(func=dashboard)
 
@@ -520,7 +520,7 @@ def main() -> None:
     p_presence.add_argument("--json", action="store_true")
     p_presence.set_defaults(func=presence_list)
 
-    p_channel = sub.add_parser("channel", help="project Human Queue into a third-party channel")
+    p_channel = sub.add_parser("channel", help="project human:// into a third-party channel")
     chs = p_channel.add_subparsers(dest="channel_command")
     p_channel_add = chs.add_parser("add", help="add a third-party channel")
     p_channel_add.add_argument("type", choices=["webhook", "telegram", "slack"])

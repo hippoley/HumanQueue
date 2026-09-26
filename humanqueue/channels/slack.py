@@ -37,7 +37,7 @@ def _resolve_local(request_id: str, action: str, actor: str) -> tuple[bool, str]
     except Exception as exc:
         return False, str(exc)
     if response.status_code == 200:
-        return True, "Resolved in Human Queue"
+        return True, "Resolved in human://"
     if response.status_code == 409:
         return False, "Already resolved"
     return False, f"Gateway returned HTTP {response.status_code}"
@@ -96,7 +96,7 @@ def publish_one(name: str, cfg: dict[str, Any], request: AttentionRequest) -> di
     try:
         result = WebClient(token=bot_token).chat_postMessage(
             channel=channel_id,
-            text=f"Human Queue: {request.title}",
+            text=f"human://: {request.title}",
             blocks=render_blocks(request),
         )
         return {"channel": name, "delivered": bool(result.get("ok", True)), "ts": result.get("ts")}

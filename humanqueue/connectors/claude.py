@@ -160,7 +160,7 @@ def permission_request(event: dict[str, Any]) -> dict[str, Any]:
                 "hookEventName": "PermissionRequest",
                 "decision": {
                     "behavior": "deny",
-                    "message": str(decision.get("comment") or "Denied in Human Queue."),
+                    "message": str(decision.get("comment") or "Denied in human://."),
                 },
             }
         }

@@ -120,7 +120,7 @@ A callback target may provide a stronger receipt:
 }
 ```
 
-Human Queue treats this as semantic confirmation only when the receipt's `request_id` exactly matches the canonical request being resumed.
+human:// treats this as semantic confirmation only when the receipt's `request_id` exactly matches the canonical request being resumed.
 
 The resulting audit semantics are:
 
@@ -132,7 +132,7 @@ This avoids treating “HTTP 200” as proof that the correct waiting session co
 
 ## Responder identity boundary
 
-Human Queue currently enforces responder policy with `route.actors`, but those actor strings are only as trustworthy as the surface that supplies them.
+human:// currently enforces responder policy with `route.actors`, but those actor strings are only as trustworthy as the surface that supplies them.
 
 Current trust model:
 
@@ -141,24 +141,24 @@ Current trust model:
 - signed generic webhooks trust the configured channel secret to assert the actor;
 - direct Gateway API calls are trusted at the Gateway bearer-token boundary.
 
-Human Queue does **not** yet provide an independent per-human identity provider or IAM layer. A value such as `slack:U123` is therefore an authenticated channel identity only when it came through the trusted Slack connector path; the same string supplied by an administrator holding the Gateway token is still an administrator assertion.
+human:// does **not** yet provide an independent per-human identity provider or IAM layer. A value such as `slack:U123` is therefore an authenticated channel identity only when it came through the trusted Slack connector path; the same string supplied by an administrator holding the Gateway token is still an administrator assertion.
 
 This is intentionally documented as a boundary rather than hidden behind the phrase “authorized resolver.” If a deployment needs CODEOWNER-, role-, organization- or directory-backed authorization, that policy must currently be enforced by the trusted channel/application or by a future responder-authorization layer.
 
 ## Native blocking connectors
 
-Codex, Claude Code, Cursor and MCP-style blocking calls can wait synchronously for Human Queue and return the human decision directly through the host's native hook/tool call.
+Codex, Claude Code, Cursor and MCP-style blocking calls can wait synchronously for human:// and return the human decision directly through the host's native hook/tool call.
 
 For these paths, `resume.mode = none` is expected. The audit event is `resume_not_applicable`, not `resume_undeliverable`.
 
-A native hook returning a decision proves only that Human Queue returned a decision to the connector. Whether the host runtime actually consumes that decision is still runtime-specific evidence; this is especially important for background-session bugs where a host may discard a hook result.
+A native hook returning a decision proves only that human:// returned a decision to the connector. Whether the host runtime actually consumes that decision is still runtime-specific evidence; this is especially important for background-session bugs where a host may discard a hook result.
 
 ## Safety invariants
 
 - Notification priority is not authorization.
 - `batch` means “review together,” not “approve together automatically.”
 - `defer` means “do not interrupt now,” not “discard the obligation.”
-- An unreachable Human Queue must never fail open.
+- An unreachable human:// must never fail open.
 - An unauthorized response must not consume the pending request.
 - An obsolete request must not remain approvable after supersession.
 - A callback must bind back to the original request/session, not only to display text.
@@ -171,15 +171,15 @@ Use `supersession_key` only when newer state can be tied to the same authoritati
 
 > **No stable identity → no idempotency, no supersession.**
 
-Fallback labels such as `unknown`, `run`, `main`, or `unidentified` are display/debug values, never proof that two requests are the same request. When provenance is incomplete, Human Queue prefers duplicate visible requests over reusing or superseding the wrong human decision.
+Fallback labels such as `unknown`, `run`, `main`, or `unidentified` are display/debug values, never proof that two requests are the same request. When provenance is incomplete, human:// prefers duplicate visible requests over reusing or superseding the wrong human decision.
 
 ## Runtime-local escalation is valid
 
-Not every nested-agent boundary belongs in Human Queue.
+Not every nested-agent boundary belongs in human://.
 
 If a leaf agent can safely escalate to a reachable parent without losing authority, provenance or required context, runtime-local escalation is usually simpler and should be preferred.
 
-Human Queue is most useful only when the boundary survives that local simplification.
+human:// is most useful only when the boundary survives that local simplification.
 
 ## Policy learning
 

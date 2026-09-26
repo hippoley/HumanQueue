@@ -1,13 +1,13 @@
 # Self-hosting human://
 
-Human Queue is designed to run as a **personal or team Human Gateway**. Your queue, audit trail, gateway token and SQLite state can stay on your own machine or server.
+human:// is designed to run as a **personal or team Human Gateway**. Your queue, audit trail, gateway token and SQLite state can stay on your own machine or server.
 
 ## Fastest local install
 
 macOS / Linux / WSL:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hippoley/human-queue/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hippoley/HumanQueue/main/scripts/install.sh | bash
 humanq gateway run
 ```
 
@@ -71,9 +71,9 @@ The request appears in your dashboard. When you decide, the machine can either p
 ## Python
 
 ```python
-from humanqueue import HumanQueue
+from humanqueue import HumanBoundary
 
-human = HumanQueue(
+human = HumanBoundary(
     base_url="http://127.0.0.1:7482",
     token="hq_xxx",
 )
@@ -91,7 +91,7 @@ When the SDK runs on the same user account as the gateway, it can read the local
 
 ## Remote exposure
 
-The default bind is loopback on purpose. If you expose Human Queue beyond the host:
+The default bind is loopback on purpose. If you expose human:// beyond the host:
 
 1. keep gateway-token authentication enabled;
 2. terminate TLS in front of the gateway;
@@ -129,4 +129,4 @@ your agents / CI / MCP / n8n
        resume source
 ```
 
-Hosted Human Queue can exist later, but it is not required by the protocol or runtime.
+Hosted human:// can exist later, but it is not required by the protocol or runtime.
