@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from .config import gateway_token, gateway_url
+
 
 class HumanQueueError(RuntimeError):
     pass
@@ -102,6 +104,11 @@ class HumanQueue:
             if timeout is not None and time.monotonic() - started >= timeout:
                 raise TimeoutError(f"timed out waiting for {request_id}")
             time.sleep(poll_interval)
+
+    @staticmethod
+    def _headers() -> dict[str, str]:
+        token = gateway_token()
+        return {"Authorization": f"Bearer {token}"} if token else {}
 
     @staticmethod
     def _raise(response: httpx.Response) -> None:
