@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — native host verification
+
+- Added `humanq verify codex` to distinguish binary/Gateway/hook readiness from manual hook trust and real-host consumption.
+- Added packaged Codex PermissionRequest hook E2E for both allow and deny using real stdin/stdout subprocesses, Gateway auth, canonical request identity and blocking human resolution.
+- Kept the Codex real-host claim explicitly pending until the Codex binary loads/trusts the hook and the original native tool call is observed continuing or denying.
+
+
 ## 0.7.0 — human-boundary integrity
 
 - Promoted `human://` from protocol syntax to the public project brand; the queue is now explicitly one presentation layer.
