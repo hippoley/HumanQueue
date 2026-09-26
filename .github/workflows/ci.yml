@@ -73,6 +73,10 @@ jobs:
           /tmp/humanq-e2e-venv/bin/python -m pip install dist/human_queue-*.whl
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/first_run_e2e.py"
+      - name: Packaged Codex permission-hook E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/codex_hook_e2e.py"
       - name: Verify packaged runtime assets
         run: |
           python - <<'PY'
