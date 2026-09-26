@@ -17,6 +17,27 @@ jobs:
       - run: humanq connect --help
       - run: humanq mcp --help
       - run: humanq channel --help
+      - name: Verify README visual assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          readme = Path("README.md").read_text(encoding="utf-8")
+          assets = [
+              "docs/assets/human-boundary-hero.svg",
+              "docs/assets/boundary-card.svg",
+              "docs/assets/exact-resume.svg",
+          ]
+          for asset in assets:
+              path = Path(asset)
+              assert path.exists(), f"missing README asset: {asset}"
+              assert asset in readme, f"README no longer references {asset}"
+              ET.parse(path)
+
+          assert "cd human-queue" not in readme, "README contains stale clone directory"
+          print("README visual assets verified")
+          PY
       - name: Build wheel
         run: python -m pip wheel . --no-deps -w dist
       - name: Verify packaged runtime assets
