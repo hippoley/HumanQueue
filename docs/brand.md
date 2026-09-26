@@ -89,10 +89,10 @@ The README should read like a product surface, not an accumulated manual.
 Illustrations should explain a real contract:
 
 1. **hero topology** — many autonomous sources converge on one addressable human boundary;
-2. **decision card** — the human sees why the machine stopped, the authoritative source identity, and explicit actions;
+2. **product surface** — a faithful visual derived from the current web UI, showing the actual interaction hierarchy rather than an invented mockup;
 3. **exact-resume lifecycle** — delivery is not the end; the return path is part of the product.
 
-Avoid decorative AI imagery, robot stock art, generic gradient clouds, and screenshots that cannot be reproduced from the actual product.
+Avoid decorative AI imagery, robot stock art, generic gradient clouds, and screenshots that cannot be reproduced from the actual product. Product-surface visuals should be clickable when a live demo exists.
 
 ### Reading rhythm
 
