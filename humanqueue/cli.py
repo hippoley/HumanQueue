@@ -178,6 +178,46 @@ def connect(args: argparse.Namespace) -> None:
     raise SystemExit(f"unsupported connector: {args.provider}")
 
 
+def verify(args: argparse.Namespace) -> None:
+    if args.provider != "codex":
+        raise SystemExit(f"unsupported verification provider: {args.provider}")
+
+    from .connectors.codex import codex_readiness
+
+    status = codex_readiness()
+    if args.json:
+        print(json.dumps(status, indent=2, ensure_ascii=False))
+        return
+
+    print("human:// Codex verification")
+    print(f" binary       {'yes' if status['codex_detected'] else 'missing'}")
+    if status.get("codex_version"):
+        print(f" version      {status['codex_version']}")
+    print(f" gateway      {'online' if status['gateway_online'] else 'offline'}  {status['gateway_url']}")
+    print(f" hook file    {'present' if status['hooks_file_present'] else 'missing'}  {status['hooks_path']}")
+    print(f" permission   {'installed' if status['permission_hook_present'] else 'missing'}")
+    print(
+        " observers    "
+        + (", ".join(status["observer_events_present"]) if status["observer_events_present"] else "missing")
+    )
+    print(f" runtime      {'matches' if status['hook_command_matches_current_runtime'] else 'mismatch/unknown'}")
+    print(f" hook trust   {status['trust_status']}")
+    print(" host E2E     NOT YET PROVEN")
+
+    if status["problems"]:
+        print("\nProblems:")
+        for problem in status["problems"]:
+            print(" - " + problem)
+
+    if status["ready_for_real_host_probe"]:
+        print("\nReady for the final native proof:")
+        print("  1. Open Codex and run /hooks; trust the human:// hook if it is new or changed.")
+        print("  2. Trigger one action that produces a native PermissionRequest.")
+        print("  3. Resolve that boundary in human://.")
+        print("  4. Confirm the exact Codex tool call continues or is denied.")
+    else:
+        print("\nNot ready for a real-host proof yet.")
+
 def disconnect(args: argparse.Namespace) -> None:
     if args.provider == "codex":
         from .connectors.codex import uninstall_codex_hooks
@@ -489,6 +529,11 @@ def main() -> None:
     p_connect = sub.add_parser("connect", help="install an editor/agent connector")
     p_connect.add_argument("provider", choices=["codex", "cursor", "claude", "opencode"])
     p_connect.set_defaults(func=connect)
+
+    p_verify = sub.add_parser("verify", help="check readiness for a real native connector proof")
+    p_verify.add_argument("provider", choices=["codex"])
+    p_verify.add_argument("--json", action="store_true")
+    p_verify.set_defaults(func=verify)
 
     p_disconnect = sub.add_parser("disconnect", help="remove an editor/agent connector")
     p_disconnect.add_argument("provider", choices=["codex", "cursor", "claude", "opencode"])

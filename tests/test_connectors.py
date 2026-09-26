@@ -641,3 +641,59 @@ def test_native_connectors_only_dedupe_with_stable_identity(monkeypatch):
     assert captured["claude"][1]["idempotency_key"].startswith("claude:")
     assert captured["claude"][1]["supersession_key"] == "claude:claude_1:prompt_1:Bash"
     assert captured["cursor"][1]["idempotency_key"].startswith("cursor:")
+
+
+def test_codex_readiness_distinguishes_local_readiness_from_host_e2e(tmp_path: Path, monkeypatch):
+    from humanqueue.connectors import codex as codex_module
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(codex_module.shutil, "which", lambda name: "/usr/local/bin/codex")
+
+    class Completed:
+        returncode = 0
+        stdout = "codex-cli 0.test"
+        stderr = ""
+
+    monkeypatch.setattr(codex_module.subprocess, "run", lambda *a, **k: Completed())
+
+    class Health:
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"ok": True, "version": "0.7.0"}
+
+    monkeypatch.setattr(codex_module.httpx, "get", lambda *a, **k: Health())
+
+    installed = codex_module.install_codex_hooks()
+    assert installed["requires_trust_review"] is True
+
+    status = codex_module.codex_readiness()
+    assert status["codex_detected"] is True
+    assert status["gateway_online"] is True
+    assert status["permission_hook_present"] is True
+    assert status["hook_command_matches_current_runtime"] is True
+    assert sorted(status["observer_events_present"]) == sorted(
+        ["SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"]
+    )
+    assert status["trust_status"] == "manual_review_required_or_unknown"
+    assert status["ready_for_real_host_probe"] is True
+    assert status["real_host_e2e_verified"] is False
+
+
+def test_codex_readiness_never_calls_missing_binary_a_real_host_proof(tmp_path: Path, monkeypatch):
+    from humanqueue.connectors import codex as codex_module
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(codex_module.shutil, "which", lambda name: None)
+
+    class Offline:
+        def raise_for_status(self):
+            raise RuntimeError("offline")
+
+    monkeypatch.setattr(codex_module.httpx, "get", lambda *a, **k: Offline())
+
+    status = codex_module.codex_readiness()
+    assert status["codex_detected"] is False
+    assert status["gateway_online"] is False
+    assert status["ready_for_real_host_probe"] is False
+    assert status["real_host_e2e_verified"] is False
