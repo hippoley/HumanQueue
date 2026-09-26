@@ -655,6 +655,21 @@ def test_codex_readiness_distinguishes_local_readiness_from_host_e2e(tmp_path: P
         stderr = ""
 
     monkeypatch.setattr(codex_module.subprocess, "run", lambda *a, **k: Completed())
+    monkeypatch.setattr(
+        codex_module,
+        "_codex_native_hook_inventory",
+        lambda *a, **k: {
+            "discovered": True,
+            "permission_hook": {
+                "key": "user:permissionRequest:0:0",
+                "currentHash": "sha256:test",
+                "timeoutSec": 600,
+                "statusMessage": "Waiting for human://",
+                "trustStatus": "trusted",
+            },
+            "errors": [],
+        },
+    )
 
     class Health:
         def raise_for_status(self):
@@ -675,7 +690,9 @@ def test_codex_readiness_distinguishes_local_readiness_from_host_e2e(tmp_path: P
     assert sorted(status["observer_events_present"]) == sorted(
         ["SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"]
     )
-    assert status["trust_status"] == "manual_review_required_or_unknown"
+    assert status["native_hook_discovered"] is True
+    assert status["trust_status"] == "trusted"
+    assert status["native_current_hash"] == "sha256:test"
     assert status["ready_for_real_host_probe"] is True
     assert status["real_host_e2e_verified"] is False
 
