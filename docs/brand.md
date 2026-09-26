@@ -72,3 +72,52 @@ The brand is only credible if the implementation preserves these invariants:
 6. distinguish delivery from semantic resume confirmation.
 
 If a runtime-local feature solves the boundary completely, `human://` should get out of the way.
+
+
+## README visual grammar
+
+The README should read like a product surface, not an accumulated manual.
+
+### Visual roles
+
+- warm off-white / near-black backgrounds: infrastructure, not SaaS gloss;
+- acid-lime: the active `human://` boundary or a successful exact return;
+- signal orange: a machine is blocked and needs human contribution;
+- monospace labels: protocol identity, session identity, receipts, and machine state;
+- sans-serif copy: human explanation and decision context.
+
+Illustrations should explain a real contract:
+
+1. **hero topology** — many autonomous sources converge on one addressable human boundary;
+2. **decision card** — the human sees why the machine stopped, the authoritative source identity, and explicit actions;
+3. **exact-resume lifecycle** — delivery is not the end; the return path is part of the product.
+
+Avoid decorative AI imagery, robot stock art, generic gradient clouds, and screenshots that cannot be reproduced from the actual product.
+
+### Reading rhythm
+
+A new visitor should move through the README in this order:
+
+```text
+recognize the problem
+        ↓
+see the boundary visually
+        ↓
+understand the human interaction
+        ↓
+run the loop in 60 seconds
+        ↓
+learn the primitive
+        ↓
+connect a real runtime
+        ↓
+inspect evidence / safety / deeper internals
+```
+
+Use deliberate vertical whitespace between these transitions. Secondary implementation detail belongs in `<details>` blocks or dedicated docs rather than interrupting the first-pass narrative.
+
+The first screen should always answer:
+
+- What is `human://`?
+- Why is it different from a native approval prompt?
+- What can I click or run right now?
