@@ -149,7 +149,7 @@ def permission_request(event: dict[str, Any]) -> dict[str, Any]:
             }
         }
     if action in {"reject", "deny", "decline", "cancel"}:
-        message = decision.get("comment") or "Denied in Human Queue."
+        message = decision.get("comment") or "Denied in human://."
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PermissionRequest",
@@ -225,7 +225,7 @@ def install_codex_hooks() -> dict[str, Any]:
             "type": "command",
             "command": _humanq_command("codex-permission"),
             "timeout": 600,
-            "statusMessage": "Waiting for Human Queue",
+            "statusMessage": "Waiting for human://",
         }],
     })
 
@@ -237,7 +237,7 @@ def install_codex_hooks() -> dict[str, Any]:
     for event_name in ("SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
         hooks[event_name].append({"hooks": [dict(observer)]})
 
-    config["description"] = config.get("description") or "Codex hooks including human:// Human Queue connector."
+    config["description"] = config.get("description") or "Codex hooks including human:// human:// connector."
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     return {
         "provider": "codex",
