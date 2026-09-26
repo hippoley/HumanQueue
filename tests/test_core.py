@@ -464,3 +464,16 @@ def test_batch_authorization_fails_before_any_item_is_resolved(tmp_path: Path):
 def test_human_boundary_is_public_alias():
     import humanqueue
     assert humanqueue.HumanBoundary is humanqueue.HumanQueue
+
+
+def test_python_sdk_default_constructor_uses_gateway_config(monkeypatch):
+    import humanqueue.client as client_module
+    from humanqueue import HumanBoundary
+
+    monkeypatch.setattr(client_module, "gateway_url", lambda: "http://127.0.0.1:9999")
+    monkeypatch.setattr(client_module, "gateway_token", lambda: "hq_test_client")
+
+    human = HumanBoundary()
+
+    assert human.base_url == "http://127.0.0.1:9999"
+    assert human._headers() == {"Authorization": "Bearer hq_test_client"}
