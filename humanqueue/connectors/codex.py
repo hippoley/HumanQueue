@@ -3,10 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -249,6 +251,106 @@ def install_codex_hooks() -> dict[str, Any]:
     }
 
 
+def _codex_native_hook_inventory(codex_path: str, cwd: str | None = None) -> dict[str, Any]:
+    """Ask the real Codex app-server which human:// hooks it discovered."""
+
+    target_cwd = str(Path(cwd or os.getcwd()).resolve())
+    proc = subprocess.Popen(
+        [codex_path, "app-server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    messages: queue.Queue[dict[str, Any]] = queue.Queue()
+
+    def _read_stdout() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                messages.put(json.loads(line))
+            except Exception:
+                continue
+
+    thread = threading.Thread(target=_read_stdout, daemon=True)
+    thread.start()
+
+    def _send(payload: dict[str, Any]) -> None:
+        assert proc.stdin is not None
+        proc.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        proc.stdin.flush()
+
+    def _read_id(request_id: int, timeout: float = 4.0) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+        deferred: list[dict[str, Any]] = []
+        try:
+            while time.monotonic() < deadline:
+                try:
+                    message = messages.get(timeout=max(0.05, deadline - time.monotonic()))
+                except queue.Empty:
+                    break
+                if message.get("id") == request_id:
+                    for item in deferred:
+                        messages.put(item)
+                    return message
+                deferred.append(message)
+        finally:
+            for item in deferred:
+                messages.put(item)
+        raise TimeoutError(f"timed out waiting for Codex app-server response id={request_id}")
+
+    try:
+        _send({
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "clientInfo": {"name": "humanq-verify", "version": "0.7.0"},
+                "capabilities": {"experimentalApi": True},
+            },
+        })
+        initialized = _read_id(1)
+        if initialized.get("error"):
+            raise RuntimeError(f"Codex initialize failed: {initialized['error']}")
+
+        _send({"method": "initialized"})
+        _send({"id": 2, "method": "hooks/list", "params": {"cwds": [target_cwd]}})
+        response = _read_id(2)
+        if response.get("error"):
+            raise RuntimeError(f"Codex hooks/list failed: {response['error']}")
+
+        rows = (response.get("result") or {}).get("data") or []
+        row = next((item for item in rows if item.get("cwd") == target_cwd), None)
+        hooks = (row or {}).get("hooks") or []
+        human_hooks = [
+            hook for hook in hooks
+            if "humanqueue connector hook" in str(hook.get("command") or "").replace("-m ", "")
+        ]
+        permission = next(
+            (hook for hook in human_hooks if hook.get("eventName") == "permissionRequest"),
+            None,
+        )
+        return {
+            "cwd": target_cwd,
+            "discovered": bool(human_hooks),
+            "permission_hook": permission,
+            "hooks": human_hooks,
+            "warnings": (row or {}).get("warnings") or [],
+            "errors": (row or {}).get("errors") or [],
+        }
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2)
+
+
 def codex_readiness() -> dict[str, Any]:
     """Report what is proven locally before claiming a real Codex host round-trip."""
 
@@ -267,6 +369,11 @@ def codex_readiness() -> dict[str, Any]:
         "observer_events_present": [],
         "hook_command_matches_current_runtime": False,
         "trust_status": "unknown",
+        "native_hook_discovered": False,
+        "native_hook_key": None,
+        "native_current_hash": None,
+        "native_timeout_sec": None,
+        "native_status_message": None,
         "real_host_e2e_verified": False,
         "ready_for_real_host_probe": False,
         "problems": [],
@@ -292,6 +399,22 @@ def codex_readiness() -> dict[str, Any]:
             result["problems"].append(f"cannot execute Codex: {exc}")
     else:
         result["problems"].append("codex binary is not on PATH")
+
+    if codex_path:
+        try:
+            native = _codex_native_hook_inventory(codex_path)
+            permission = native.get("permission_hook") or {}
+            result["native_hook_discovered"] = bool(native.get("discovered"))
+            if permission:
+                result["native_hook_key"] = permission.get("key")
+                result["native_current_hash"] = permission.get("currentHash")
+                result["native_timeout_sec"] = permission.get("timeoutSec")
+                result["native_status_message"] = permission.get("statusMessage")
+                result["trust_status"] = permission.get("trustStatus") or "unknown"
+            if native.get("errors"):
+                result["problems"].append("Codex hook discovery errors: " + json.dumps(native["errors"]))
+        except Exception as exc:
+            result["problems"].append(f"Codex app-server hook discovery failed: {exc}")
 
     try:
         response = httpx.get(gateway_url() + "/health", timeout=1.5)
@@ -349,11 +472,8 @@ def codex_readiness() -> dict[str, Any]:
                 "missing observer hooks: " + ", ".join(missing_observers)
             )
 
-        # Codex intentionally gates user hooks behind a trust review. The public
-        # installer API cannot safely infer that the exact current hash is trusted,
-        # so do not manufacture a green state here.
-        if result["permission_hook_present"]:
-            result["trust_status"] = "manual_review_required_or_unknown"
+        # Trust is authoritative only when Codex app-server itself reports it.
+        # Merely finding the hook in hooks.json never upgrades this field.
     else:
         result["problems"].append("~/.codex/hooks.json does not exist; run humanq connect codex")
 
@@ -363,6 +483,8 @@ def codex_readiness() -> dict[str, Any]:
         and result["permission_hook_present"]
         and result["hook_command_matches_current_runtime"]
         and len(result["observer_events_present"]) == 4
+        and result["native_hook_discovered"]
+        and result["trust_status"] in {"trusted", "managed"}
     )
     return result
 
