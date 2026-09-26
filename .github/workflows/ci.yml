@@ -66,6 +66,12 @@ jobs:
           PY
       - name: Build wheel
         run: python -m pip wheel . --no-deps -w dist
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: human-queue-wheel
+          path: dist/*.whl
+          if-no-files-found: error
       - name: Verify packaged runtime assets
         run: |
           python - <<'PY'
