@@ -1,6 +1,6 @@
 # Connector runtime
 
-Human Queue treats every editor and channel as an adapter around one source of truth: the local Human Gateway.
+human:// treats every editor and channel as an adapter around one source of truth: the local Human Gateway.
 
 > **Status:** Codex and Cursor native paths are implemented and exercised in the test suite. Claude Code and OpenCode connectors are implemented, but real-host end-to-end validation is still pending. Slack and Telegram channel adapters are implemented; Slack workspace E2E is still pending. OpenClaw and Muse live workers are not implemented yet.
 
@@ -35,7 +35,7 @@ humanq connect codex
 
 This installs user-level hooks in `~/.codex/hooks.json` for:
 
-- `PermissionRequest`: blocks on Human Queue and returns Codex-native allow/deny JSON.
+- `PermissionRequest`: blocks on human:// and returns Codex-native allow/deny JSON.
 - `SessionStart`: registers the session.
 - `UserPromptSubmit`: records the current turn and prompt.
 - `Stop`: records the latest assistant message.
@@ -63,7 +63,7 @@ humanq connector hook codex-permission
 POST /v1/human
       |
       v
-Human Queue decision
+human:// decision
       |
       v
 hook stdout:
@@ -73,7 +73,7 @@ hook stdout:
 Codex resumes the same tool call
 ```
 
-If the Gateway is unavailable or the Human Queue wait times out, the connector emits no decision so Codex can fall back to its normal native approval UI instead of silently authorizing anything.
+If the Gateway is unavailable or the human:// wait times out, the connector emits no decision so Codex can fall back to its normal native approval UI instead of silently authorizing anything.
 
 ## Cursor
 
@@ -91,7 +91,7 @@ Round-trip:
 Cursor beforeShellExecution
       |
       v
-Human Queue request
+human:// request
       |
       v
 approve / reject
@@ -104,7 +104,7 @@ Cursor hook stdout:
 same generation continues
 ```
 
-If Human Queue is unavailable or the wait expires, the connector returns `permission: ask`, handing control back to Cursor's own approval UI.
+If human:// is unavailable or the wait expires, the connector returns `permission: ask`, handing control back to Cursor's own approval UI.
 
 
 ## Claude Code
@@ -115,9 +115,9 @@ humanq connect claude
 
 The Claude Code connector installs native hooks for `PermissionRequest`, `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd`.
 
-At a normal foreground `PermissionRequest`, Human Queue can return Claude-native allow/deny output. If Human Queue is unavailable, it returns no structured decision so Claude Code keeps its native permission path.
+At a normal foreground `PermissionRequest`, human:// can return Claude-native allow/deny output. If human:// is unavailable, it returns no structured decision so Claude Code keeps its native permission path.
 
-**Important:** the connector is implemented, but real-host E2E remains pending. Public Claude Code reports also show that background `--bg` sessions can discard a hook decision and remain blocked. Human Queue therefore does not claim that “hook returned allow” proves the host resumed the background session.
+**Important:** the connector is implemented, but real-host E2E remains pending. Public Claude Code reports also show that background `--bg` sessions can discard a hook decision and remain blocked. human:// therefore does not claim that “hook returned allow” proves the host resumed the background session.
 
 ## OpenCode
 
@@ -125,9 +125,9 @@ At a normal foreground `PermissionRequest`, Human Queue can return Claude-native
 humanq connect opencode
 ```
 
-Human Queue installs the V2 plugin from `integrations/opencode/human-queue.ts`.
+human:// installs the V2 plugin from `integrations/opencode/human-queue.ts`.
 
-The plugin evaluates only permission events that are already `ask`; configured native `allow` / `deny` semantics remain upstream-owned. When Human Queue cannot produce a decision, the permission remains `ask` rather than failing open.
+The plugin evaluates only permission events that are already `ask`; configured native `allow` / `deny` semantics remain upstream-owned. When human:// cannot produce a decision, the permission remains `ask` rather than failing open.
 
 The plugin is implemented and packaged, but real-host E2E remains pending.
 
@@ -181,7 +181,7 @@ humanq channel add webhook ops https://channel.example/human
 humanq channel list
 ```
 
-Human Queue generates a separate `hqc_...` channel secret. The Gateway sends a bounded request card to the configured URL with:
+human:// generates a separate `hqc_...` channel secret. The Gateway sends a bounded request card to the configured URL with:
 
 ```text
 X-Human-Channel: ops
@@ -210,7 +210,7 @@ Example body:
 
 The callback verifies the channel HMAC, resolves the one Gateway request, and rejects stale/already-resolved requests.
 
-For webhook-backed workflows, Human Queue then attempts the configured resume callback. Delivery and semantic resume are distinct:
+For webhook-backed workflows, human:// then attempts the configured resume callback. Delivery and semantic resume are distinct:
 
 - HTTP 2xx means the callback transport accepted the request;
 - `{"request_id":"attn_...","resumed":true}` with the exact same request id confirms semantic resume;
@@ -240,7 +240,7 @@ A Telegram bot cannot use `getUpdates` while it has an outgoing webhook configur
 Each channel adapter must:
 
 1. render a bounded `ContextCapsule`;
-2. retain the Human Queue `request_id`;
+2. retain the human:// `request_id`;
 3. send human actions back to the Gateway;
 4. mark stale/superseded projections read-only;
 5. never directly drive the editor or agent.
@@ -254,6 +254,6 @@ This keeps all races, quorum, supersession, audit history and policy learning in
 
 Slack is implemented as a local Socket Mode worker, so no public inbound Gateway port is required.
 
-The worker renders bounded request context into Block Kit and resolves the canonical Gateway request when an authorized interaction arrives. Human Queue records the Slack user identity supplied by the authenticated Slack interaction path.
+The worker renders bounded request context into Block Kit and resolves the canonical Gateway request when an authorized interaction arrives. human:// records the Slack user identity supplied by the authenticated Slack interaction path.
 
 The channel implementation is present and tested at the adapter/security level, but real workspace end-to-end validation is still pending.
