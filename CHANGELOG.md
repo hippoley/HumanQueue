@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — human-boundary integrity
+## 0.7.0 — human-boundary integrity
 
 - Promoted `human://` from protocol syntax to the public project brand; the queue is now explicitly one presentation layer.
 - Added `HumanBoundary` as the preferred Python/JavaScript primitive while keeping `HumanQueue` backward compatible.
@@ -19,7 +19,10 @@
 - Disabled idempotency and supersession when native request/session identity is incomplete.
 - Reject blank Presence / connector provenance instead of persisting ambiguous control-plane identities.
 - Preflight batch authorization before mutation so an unauthorized later item cannot leave an apparently failed batch partially approved.
-- Test suite currently passes 51 tests.
+- Fixed the packaged Python SDK first-run path: `HumanBoundary()` now loads Gateway URL/token correctly and sends Bearer auth.
+- Added a clean-venv packaged-wheel E2E gate that proves onboard → Gateway → `HumanBoundary.ask(wait=True)` → exact request resolution → original caller continues.
+- Changed the README quickstart to a non-editable install so packaging failures cannot hide behind an editable source checkout.
+- Test suite currently passes 53 unit/integration tests plus the packaged first-run E2E.
 
 ## 0.6.0 — agent presence hub
 
