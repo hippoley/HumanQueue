@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Human Queue is developed evidence-first. Please report what actually happened before proposing a connector or feature.
+        human:// is developed evidence-first. Please report what actually happened before proposing a connector or feature.
   - type: input
     id: runtime
     attributes:
@@ -67,7 +67,7 @@ body:
   - type: textarea
     id: falsify
     attributes:
-      label: What local/runtime fix would make Human Queue unnecessary here?
+      label: What local/runtime fix would make human:// unnecessary here?
       description: If the answer is "none", explain why the boundary still survives after a native fix.
     validations:
       required: true
