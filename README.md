@@ -6,7 +6,7 @@
 
 **Autonomous work can run anywhere. Human judgment still needs an address — and a return path.**
 
-[**See it live ↗**](https://hippoley.github.io/PAJ-Eval/human-queue/) ·
+[**See it live ↗**](https://hippoley.github.io/PAJ-Eval/human/) ·
 [**60-second proof ↓**](#try-it-in-60-seconds) ·
 [**Why it exists ↓**](#why-this-exists-if-native-approval-already-works) ·
 [**Connect a runtime ↓**](#connect-a-real-runtime)
@@ -20,7 +20,7 @@ Self-host first · Python ≥3.10 · FastAPI · SQLite · Apache-2.0
 <br />
 
 <p align="center">
-  <a href="https://hippoley.github.io/PAJ-Eval/human-queue/">
+  <a href="https://hippoley.github.io/PAJ-Eval/human/">
     <img src="docs/assets/human-boundary-hero.svg" alt="Multiple autonomous agents converge on a human boundary, reach the right human, and resume the exact waiting execution." width="100%" />
   </a>
 </p>
@@ -55,7 +55,7 @@ The actual unit of work is smaller and stricter:
 
 The README should not make you imagine the UI. The seeded demo already has one.
 
-<a href="https://hippoley.github.io/PAJ-Eval/human-queue/">
+<a href="https://hippoley.github.io/PAJ-Eval/human/">
   <img src="docs/assets/demo-surface.svg" alt="The current human:// seeded demo surface with blocked-machine count, boundary queue, decision context and explicit approve/reject controls." width="100%" />
 </a>
 
@@ -67,7 +67,7 @@ A human should be able to answer four questions without reconstructing a termina
 
 > **The screen is not the proof. The return path is.**
 
-[Open the live seeded demo ↗](https://hippoley.github.io/PAJ-Eval/human-queue/)
+[Open the live seeded demo ↗](https://hippoley.github.io/PAJ-Eval/human/)
 
 <br />
 
@@ -525,7 +525,7 @@ A well-reproduced counterexample that **deletes something from the roadmap** is 
 
 `human://approve` · `review` · `clarify` · `auth` · `choose` · `edit` · `claim`
 
-[Live demo](https://hippoley.github.io/PAJ-Eval/human-queue/) ·
+[Live demo](https://hippoley.github.io/PAJ-Eval/human/) ·
 [Protocol](docs/protocol.md) ·
 [Evidence](CLAIMS.md) ·
 [Security](SECURITY.md)
