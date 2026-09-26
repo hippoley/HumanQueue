@@ -49,6 +49,9 @@ jobs:
           assert "hippoley/human:///" not in demo
           assert "https://github.com/hippoley/HumanQueue" in demo
           assert "Static demo · interactions stay in this browser" in demo
+          for scenario in ("codex", "cursor", "mcp", "channel", "telegram"):
+              assert f'?scenario={scenario}' in demo, f"missing shareable scenario: {scenario}"
+          assert 'new URLSearchParams(location.search).get("scenario")' in demo
           print("public demo source verified")
           PY
       - name: Build wheel
