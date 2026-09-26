@@ -111,4 +111,4 @@ class HumanQueue:
             detail = response.json()
         except Exception:
             detail = response.text
-        raise HumanQueueError(f"Human Queue returned HTTP {response.status_code}: {detail}")
+        raise HumanQueueError(f"human:// returned HTTP {response.status_code}: {detail}")
