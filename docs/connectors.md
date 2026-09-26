@@ -2,7 +2,7 @@
 
 human:// treats every editor and channel as an adapter around one source of truth: the local Human Gateway.
 
-> **Status:** Codex and Cursor native paths are implemented and exercised in the test suite. Claude Code and OpenCode connectors are implemented, but real-host end-to-end validation is still pending. Slack and Telegram channel adapters are implemented; Slack workspace E2E is still pending. OpenClaw and Muse live workers are not implemented yet.
+> **Status:** Codex now has a packaged hook-process E2E for native `PermissionRequest` stdin → human:// → allow/deny stdout, but Codex host loading/trust/consumption is still a separate pending proof. Cursor is implemented and tested. Claude Code and OpenCode connectors are implemented, but real-host end-to-end validation is still pending. Slack and Telegram channel adapters are implemented; Slack workspace E2E is still pending. OpenClaw and Muse live workers are not implemented yet.
 
 ```text
 Agent/editor native event
@@ -43,7 +43,15 @@ This installs user-level hooks in `~/.codex/hooks.json` for:
 
 Codex exposes `session_id`, `transcript_path`, `cwd`, and the current model to command hooks. Turn hooks also expose `turn_id`. The connector stores a bounded context capsule and transcript pointer; it does not require parsing the whole transcript to function.
 
-After installation, Codex requires you to review/trust the new non-managed hook definition once with `/hooks`.
+After installation, Codex requires you to review/trust the new non-managed hook definition once with `/hooks`. human:// deliberately does not infer that trust state from the hook file.
+
+Check everything that can be established **before** the final native-host proof:
+
+```bash
+humanq verify codex
+```
+
+The verifier reports the Codex binary/version, Gateway health, installed PermissionRequest + observer hooks, whether the hook command still points at the Python runtime that installed it, and the remaining trust/real-host gap. It never marks the native host E2E as proven by configuration alone.
 
 View observed sessions:
 
@@ -74,6 +82,8 @@ Codex resumes the same tool call
 ```
 
 If the Gateway is unavailable or the human:// wait times out, the connector emits no decision so Codex can fall back to its normal native approval UI instead of silently authorizing anything.
+
+CI additionally runs the **built wheel** as a real hook subprocess for both allow and deny: JSON is written to stdin, the hook blocks on a real local Gateway request, a separate actor resolves the canonical boundary, and stdout is parsed as Codex PermissionRequest output. This proves the packaged hook process, not the final Codex host consumption.
 
 ## Cursor
 
