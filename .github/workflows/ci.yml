@@ -37,6 +37,8 @@ jobs:
 
           assert "cd human-queue" not in readme, "README contains stale clone directory"
           assert 'href="https://hippoley.github.io/PAJ-Eval/human/"' in readme, "README lost clickable live-demo visual"
+          assert "implemented + adapter tested" in readme
+          assert "| **working** |" not in readme
           print("README visual assets verified")
           PY
       - name: Verify public demo source
@@ -52,6 +54,9 @@ jobs:
           for scenario in ("codex", "cursor", "mcp", "channel", "telegram"):
               assert f'?scenario={scenario}' in demo, f"missing shareable scenario: {scenario}"
           assert 'new URLSearchParams(location.search).get("scenario")' in demo
+          assert 'native_resume=simulated' in demo
+          assert 'native_resume=true' not in demo
+          assert 'reached a real human boundary' not in demo
           print("public demo source verified")
           PY
       - name: Build wheel
