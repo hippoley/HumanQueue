@@ -17,7 +17,7 @@ def _api(token: str, method: str) -> str:
 
 
 def _callback_data(request_id: str, action: str) -> str:
-    # Human Queue request IDs and normal action IDs keep this under Telegram's
+    # human:// request IDs and normal action IDs keep this under Telegram's
     # callback-data limit. Reject pathological connector-defined action IDs.
     data = f"hq|{request_id}|{action}"
     if len(data.encode("utf-8")) > 64:
@@ -133,7 +133,7 @@ def _resolve_local(request_id: str, action: str, actor: str) -> tuple[bool, str]
         return False, str(exc)
 
     if response.status_code == 200:
-        return True, "Resolved in Human Queue"
+        return True, "Resolved in human://"
     if response.status_code == 409:
         return False, "Already resolved"
     return False, f"Gateway returned HTTP {response.status_code}"
@@ -149,9 +149,9 @@ def handle_callback(name: str, cfg: dict[str, Any], query: dict[str, Any]) -> tu
     actual_chat = str(chat.get("id")) if chat.get("id") is not None else ""
 
     if not parsed:
-        result = (False, "Unknown Human Queue action")
+        result = (False, "Unknown human:// action")
     elif configured_chat and actual_chat != configured_chat:
-        result = (False, "This chat is not authorized for this Human Queue")
+        result = (False, "This chat is not authorized for this human://")
     else:
         rid, action = parsed
         actor_id = ((query.get("from") or {}).get("id"))
