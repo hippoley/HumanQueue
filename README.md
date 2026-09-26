@@ -77,12 +77,14 @@ A human should be able to answer four questions without reconstructing a termina
 
 ## Try it in 60 seconds
 
+The core local path is now CI-gated from the **built wheel**, not only from the source checkout: clean environment → onboard → Gateway → `HumanBoundary.ask(wait=True)` → exact request resolved → the original blocked Python caller continues.
+
 ### 1. Run the seeded demo
 
 ```bash
 git clone https://github.com/hippoley/HumanQueue.git
 cd HumanQueue
-pip install -e .
+python -m pip install .
 humanq demo
 ```
 
