@@ -199,6 +199,7 @@ The quickest useful test is not “can I render a queue?” It is “can one rea
 
 ```bash
 humanq connect codex
+humanq verify codex
 humanq connect cursor
 humanq connect claude
 humanq connect opencode
@@ -208,7 +209,7 @@ humanq sessions
 
 | Surface | Human → machine return | Current state |
 | --- | --- | --- |
-| [**Codex ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=codex) | native `PermissionRequest` allow/deny | implemented + tested |
+| [**Codex ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=codex) | native `PermissionRequest` allow/deny | packaged hook E2E · real-host pending |
 | [**Cursor ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=cursor) | native high-risk `beforeShellExecution` permission | implemented + tested |
 | [**MCP ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=mcp) | `human_ask` returns to the same tool call | verified in CI |
 | [**Signed webhook ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=channel) | canonical decision callback | implemented + tested |
