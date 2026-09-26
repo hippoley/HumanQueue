@@ -18,7 +18,7 @@ def _tool_definitions() -> list[dict[str, Any]]:
         {
             "name": "human_ask",
             "title": "Ask a human",
-            "description": "Pause this workflow and ask the user's Human Queue for approval, clarification, review, or a choice.",
+            "description": "Pause this workflow at a human:// boundary for approval, clarification, review, or a choice.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
