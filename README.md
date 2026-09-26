@@ -206,11 +206,11 @@ humanq sessions
 
 | Surface | Human → machine return | Current state |
 | --- | --- | --- |
-| [**Codex ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=codex) | native `PermissionRequest` allow/deny | **working** |
-| [**Cursor ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=cursor) | native high-risk `beforeShellExecution` permission | **working** |
-| [**MCP ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=mcp) | `human_ask` returns to the same tool call | **working** |
-| [**Signed webhook ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=channel) | canonical decision callback | **working** |
-| [**Telegram ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=telegram) | long-poll callback resolves the local boundary | **working** |
+| [**Codex ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=codex) | native `PermissionRequest` allow/deny | implemented + tested |
+| [**Cursor ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=cursor) | native high-risk `beforeShellExecution` permission | implemented + tested |
+| [**MCP ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=mcp) | `human_ask` returns to the same tool call | verified in CI |
+| [**Signed webhook ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=channel) | canonical decision callback | implemented + tested |
+| [**Telegram ↗**](https://hippoley.github.io/PAJ-Eval/human/?scenario=telegram) | long-poll callback resolves the local boundary | implemented + adapter tested |
 | **Slack Socket Mode** | interactive action resolves the boundary | implemented · workspace E2E pending |
 | **Claude Code** | native `PermissionRequest` return | implemented · real-host E2E pending |
 | **OpenCode V2** | permission evaluate hook | implemented · real-host E2E pending |
