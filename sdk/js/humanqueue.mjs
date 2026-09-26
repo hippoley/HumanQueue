@@ -40,3 +40,6 @@ export class HumanQueue {
     }
   }
 }
+
+// Preferred public primitive; HumanQueue remains backward compatible.
+export const HumanBoundary = HumanQueue;
