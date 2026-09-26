@@ -1,6 +1,6 @@
-from humanqueue import HumanQueue
+from humanqueue import HumanBoundary
 
-human = HumanQueue()
+human = HumanBoundary()
 decision = human.ask(
     "human://approve",
     source="my-agent", ref="run-42", title="Deploy to production?",
