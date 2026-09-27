@@ -17,6 +17,7 @@ jobs:
       - run: humanq connect --help
       - run: humanq verify --help
       - run: humanq verify codex --json
+      - run: humanq prove --help
       - run: humanq mcp --help
       - run: humanq channel --help
       - name: Verify README visual assets
