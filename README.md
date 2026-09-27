@@ -200,6 +200,7 @@ The quickest useful test is not “can I render a queue?” It is “can one rea
 ```bash
 humanq connect codex
 humanq verify codex
+humanq prove codex
 humanq connect cursor
 humanq connect claude
 humanq connect opencode
