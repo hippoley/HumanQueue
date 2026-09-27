@@ -688,7 +688,7 @@ def test_codex_readiness_distinguishes_local_readiness_from_host_e2e(tmp_path: P
     assert status["permission_hook_present"] is True
     assert status["hook_command_matches_current_runtime"] is True
     assert sorted(status["observer_events_present"]) == sorted(
-        ["SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"]
+        ["PreToolUse", "PostToolUse", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"]
     )
     assert status["native_hook_discovered"] is True
     assert status["trust_status"] == "trusted"
@@ -714,3 +714,90 @@ def test_codex_readiness_never_calls_missing_binary_a_real_host_proof(tmp_path: 
     assert status["gateway_online"] is False
     assert status["ready_for_real_host_probe"] is False
     assert status["real_host_e2e_verified"] is False
+
+
+def test_connector_registry_retains_post_tool_response(tmp_path: Path):
+    reg = ConnectorRegistry(str(tmp_path / "post-tool.db"))
+    reg.record(ConnectorEventIn(
+        provider="codex",
+        event_name="PostToolUse",
+        session_id="codex-session-1",
+        turn_id="turn-1",
+        tool_name="Bash",
+        tool_use_id="call-1",
+        tool_input={"command": "printf proof"},
+        tool_response="proof",
+    ))
+
+    row = reg.session("codex", "codex-session-1")
+    assert row is not None
+    event = row["events"][0]
+    assert event["event_name"] == "PostToolUse"
+    assert event["capsule"]["tool_use_id"] == "call-1"
+    assert event["capsule"]["tool_response"] == "proof"
+
+
+def test_codex_post_tool_proof_requires_newer_matching_turn_and_tool():
+    from humanqueue.cli import _codex_post_tool_proof
+
+    session = {
+        "events": [
+            {
+                "seq": 14,
+                "event_name": "PostToolUse",
+                "turn_id": "turn-other",
+                "capsule": {"tool_name": "Bash", "tool_use_id": "wrong-turn"},
+            },
+            {
+                "seq": 13,
+                "event_name": "PostToolUse",
+                "turn_id": "turn-1",
+                "capsule": {"tool_name": "apply_patch", "tool_use_id": "wrong-tool"},
+            },
+            {
+                "seq": 12,
+                "event_name": "PostToolUse",
+                "turn_id": "turn-1",
+                "capsule": {"tool_name": "Bash", "tool_use_id": "old"},
+            },
+            {
+                "seq": 16,
+                "event_name": "PostToolUse",
+                "turn_id": "turn-1",
+                "capsule": {
+                    "tool_name": "Bash",
+                    "tool_use_id": "call-verified",
+                    "tool_response": "done",
+                },
+            },
+        ]
+    }
+
+    proof = _codex_post_tool_proof(
+        session=session,
+        boundary_seq=12,
+        turn_id="turn-1",
+        tool_name="Bash",
+    )
+    assert proof is not None
+    assert proof["seq"] == 16
+    assert proof["capsule"]["tool_use_id"] == "call-verified"
+
+
+def test_codex_post_tool_proof_never_accepts_pre_boundary_event():
+    from humanqueue.cli import _codex_post_tool_proof
+
+    proof = _codex_post_tool_proof(
+        session={
+            "events": [{
+                "seq": 9,
+                "event_name": "PostToolUse",
+                "turn_id": "turn-1",
+                "capsule": {"tool_name": "Bash", "tool_use_id": "call-old"},
+            }]
+        },
+        boundary_seq=10,
+        turn_id="turn-1",
+        tool_name="Bash",
+    )
+    assert proof is None
