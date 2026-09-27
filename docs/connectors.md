@@ -53,6 +53,16 @@ humanq verify codex
 
 The verifier reports the Codex binary/version, Gateway health, installed PermissionRequest + observer hooks, whether the hook command still points at the Python runtime that installed it, **and Codex's own `hooks/list` result** including trust status/current hash. A local JSON file alone cannot make trust green. Even a Codex-reported `trusted` hook still does not mark native host E2E as proven until a real PermissionRequest consumes the decision.
 
+Once readiness is green, capture the final native proof:
+
+```bash
+humanq prove codex
+```
+
+The proof command ignores pre-existing pending requests, waits for a **new** Codex `PermissionRequest`, records the exact native session/turn/tool identity, waits for the human decision, and — for an approval — requires a later matching `PostToolUse` from Codex before declaring success. A resolved human:// request by itself is not enough.
+
+For a deterministic, harmless probe, the command prints a disposable-workspace Codex invocation using a read-only sandbox and on-request approvals. Approve that one boundary. A verified run writes an evidence receipt under `~/.human-queue/evidence/codex/`.
+
 View observed sessions:
 
 ```bash
@@ -83,7 +93,9 @@ Codex resumes the same tool call
 
 If the Gateway is unavailable or the human:// wait times out, the connector emits no decision so Codex can fall back to its normal native approval UI instead of silently authorizing anything.
 
-CI additionally runs the **built wheel** as a real hook subprocess for both allow and deny: JSON is written to stdin, the hook blocks on a real local Gateway request, a separate actor resolves the canonical boundary, and stdout is parsed as Codex PermissionRequest output. This proves the packaged hook process, not the final Codex host consumption.
+CI additionally runs the **built wheel** as a real hook subprocess for both allow and deny: JSON is written to stdin, the hook blocks on a real local Gateway request, a separate actor resolves the canonical boundary, and stdout is parsed as Codex PermissionRequest output. This proves the packaged hook process.
+
+For native-host confirmation, human:// also installs `PreToolUse` and `PostToolUse` observer hooks. `PostToolUse` includes Codex's native `turn_id`, `tool_use_id`, `tool_name`, input, and response; `humanq prove codex` uses the first matching post-boundary event as evidence that Codex actually consumed the approval and executed the original tool.
 
 ## Cursor
 
