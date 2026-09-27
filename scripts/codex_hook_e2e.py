@@ -54,9 +54,9 @@ def wait_for_codex_request(url: str, token: str, session_id: str, timeout: float
     raise RuntimeError(f"timed out waiting for Codex request {session_id}")
 
 
-def run_hook(python: str, env: dict[str, str], event: dict) -> subprocess.Popen[str]:
+def run_hook(python: str, env: dict[str, str], event: dict, mode: str = "codex-permission") -> subprocess.Popen[str]:
     child = subprocess.Popen(
-        [python, "-m", "humanqueue", "connector", "hook", "codex-permission"],
+        [python, "-m", "humanqueue", "connector", "hook", mode],
         env=env,
         text=True,
         stdin=subprocess.PIPE,
@@ -147,6 +147,48 @@ def prove_decision(base_url: str, token: str, env: dict[str, str], action: str, 
         for required in ("created", "vote", "resolved", "resume_not_applicable"):
             if required not in event_types:
                 raise RuntimeError(f"missing {required} from Codex hook lifecycle: {event_types}")
+
+        if action == "approve":
+            post_event = {
+                "agent_id": "agent-e2e",
+                "agent_type": "main",
+                "cwd": os.getcwd(),
+                "hook_event_name": "PostToolUse",
+                "model": "gpt-test",
+                "permission_mode": "default",
+                "session_id": session_id,
+                "tool_input": event["tool_input"],
+                "tool_name": "Bash",
+                "tool_response": "native tool completed",
+                "tool_use_id": "call-native-proof",
+                "transcript_path": None,
+                "turn_id": "turn-approve",
+            }
+            observer = run_hook(sys.executable, env, post_event, "codex-observe")
+            observer_stdout, observer_stderr = observer.communicate(timeout=5)
+            if observer.returncode != 0:
+                raise RuntimeError(
+                    f"Codex observer hook failed: {observer_stderr}\n{observer_stdout}"
+                )
+
+            session = request_json(
+                "GET",
+                base_url + f"/v1/connectors/sessions/codex/{session_id}?event_limit=20",
+                token,
+            )
+            post_rows = [
+                row for row in session.get("events", [])
+                if row.get("event_name") == "PostToolUse"
+                and row.get("turn_id") == "turn-approve"
+            ]
+            if len(post_rows) != 1:
+                raise RuntimeError(f"packaged PostToolUse was not recorded exactly once: {post_rows}")
+            capsule = post_rows[0].get("capsule") or {}
+            if capsule.get("tool_use_id") != "call-native-proof":
+                raise RuntimeError(f"PostToolUse identity drifted: {capsule}")
+            if capsule.get("tool_response") != "native tool completed":
+                raise RuntimeError(f"PostToolUse response evidence was lost: {capsule}")
+            print("CODEX_POST_TOOL_OBSERVER_OK tool_use_id=call-native-proof")
 
         print(f"CODEX_HOOK_{expected_behavior.upper()}_OK request_id={request_id}")
         return request_id

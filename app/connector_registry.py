@@ -25,6 +25,7 @@ class ConnectorEventIn(BaseModel):
     tool_name: str | None = None
     tool_use_id: str | None = None
     tool_input: Any = None
+    tool_response: Any = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -95,6 +96,7 @@ class ConnectorRegistry:
             "tool_name": event.tool_name,
             "tool_use_id": event.tool_use_id,
             "tool_input": event.tool_input,
+            "tool_response": event.tool_response,
             "metadata": event.metadata,
         }
 

@@ -4,7 +4,9 @@ import argparse
 import json
 import os
 import threading
+import time
 import webbrowser
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -220,6 +222,239 @@ def verify(args: argparse.Namespace) -> None:
         print("  4. Confirm the exact Codex tool call continues or is denied.")
     else:
         print("\nNot ready for a real-host proof yet.")
+
+def _gateway_get(path: str, *, params: dict | None = None) -> dict:
+    response = httpx.get(
+        gateway_url() + path,
+        params=params,
+        headers=_auth_headers(),
+        timeout=3,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _codex_post_tool_proof(
+    *,
+    session: dict,
+    boundary_seq: int,
+    turn_id: str,
+    tool_name: str,
+) -> dict | None:
+    for event in session.get("events", []):
+        if int(event.get("seq") or 0) <= boundary_seq:
+            continue
+        if str(event.get("event_name") or "").lower() != "posttooluse":
+            continue
+        if str(event.get("turn_id") or "") != turn_id:
+            continue
+        capsule = event.get("capsule") or {}
+        if str(capsule.get("tool_name") or "") != tool_name:
+            continue
+        return event
+    return None
+
+
+def prove(args: argparse.Namespace) -> None:
+    if args.provider != "codex":
+        raise SystemExit(f"unsupported proof provider: {args.provider}")
+
+    from .connectors.codex import codex_readiness
+
+    readiness = codex_readiness()
+    if not readiness["ready_for_real_host_probe"]:
+        if args.json:
+            print(json.dumps({
+                "provider": "codex",
+                "verified": False,
+                "stage": "readiness",
+                "readiness": readiness,
+            }, indent=2, ensure_ascii=False))
+        else:
+            print("human:// Codex native proof cannot start yet.")
+            print("Run: humanq verify codex")
+            for problem in readiness.get("problems", []):
+                print(" - " + problem)
+            if readiness.get("trust_status") not in {"trusted", "managed"}:
+                print(" - trust the current human:// hook in Codex /hooks")
+        raise SystemExit(2)
+
+    try:
+        baseline = _gateway_get("/v1/queue", params={"status": "pending", "limit": 100})
+    except Exception as exc:
+        raise SystemExit(f"cannot read human:// queue: {exc}") from exc
+
+    baseline_ids = {
+        str(item.get("id"))
+        for item in baseline.get("items", [])
+        if item.get("source") == "codex"
+    }
+
+    if not args.json:
+        probe_dir = CONFIG_PATH.parent / "probes" / "codex-native"
+        probe_dir.mkdir(parents=True, exist_ok=True)
+        print("human:// Codex native proof")
+        print(" readiness     trusted + native discovery confirmed")
+        print(" waiting for  a NEW Codex PermissionRequest")
+        print("")
+        print("In another terminal, a deterministic harmless probe is:")
+        print(
+            f'  codex -C "{probe_dir}" --sandbox read-only '
+            '--ask-for-approval on-request '
+            '"Use a shell command to create native-proof.txt containing HUMANQ_NATIVE_PROOF."'
+        )
+        print("")
+        print("When human:// asks, choose Approve.")
+        print("This command will then require a matching Codex PostToolUse before calling the proof verified.")
+
+    deadline = time.monotonic() + float(args.timeout)
+    item = None
+    while time.monotonic() < deadline:
+        queue_body = _gateway_get("/v1/queue", params={"status": "pending", "limit": 100})
+        candidates = [
+            row for row in queue_body.get("items", [])
+            if row.get("source") == "codex"
+            and str(row.get("id")) not in baseline_ids
+        ]
+        if candidates:
+            item = candidates[0]
+            break
+        time.sleep(0.35)
+
+    if not item:
+        result = {
+            "provider": "codex",
+            "verified": False,
+            "stage": "permission_request",
+            "reason": "timed_out_waiting_for_new_codex_boundary",
+        }
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print("\nNo new Codex PermissionRequest arrived before timeout.")
+        raise SystemExit(3)
+
+    request_id = str(item["id"])
+    context = item.get("context") or {}
+    native = context.get("native_handle") or {}
+    session_id = str(native.get("session_id") or context.get("session_id") or "")
+    turn_id = str(native.get("turn_id") or context.get("turn_id") or "")
+    tool_name = str(context.get("tool_name") or "tool")
+    if not session_id or not turn_id:
+        raise SystemExit(
+            f"captured {request_id}, but native session/turn identity is missing; cannot prove exact consumption"
+        )
+
+    session_path = f"/v1/connectors/sessions/codex/{session_id}"
+    session = _gateway_get(session_path, params={"event_limit": 100})
+    permission_events = [
+        event for event in session.get("events", [])
+        if str(event.get("event_name") or "").lower() == "permissionrequest"
+        and str(event.get("turn_id") or "") == turn_id
+        and str((event.get("capsule") or {}).get("tool_name") or "") == tool_name
+    ]
+    boundary_seq = max((int(event.get("seq") or 0) for event in permission_events), default=0)
+
+    if not args.json:
+        print(f"\nCaptured       {request_id}")
+        print(f" session        {session_id}")
+        print(f" turn           {turn_id}")
+        print(f" tool           {tool_name}")
+        print(f" dashboard      {gateway_url()}")
+        print(" waiting for    human resolution")
+
+    resolution = None
+    resolved_request = None
+    while time.monotonic() < deadline:
+        detail = _gateway_get(f"/v1/requests/{request_id}")
+        resolved_request = detail.get("request") or {}
+        status = str(resolved_request.get("status") or "")
+        if status in {"resolved", "cancelled", "expired", "superseded"}:
+            resolution = resolved_request.get("resolution") or {}
+            break
+        time.sleep(0.35)
+
+    if not resolved_request or str(resolved_request.get("status") or "") != "resolved":
+        result = {
+            "provider": "codex",
+            "request_id": request_id,
+            "verified": False,
+            "stage": "human_resolution",
+            "status": (resolved_request or {}).get("status"),
+        }
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print("\nBoundary did not reach a resolved human decision.")
+        raise SystemExit(4)
+
+    action = str((resolution or {}).get("action") or "").lower()
+    approve = action in {"approve", "allow", "accept", "continue"}
+    post_event = None
+    if approve:
+        while time.monotonic() < deadline:
+            session = _gateway_get(session_path, params={"event_limit": 100})
+            post_event = _codex_post_tool_proof(
+                session=session,
+                boundary_seq=boundary_seq,
+                turn_id=turn_id,
+                tool_name=tool_name,
+            )
+            if post_event:
+                break
+            time.sleep(0.35)
+
+    verified = bool(approve and post_event)
+    receipt = {
+        "schema": "human://codex-native-proof/v1",
+        "provider": "codex",
+        "verified": verified,
+        "request_id": request_id,
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "tool_name": tool_name,
+        "decision": resolution,
+        "permission_event_seq": boundary_seq or None,
+        "post_tool_event_seq": int(post_event.get("seq")) if post_event else None,
+        "tool_use_id": ((post_event or {}).get("capsule") or {}).get("tool_use_id"),
+        "tool_response": ((post_event or {}).get("capsule") or {}).get("tool_response"),
+        "evidence": (
+            "matching PostToolUse observed after approved PermissionRequest"
+            if verified
+            else (
+                "human decision was not an approval; PostToolUse is not a valid proof target"
+                if not approve
+                else "approved boundary resolved, but no matching PostToolUse was observed"
+            )
+        ),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "codex_version": readiness.get("codex_version"),
+        "hook_hash": readiness.get("native_current_hash"),
+    }
+
+    evidence_dir = CONFIG_PATH.parent / "evidence" / "codex"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    safe_id = request_id.replace("/", "_")
+    evidence_path = evidence_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{safe_id}.json"
+    evidence_path.write_text(json.dumps(receipt, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    receipt["evidence_path"] = str(evidence_path)
+
+    if args.json:
+        print(json.dumps(receipt, indent=2, ensure_ascii=False))
+    else:
+        print("")
+        if verified:
+            print("CODEX_NATIVE_HOST_E2E_VERIFIED")
+            print(f" PostToolUse    seq={receipt['post_tool_event_seq']}")
+            print(f" tool_use_id    {receipt['tool_use_id'] or '-'}")
+        else:
+            print("CODEX_NATIVE_HOST_E2E_NOT_PROVEN")
+            print(" reason         " + receipt["evidence"])
+        print(f" receipt        {evidence_path}")
+
+    if not verified:
+        raise SystemExit(5)
+
 
 def disconnect(args: argparse.Namespace) -> None:
     if args.provider == "codex":
@@ -537,6 +772,12 @@ def main() -> None:
     p_verify.add_argument("provider", choices=["codex"])
     p_verify.add_argument("--json", action="store_true")
     p_verify.set_defaults(func=verify)
+
+    p_prove = sub.add_parser("prove", help="capture evidence from a real native connector round-trip")
+    p_prove.add_argument("provider", choices=["codex"])
+    p_prove.add_argument("--timeout", type=float, default=180.0)
+    p_prove.add_argument("--json", action="store_true")
+    p_prove.set_defaults(func=prove)
 
     p_disconnect = sub.add_parser("disconnect", help="remove an editor/agent connector")
     p_disconnect.add_argument("provider", choices=["codex", "cursor", "claude", "opencode"])

@@ -82,6 +82,7 @@ def observe_event(event: dict[str, Any]) -> None:
         "tool_name": event.get("tool_name"),
         "tool_use_id": event.get("tool_use_id"),
         "tool_input": event.get("tool_input"),
+        "tool_response": event.get("tool_response"),
         "metadata": {
             "permission_mode": event.get("permission_mode"),
             "hook_event_name": event.get("hook_event_name"),
@@ -220,7 +221,7 @@ def install_codex_hooks() -> dict[str, Any]:
                 cleaned.append(clone)
         return cleaned
 
-    for event_name in ("PermissionRequest", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
+    for event_name in ("PermissionRequest", "PreToolUse", "PostToolUse", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
         hooks[event_name] = strip_humanq(list(hooks.get(event_name, [])))
 
     hooks["PermissionRequest"].append({
@@ -238,7 +239,7 @@ def install_codex_hooks() -> dict[str, Any]:
         "command": _humanq_command("codex-observe"),
         "timeout": 2,
     }
-    for event_name in ("SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
+    for event_name in ("PreToolUse", "PostToolUse", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
         hooks[event_name].append({"hooks": [dict(observer)]})
 
     config["description"] = config.get("description") or "Codex hooks including human:// human:// connector."
@@ -247,7 +248,7 @@ def install_codex_hooks() -> dict[str, Any]:
         "provider": "codex",
         "hooks_path": str(path),
         "codex_detected": bool(shutil.which("codex")),
-        "installed_events": ["PermissionRequest", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"],
+        "installed_events": ["PermissionRequest", "PreToolUse", "PostToolUse", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"],
         "requires_trust_review": True,
     }
 
@@ -444,7 +445,7 @@ def codex_readiness() -> dict[str, Any]:
                     if command == expected_permission_command:
                         result["hook_command_matches_current_runtime"] = True
 
-        for event_name in ("SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
+        for event_name in ("PreToolUse", "PostToolUse", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"):
             found = False
             for group in hooks.get(event_name) or []:
                 for handler in group.get("hooks") or []:
@@ -465,7 +466,7 @@ def codex_readiness() -> dict[str, Any]:
             )
 
         missing_observers = sorted(
-            set(("SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"))
+            set(("PreToolUse", "PostToolUse", "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"))
             - set(result["observer_events_present"])
         )
         if missing_observers:
@@ -483,7 +484,7 @@ def codex_readiness() -> dict[str, Any]:
         and result["gateway_online"]
         and result["permission_hook_present"]
         and result["hook_command_matches_current_runtime"]
-        and len(result["observer_events_present"]) == 4
+        and len(result["observer_events_present"]) == 6
         and result["native_hook_discovered"]
         and result["trust_status"] in {"trusted", "managed"}
     )
