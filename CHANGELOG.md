@@ -5,6 +5,9 @@
 - Added `humanq verify codex` with Codex-native `app-server hooks/list` inspection so discovery, trust status and current hash come from Codex itself rather than local-file inference.
 - Added packaged Codex PermissionRequest hook E2E for both allow and deny using real stdin/stdout subprocesses, Gateway auth, canonical request identity and blocking human resolution.
 - Verified with official Codex CLI 0.157.1 that the binary discovers the installed human:// PermissionRequest hook and transitions its exact current hash from `untrusted` to `trusted`; the model-turn consumption proof remains pending.
+- Added `PreToolUse` / `PostToolUse` Codex observers and preserve native `tool_use_id` + `tool_response` as bounded connector evidence.
+- Added `humanq prove codex`: it ignores pre-existing pending requests, captures a new PermissionRequest, waits for the human resolution, and only marks an approval verified after a later matching `PostToolUse` on the same native session/turn/tool.
+- Added durable Codex proof receipts under `~/.human-queue/evidence/codex/`; resolution alone can never manufacture a green native-host proof.
 
 
 ## 0.7.0 — human-boundary integrity
