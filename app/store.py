@@ -214,6 +214,20 @@ class Store:
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             return self._row_to_model(row, c) if row else None
 
+    def get_by_idempotency(
+        self,
+        source: str,
+        idempotency_key: str,
+    ) -> AttentionRequest | None:
+        """Recover one canonical request after an ambiguous create acknowledgement."""
+
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT * FROM requests WHERE source=? AND idempotency_key=?",
+                (source, idempotency_key),
+            ).fetchone()
+            return self._row_to_model(row, c) if row else None
+
     def queue(self, status: str = "pending", limit: int = 100, include_deferred: bool = False) -> list[AttentionRequest]:
         with self._conn() as c:
             if include_deferred:
