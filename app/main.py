@@ -428,6 +428,21 @@ def policy_sandbox(policy_key: str, action: str | None = None):
     return store.policy_sandbox(policy_key, proposed_action=action)
 
 
+@app.get("/v1/idempotency/lookup")
+def lookup_idempotent_request(source: str, idempotency_key: str):
+    source = source.strip()
+    idempotency_key = idempotency_key.strip()
+    if not source or not idempotency_key:
+        raise HTTPException(422, "source and idempotency_key are required")
+    req = store.get_by_idempotency(source, idempotency_key)
+    if not req:
+        raise HTTPException(404, "idempotent request not found")
+    return {
+        "request": req,
+        "human_uri": uri_for_kind(req.kind),
+    }
+
+
 @app.get("/v1/requests/{rid}")
 def get_request(rid: str):
     req = store.get(rid)
