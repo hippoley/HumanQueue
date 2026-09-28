@@ -153,6 +153,7 @@ jobs:
           cd ${{ runner.temp }}
           "$GITHUB_WORKSPACE/.smoke-venv/bin/python" "$GITHUB_WORKSPACE/scripts/first_run_e2e.py"
           "$GITHUB_WORKSPACE/.smoke-venv/bin/python" "$GITHUB_WORKSPACE/scripts/gateway_restart_e2e.py"
+          "$GITHUB_WORKSPACE/.smoke-venv/bin/python" "$GITHUB_WORKSPACE/scripts/resume_crash_recovery_e2e.py"
       - name: Run real packaged first-run (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -160,6 +161,7 @@ jobs:
           Set-Location $env:RUNNER_TEMP
           & "$env:GITHUB_WORKSPACE\.smoke-venv\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\first_run_e2e.py"
           & "$env:GITHUB_WORKSPACE\.smoke-venv\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\gateway_restart_e2e.py"
+          & "$env:GITHUB_WORKSPACE\.smoke-venv\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\resume_crash_recovery_e2e.py"
 
 
   installer-entrypoint-matrix:
