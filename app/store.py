@@ -286,8 +286,42 @@ class Store:
                 voters = [v["actor"] for v in votes if v["fingerprint"] == winning_fp]
                 winning["quorum"] = {"required": required, "actors": voters, "votes": winning_count}
                 final_encoded = json.dumps(winning)
-                c.execute("UPDATE requests SET status=?,resolved_by=?,resolution=?,updated_at=? WHERE id=?", (RequestStatus.resolved.value, actor, final_encoded, now, rid))
-                c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (rid, "resolved", actor, final_encoded, now))
+                terminal_values = (
+                    RequestStatus.resolved.value,
+                    RequestStatus.cancelled.value,
+                    RequestStatus.expired.value,
+                    RequestStatus.superseded.value,
+                )
+                updated = c.execute(
+                    """
+                    UPDATE requests
+                    SET status=?,resolved_by=?,resolution=?,updated_at=?
+                    WHERE id=?
+                      AND status NOT IN (?,?,?,?)
+                    """,
+                    (
+                        RequestStatus.resolved.value,
+                        actor,
+                        final_encoded,
+                        now,
+                        rid,
+                        *terminal_values,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    # Another worker won the terminal transition after this
+                    # transaction started. Roll back our vote/event so a losing
+                    # concurrent resolver leaves no semantic side effects.
+                    c.rollback()
+                    row = c.execute(
+                        "SELECT * FROM requests WHERE id=?",
+                        (rid,),
+                    ).fetchone()
+                    return self._row_to_model(row, c), False
+                c.execute(
+                    "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                    (rid, "resolved", actor, final_encoded, now),
+                )
             else:
                 c.execute("UPDATE requests SET status=?,updated_at=? WHERE id=?", (RequestStatus.claimed.value, now, rid))
                 c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (rid, "quorum_wait", actor, json.dumps({"required": required, "leading_votes": winning_count}), now))
@@ -374,10 +408,31 @@ class Store:
                 "reason": reason,
                 "metadata": metadata or {},
             }
-            c.execute(
-                "UPDATE requests SET status=?,updated_at=? WHERE id=?",
-                (outcome, now, rid),
+            terminal_values = (
+                RequestStatus.resolved.value,
+                RequestStatus.cancelled.value,
+                RequestStatus.expired.value,
+                RequestStatus.superseded.value,
             )
+            updated = c.execute(
+                """
+                UPDATE requests
+                SET status=?,updated_at=?
+                WHERE id=?
+                  AND status NOT IN (?,?,?,?)
+                """,
+                (outcome, now, rid, *terminal_values),
+            )
+            if updated.rowcount != 1:
+                # Human resolution or another machine outcome won the race.
+                # Do not manufacture a second terminal event.
+                c.rollback()
+                row = c.execute(
+                    "SELECT * FROM requests WHERE id=?",
+                    (rid,),
+                ).fetchone()
+                return self._row_to_model(row, c)
+
             c.execute(
                 "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
                 (rid, f"machine_{outcome}", actor, json.dumps(data, default=str), now),
