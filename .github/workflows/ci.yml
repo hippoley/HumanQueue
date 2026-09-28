@@ -93,6 +93,10 @@ jobs:
         run: |
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/idempotent_retry_e2e.py"
+      - name: Packaged multi-worker idempotent create E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/multiworker_idempotent_create_e2e.py"
       - name: Verify packaged runtime assets
         run: |
           python - <<'PY'
