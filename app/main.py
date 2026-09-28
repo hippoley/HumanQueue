@@ -121,25 +121,92 @@ async def channel_resolve(name: str, rid: str, request: Request):
         delivery = await _resume_and_record(item, item.resolution or resolution)
     return {"request": item, "finalized": finalized, "resume": delivery}
 
+async def _deliver_claimed_resume(item):
+    """Deliver one already-leased webhook outbox item and persist the result."""
+
+    try:
+        result = await resume(item, item.resolution or {})
+    except Exception as exc:  # defensive: never strand an in-flight lease on worker errors
+        result = {
+            "delivered": False,
+            "confirmed": False,
+            "reason": "resume_worker_error",
+            "error": str(exc),
+        }
+    store.finish_resume_attempt(item.id, result)
+    return result
+
+
 async def _resume_and_record(item, resolution):
-    """Resume webhook-backed workflows without misclassifying native blocking connectors."""
+    """Deliver now when possible while preserving a durable recovery obligation."""
+
+    if item.resume.mode == "webhook" and item.resume.url:
+        claimed = store.claim_resume(item.id)
+        if claimed is None:
+            outbox = store.resume_outbox(item.id)
+            if outbox and outbox.get("state") == "done":
+                return outbox.get("last_result") or {
+                    "delivered": True,
+                    "confirmed": True,
+                    "reason": "resume_already_confirmed",
+                }
+            return {
+                "delivered": False,
+                "confirmed": False,
+                "reason": "resume_already_in_flight_or_not_due",
+            }
+        return await _deliver_claimed_resume(claimed)
+
+    # Native blocking connectors have no outbound transport. They keep the
+    # existing audit event but deliberately do not enter the webhook outbox.
     result = await resume(item, resolution)
-    reason = result.get("reason")
-    if reason == "no_resume_target":
-        event_type = "resume_not_applicable"
-    elif result.get("confirmed"):
-        event_type = "resume_confirmed"
-    elif result.get("delivered"):
-        event_type = "resume_delivered_unconfirmed"
-    else:
-        event_type = "resume_undeliverable"
     store.record_event(
         item.id,
-        event_type,
+        "resume_not_applicable",
         actor="resume",
         data=result,
     )
     return result
+
+
+async def _resume_reconciler():
+    """Recover durable webhook resumes left pending by crashes or outages."""
+
+    while True:
+        try:
+            items = store.claim_due_resumes(limit=20, lease_seconds=30)
+            for item in items:
+                await _deliver_claimed_resume(item)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # One malformed/outage cycle must not kill recovery for all future work.
+            pass
+        await asyncio.sleep(0.5)
+
+
+_resume_reconciler_task: asyncio.Task | None = None
+
+
+@app.on_event("startup")
+async def _start_resume_reconciler():
+    global _resume_reconciler_task
+    if _resume_reconciler_task is None or _resume_reconciler_task.done():
+        _resume_reconciler_task = asyncio.create_task(_resume_reconciler())
+
+
+@app.on_event("shutdown")
+async def _stop_resume_reconciler():
+    global _resume_reconciler_task
+    task = _resume_reconciler_task
+    _resume_reconciler_task = None
+    if task is None:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 def _publish_and_record(item):
