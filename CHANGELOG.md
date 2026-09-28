@@ -27,6 +27,11 @@
 - Added duplicate same-actor and repeated 20-race stress coverage.
 - Added resolve-vs-supersede and concurrent-replacement regression coverage; supersession already serialized correctly through the shared SQLite write transaction.
 - Added deterministic resume transport identity tests: the same request/decision produces the same callback body, canonical request-id header, and HMAC signature.
+- Added a durable `resume_outbox` committed atomically with the winning human resolution for webhook-backed boundaries, closing the resolved-before-send crash window.
+- Added Gateway resume-outbox reconciliation: pending intents survive restart, while abandoned in-flight attempts become `uncertain` instead of being automatically replayed.
+- Added packaged crash-recovery E2E proving a resolver can commit the decision and exit before any Gateway worker exists; restart delivers exactly once and reaches `resume_confirmed` / outbox `done`.
+- Added packaged ambiguous-crash E2E where the receiver executes and confirms once, the sender exits before local completion, restart marks `uncertain`, and receiver count remains 1.
+- Added request-detail and metrics visibility for resume outbox state, including `resume_delivery_uncertain` as an integrity signal.
 - Added packaged ACK-loss fault injection: a receiver executes once and drops the HTTP response; human:// records `resume_undeliverable` and does not automatically retry or duplicate the receiver-side effect.
 - Documented webhook resume as one automatic attempt per finalized boundary; exactly-once external execution still requires receiver-side deduplication by canonical request_id.
 - Hardened Python SDK create semantics against ambiguous transport failures: every `ask()` invocation now carries one stable client idempotency key (caller-provided or generated) and retries transport/5xx create outcomes with that same key.
