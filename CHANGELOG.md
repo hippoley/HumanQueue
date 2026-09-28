@@ -26,6 +26,9 @@
 - Terminal resolution/expiry now uses database compare-and-set semantics; losing contenders roll back vote/event side effects and read the canonical winner.
 - Added duplicate same-actor and repeated 20-race stress coverage.
 - Added resolve-vs-supersede and concurrent-replacement regression coverage; supersession already serialized correctly through the shared SQLite write transaction.
+- Added deterministic resume transport identity tests: the same request/decision produces the same callback body, canonical request-id header, and HMAC signature.
+- Added packaged ACK-loss fault injection: a receiver executes once and drops the HTTP response; human:// records `resume_undeliverable` and does not automatically retry or duplicate the receiver-side effect.
+- Documented webhook resume as one automatic attempt per finalized boundary; exactly-once external execution still requires receiver-side deduplication by canonical request_id.
 - Hardened Python SDK create semantics against ambiguous transport failures: every `ask()` invocation now carries one stable client idempotency key (caller-provided or generated) and retries transport/5xx create outcomes with that same key.
 - Added packaged fault-injection E2E where Gateway commits and returns 201 but a proxy deliberately drops the response; SDK retries, recovers the same request with `created=false`, observes only one canonical `created` event, then receives the real human decision and continues.
 
