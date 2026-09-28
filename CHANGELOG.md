@@ -15,6 +15,9 @@
 - Added clean-wheel first-run E2E on Ubuntu/Python 3.10 + 3.12, macOS/Python 3.12 and Windows/Python 3.12.
 - Added real installer-entrypoint E2E for shipped `install.sh` on Ubuntu/macOS and `install.ps1` on Windows.
 - Fixed the first-run E2E harness after Windows proved that intentional process teardown may return exit code 1 even though the complete human boundary round-trip succeeded.
+- Fixed a real human-vs-timeout race where concurrent workers could each emit a different terminal event for the same boundary.
+- Terminal resolution/expiry now uses database compare-and-set semantics; a losing concurrent contender rolls back its vote/event side effects and reads the canonical winner.
+- Added concurrent opposing-resolver, duplicate same-actor, human-vs-timeout, and repeated 20-race stress coverage across independent Store instances.
 
 
 ## 0.7.0 — human-boundary integrity
