@@ -187,6 +187,7 @@ A native hook returning a decision proves only that human:// returned a decision
 
 - Notification priority is not authorization.
 - A system event, timeout, policy action, or service callback is not a human answer.
+- Source `Stop`, turn completion, or session teardown does not implicitly resolve a still-pending human boundary; clearing it requires an explicit answered/dismissed/expired/cancelled/replaced transition.
 - A human-only boundary must reject non-human `actor_kind` on the resolution path.
 - `batch` means “review together,” not “approve together automatically.”
 - `defer` means “do not interrupt now,” not “discard the obligation.”
