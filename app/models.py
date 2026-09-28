@@ -180,3 +180,21 @@ class MachineOutcomeRequest(BaseModel):
     outcome: Literal["expired", "cancelled"]
     reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeReconcileRequest(BaseModel):
+    """Explicit operator action for an ambiguous/failed webhook resume."""
+
+    actor: str
+    action: Literal["confirm_executed", "retry", "abandon"]
+    reason: str | None = None
+    receiver_dedup_confirmed: bool = False
+
+    @model_validator(mode="after")
+    def validate_retry_safety(self):
+        if self.action == "retry" and not self.receiver_dedup_confirmed:
+            raise ValueError(
+                "retry requires receiver_dedup_confirmed=true because the prior "
+                "attempt may already have executed remotely"
+            )
+        return self
