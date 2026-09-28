@@ -154,7 +154,7 @@ class Store:
             c.close()
         return model
 
-    def create(self, req: AttentionRequestCreate) -> AttentionRequest:
+    def create_with_status(self, req: AttentionRequestCreate) -> tuple[AttentionRequest, bool]:
         now = self._now()
         rid = f"attn_{uuid.uuid4().hex[:16]}"
         priority = priority_score(req)
@@ -163,7 +163,7 @@ class Store:
             if req.idempotency_key:
                 existing = c.execute("SELECT * FROM requests WHERE source=? AND idempotency_key=?", (req.source, req.idempotency_key)).fetchone()
                 if existing:
-                    return self._row_to_model(existing, c)
+                    return self._row_to_model(existing, c), False
 
             budget = self._budget_policy(c, req.attention_group)
             surface = choose_surface(priority, req, budget, self._interrupts_last_hour(c, req.attention_group))
@@ -182,7 +182,11 @@ class Store:
                         c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (old["id"], "superseded", None, json.dumps({"by": rid}), now.isoformat()))
 
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
-        return self._row_to_model(row)
+        return self._row_to_model(row), True
+
+    def create(self, req: AttentionRequestCreate) -> AttentionRequest:
+        item, _created = self.create_with_status(req)
+        return item
 
     def get(self, rid: str) -> AttentionRequest | None:
         with self._conn() as c:
