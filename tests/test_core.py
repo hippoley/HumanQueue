@@ -1242,6 +1242,7 @@ def test_wait_does_not_hide_http_protocol_errors(monkeypatch):
 
 def test_store_connection_context_releases_sqlite_handle(tmp_path: Path):
     import sqlite3
+    import pytest
 
     store = Store(str(tmp_path / "close-handle.db"))
     with store._conn() as conn:
