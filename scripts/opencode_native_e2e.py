@@ -142,7 +142,12 @@ def main() -> None:
                     f"OpenCode service failed to start:\n{service.stdout}\n{service.stderr}"
                 )
 
-            plugins = subprocess.run(
+            # Plugin discovery is Location-aware in the shared OpenCode service.
+            # The preceding CI step already proves the real runtime loads the global
+            # human:// plugin. In a brand-new temporary Location, the useful test is
+            # whether a permission evaluation actually reaches human://, not whether
+            # plugin-list has projected the Location before a session exists.
+            plugins_before = subprocess.run(
                 ["opencode", "plugin", "list"],
                 cwd=workspace,
                 text=True,
@@ -150,13 +155,7 @@ def main() -> None:
                 check=False,
                 timeout=20,
             )
-            if plugins.returncode != 0 or "human-queue" not in plugins.stdout:
-                raise RuntimeError(
-                    "human:// is not active in the OpenCode plugin list:\n"
-                    + plugins.stdout
-                    + "\n"
-                    + plugins.stderr
-                )
+            print("plugins_before_session=" + plugins_before.stdout.strip(), flush=True)
 
             session = run_json(
                 [
@@ -176,6 +175,17 @@ def main() -> None:
             )
             if not session_id:
                 raise RuntimeError(f"OpenCode session create returned no id: {session}")
+            print(f"created_opencode_session={session_id}", flush=True)
+
+            plugins_after = subprocess.run(
+                ["opencode", "plugin", "list"],
+                cwd=workspace,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=20,
+            )
+            print("plugins_after_session=" + plugins_after.stdout.strip(), flush=True)
 
             command = f"printf HUMANQ_OPENCODE_NATIVE > {marker}"
             body = json.dumps({"agent": "build", "command": command})
