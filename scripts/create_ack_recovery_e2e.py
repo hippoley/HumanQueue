@@ -73,6 +73,10 @@ class ProxyState:
             self.response_request_ids.append(request_id)
             self.created_flags.append(created)
 
+    def backend_response_count(self) -> int:
+        with self.lock:
+            return len(self.response_request_ids)
+
 
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="humanqueue-create-ack-") as temp:
@@ -276,7 +280,7 @@ print("CREATE_ACK_SIDE_EFFECT_EXECUTED True", flush=True)
                     for row in queue.get("items", [])
                     if row.get("source") == "create-ack-e2e"
                 ]
-                if matches and state.human_posts >= 2:
+                if matches and state.backend_response_count() >= 2:
                     item = matches[0]
                     break
                 if child.poll() is not None:
