@@ -21,6 +21,7 @@ from .models import (
     ClaimRequest,
     HumanAsk,
     ImportEnvelope,
+    MachineOutcomeRequest,
     ResolveRequest,
 )
 from .protocol import uri_for_kind
@@ -284,7 +285,13 @@ def get_batches():
 @app.post("/v1/batches/{batch_key}/resolve")
 async def resolve_batch(batch_key: str, decision: BatchResolveRequest):
     try:
-        items = store.resolve_batch(batch_key, decision.actor, decision.action, decision.comment)
+        items = store.resolve_batch(
+            batch_key,
+            decision.actor,
+            decision.action,
+            decision.comment,
+            actor_kind=decision.actor_kind,
+        )
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
 
@@ -362,7 +369,12 @@ async def resolve_request(rid: str, decision: ResolveRequest):
 
     resolution = decision.model_dump(mode="json")
     try:
-        req, finalized = store.resolve(rid, decision.actor, resolution)
+        req, finalized = store.resolve(
+            rid,
+            decision.actor,
+            resolution,
+            actor_kind=decision.actor_kind,
+        )
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
 
@@ -370,6 +382,39 @@ async def resolve_request(rid: str, decision: ResolveRequest):
     if finalized:
         delivery = await _resume_and_record(req, req.resolution or resolution)
     return {"request": req, "finalized": finalized, "resume": delivery}
+
+
+@app.post("/v1/requests/{rid}/outcome")
+def machine_outcome(rid: str, outcome: MachineOutcomeRequest):
+    existing = store.get(rid)
+    if not existing:
+        raise HTTPException(404, "request not found")
+    if existing.status.value in {"resolved", "cancelled", "expired", "superseded"}:
+        raise HTTPException(409, f"request is already {existing.status.value}")
+
+    try:
+        req = store.apply_machine_outcome(
+            rid,
+            actor=outcome.actor,
+            actor_kind=outcome.actor_kind,
+            outcome=outcome.outcome,
+            reason=outcome.reason,
+            metadata=outcome.metadata,
+        )
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {
+        "request": req,
+        "human_resolution": False,
+        "outcome": {
+            "actor": outcome.actor,
+            "actor_kind": outcome.actor_kind,
+            "status": outcome.outcome,
+            "reason": outcome.reason,
+        },
+    }
 
 
 @app.get("/v1/events/stream")
