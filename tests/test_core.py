@@ -1008,3 +1008,69 @@ def test_concurrent_duplicate_same_actor_resolution_is_idempotent(tmp_path: Path
         ).fetchall()
     assert len(votes) == 1
     assert votes[0]["actor"] == "alice"
+
+
+def test_terminal_compare_and_set_survives_repeated_human_timeout_races(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "terminal-cas-stress.db")
+    seed = Store(db)
+    human_store = Store(db)
+    system_store = Store(db)
+
+    for index in range(20):
+        item = seed.create(
+            req(
+                source="stress",
+                source_ref=f"race-{index}",
+                title=f"Race {index}",
+            )
+        )
+        start = threading.Barrier(2)
+
+        def human():
+            start.wait(timeout=5)
+            resolved, finalized = human_store.resolve(
+                item.id,
+                f"human-{index}",
+                {"action": "approve", "values": {"iteration": index}},
+                actor_kind="human",
+            )
+            return finalized, resolved.status.value if resolved else None
+
+        def timeout():
+            start.wait(timeout=5)
+            result = system_store.apply_machine_outcome(
+                item.id,
+                actor="deadline-worker",
+                actor_kind="system",
+                outcome="expired",
+                reason=f"deadline {index}",
+            )
+            return result.status.value if result else None
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            human_future = pool.submit(human)
+            timeout_future = pool.submit(timeout)
+            human_future.result(timeout=10)
+            timeout_future.result(timeout=10)
+
+        canonical = seed.get(item.id)
+        assert canonical is not None
+        assert canonical.status.value in {"resolved", "expired"}
+
+        events = seed.events(item.id)
+        terminal = [
+            event for event in events
+            if event["type"] in {"resolved", "machine_expired"}
+        ]
+        assert len(terminal) == 1, (index, canonical, events)
+
+        if canonical.status.value == "resolved":
+            assert terminal[0]["type"] == "resolved"
+            assert canonical.resolution is not None
+            assert canonical.resolution["provenance"]["actor_kind"] == "human"
+        else:
+            assert terminal[0]["type"] == "machine_expired"
+            assert canonical.resolution is None
