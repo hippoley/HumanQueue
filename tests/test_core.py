@@ -1076,11 +1076,12 @@ def test_concurrent_claim_has_one_owner(tmp_path: Path):
     winner = claim_events[0]["actor"]
     assert final.claimed_by == winner
 
-    successful = [
-        row for row in results
-        if row["error"] is None and row["claimed_by"] == winner
-    ]
-    assert len(successful) == 1, results
+    # Store.claim is a state-returning primitive: the racing loser is
+    # allowed to observe the winner's current ownership. Acquisition itself is
+    # proven by the single claimed event; HTTP converts a different-owner
+    # observation into 409.
+    assert all(row["error"] is None for row in results), results
+    assert {row["claimed_by"] for row in results} == {winner}, results
 
 
 def test_same_actor_reclaim_is_idempotent(tmp_path: Path):
