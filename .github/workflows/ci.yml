@@ -323,3 +323,47 @@ jobs:
           print("trust_after=" + str(after["trust_status"]))
           print("hook_hash=" + str(after["native_current_hash"]))
           PY
+
+          python -m venv .codex-upgrade-venv
+          .codex-upgrade-venv/bin/python -m pip install .
+          .codex-upgrade-venv/bin/humanq connect codex
+          .codex-upgrade-venv/bin/humanq verify codex --json > codex-runtime-moved.json
+          cat codex-runtime-moved.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          before = json.loads(Path("codex-readiness-after.json").read_text())
+          moved = json.loads(Path("codex-runtime-moved.json").read_text())
+
+          assert moved["hook_command_matches_current_runtime"] is True, moved
+          assert moved["native_hook_discovered"] is True, moved
+          assert moved["native_current_hash"], moved
+          assert moved["native_current_hash"] != before["native_current_hash"], (before, moved)
+          assert moved["trust_status"] in {"untrusted", "modified"}, moved
+          assert moved["ready_for_real_host_probe"] is False, moved
+          print("CODEX_RUNTIME_MOVE_INVALIDATES_TRUST_OK")
+          print("old_hash=" + str(before["native_current_hash"]))
+          print("new_hash=" + str(moved["native_current_hash"]))
+          print("trust_after_runtime_move=" + str(moved["trust_status"]))
+          PY
+
+          .codex-upgrade-venv/bin/humanq trust codex --json > codex-runtime-moved-trust.json
+          .codex-upgrade-venv/bin/humanq verify codex --json > codex-runtime-moved-after.json
+          cat codex-runtime-moved-trust.json
+          cat codex-runtime-moved-after.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          trust = json.loads(Path("codex-runtime-moved-trust.json").read_text())
+          after = json.loads(Path("codex-runtime-moved-after.json").read_text())
+
+          assert trust["trust_before"] in {"untrusted", "modified"}, trust
+          assert trust["trust_after"] in {"trusted", "managed"}, trust
+          assert after["trust_status"] in {"trusted", "managed"}, after
+          assert after["ready_for_real_host_probe"] is True, after
+          print("CODEX_RUNTIME_MOVE_RETRUST_OK")
+          PY
