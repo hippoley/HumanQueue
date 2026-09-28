@@ -47,6 +47,7 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 _outbox_task: asyncio.Task | None = None
+_resume_outbox_task: asyncio.Task | None = None
 
 
 async def _process_channel_outbox_request(rid: str) -> bool:
@@ -113,23 +114,123 @@ async def _channel_outbox_loop() -> None:
             await asyncio.sleep(0.5)
 
 
+async def _process_resume_outbox_request(rid: str) -> dict:
+    item = store.get(rid)
+    if item is None:
+        result = {
+            "delivered": False,
+            "confirmed": False,
+            "reason": "request_missing",
+        }
+        store.fail_resume_outbox(rid, result=result)
+        return result
+
+    if item.status.value != "resolved":
+        result = {
+            "delivered": False,
+            "confirmed": False,
+            "reason": f"request_not_resolved:{item.status.value}",
+        }
+        store.fail_resume_outbox(rid, result=result)
+        return result
+
+    try:
+        result = await resume(item, item.resolution or {})
+    except Exception as exc:
+        result = {
+            "delivered": False,
+            "confirmed": False,
+            "reason": "resume_internal_error",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    reason = result.get("reason")
+    if reason == "no_resume_target":
+        store.complete_resume_outbox(
+            rid,
+            result=result,
+            event_type="resume_not_applicable",
+        )
+    elif result.get("confirmed"):
+        store.complete_resume_outbox(
+            rid,
+            result=result,
+            event_type="resume_confirmed",
+        )
+    elif result.get("delivered"):
+        store.complete_resume_outbox(
+            rid,
+            result=result,
+            event_type="resume_delivered_unconfirmed",
+        )
+    else:
+        # A failed or acknowledgement-lost attempt is intentionally not retried.
+        # The receiver may already have executed the side effect.
+        store.fail_resume_outbox(
+            rid,
+            result=result,
+            event_type="resume_undeliverable",
+        )
+    return result
+
+
+async def _drain_resume_outbox_request(rid: str) -> dict | None:
+    claimed = store.claim_resume_outbox(
+        request_id=rid,
+        limit=1,
+        lease_seconds=30,
+    )
+    if not claimed:
+        row = store.resume_outbox(rid)
+        if row and row.get("result"):
+            try:
+                return json.loads(row["result"])
+            except Exception:
+                return None
+        return None
+    return await _process_resume_outbox_request(claimed[0])
+
+
+async def _resume_outbox_loop() -> None:
+    while True:
+        try:
+            claimed = store.claim_resume_outbox(limit=16, lease_seconds=30)
+            if not claimed:
+                await asyncio.sleep(0.25)
+                continue
+            for rid in claimed:
+                await _process_resume_outbox_request(rid)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Resume reconciliation must not crash the Gateway. A claimed
+            # attempt is never blindly replayed after ambiguity.
+            await asyncio.sleep(0.5)
+
+
 @app.on_event("startup")
-async def _start_channel_outbox_worker():
-    global _outbox_task
+async def _start_outbox_workers():
+    global _outbox_task, _resume_outbox_task
     if _outbox_task is None or _outbox_task.done():
         _outbox_task = asyncio.create_task(_channel_outbox_loop())
+    if _resume_outbox_task is None or _resume_outbox_task.done():
+        _resume_outbox_task = asyncio.create_task(_resume_outbox_loop())
 
 
 @app.on_event("shutdown")
-async def _stop_channel_outbox_worker():
-    global _outbox_task
-    if _outbox_task is not None:
-        _outbox_task.cancel()
-        try:
-            await _outbox_task
-        except asyncio.CancelledError:
-            pass
-        _outbox_task = None
+async def _stop_outbox_workers():
+    global _outbox_task, _resume_outbox_task
+    for task in (_outbox_task, _resume_outbox_task):
+        if task is not None:
+            task.cancel()
+    for task in (_outbox_task, _resume_outbox_task):
+        if task is not None:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    _outbox_task = None
+    _resume_outbox_task = None
 
 
 @app.middleware("http")
@@ -207,20 +308,21 @@ async def channel_resolve(name: str, rid: str, request: Request):
     return {"request": item, "finalized": finalized, "resume": delivery}
 
 async def _resume_and_record(item, resolution):
-    """Resume webhook-backed workflows without misclassifying native blocking connectors."""
+    """Deliver one finalized decision without losing webhook resume intent."""
+    if item.resume.mode == "webhook" and item.resume.url:
+        result = await _drain_resume_outbox_request(item.id)
+        return result or {
+            "delivered": False,
+            "confirmed": False,
+            "reason": "resume_queued",
+        }
+
+    # Native blocking connectors resume by observing canonical request state,
+    # so there is no external callback intent to persist.
     result = await resume(item, resolution)
-    reason = result.get("reason")
-    if reason == "no_resume_target":
-        event_type = "resume_not_applicable"
-    elif result.get("confirmed"):
-        event_type = "resume_confirmed"
-    elif result.get("delivered"):
-        event_type = "resume_delivered_unconfirmed"
-    else:
-        event_type = "resume_undeliverable"
     store.record_event(
         item.id,
-        event_type,
+        "resume_not_applicable",
         actor="resume",
         data=result,
     )
@@ -437,6 +539,7 @@ def get_request(rid: str):
         "request": req,
         "human_uri": uri_for_kind(req.kind),
         "events": store.events(rid),
+        "resume_outbox": store.resume_outbox(rid),
     }
 
 

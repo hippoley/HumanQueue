@@ -87,6 +87,19 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_channel_outbox_ready
                   ON channel_outbox(status, available_at, lease_until);
+                CREATE TABLE IF NOT EXISTS resume_outbox (
+                  request_id TEXT PRIMARY KEY,
+                  status TEXT NOT NULL,
+                  attempts INTEGER NOT NULL DEFAULT 0,
+                  available_at TEXT NOT NULL,
+                  lease_until TEXT,
+                  last_error TEXT,
+                  result TEXT,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_resume_outbox_ready
+                  ON resume_outbox(status, available_at, lease_until);
                 """
             )
             # Forward-migrate older MVP databases.
@@ -359,6 +372,36 @@ class Store:
                     "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
                     (rid, "resolved", actor, final_encoded, now),
                 )
+                if req.resume.mode == "webhook" and req.resume.url:
+                    c.execute(
+                        """
+                        INSERT OR IGNORE INTO resume_outbox(
+                            request_id,status,attempts,available_at,lease_until,
+                            last_error,result,created_at,updated_at
+                        ) VALUES (?,?,?,?,?,?,?,?,?)
+                        """,
+                        (
+                            rid,
+                            "pending",
+                            0,
+                            now,
+                            None,
+                            None,
+                            None,
+                            now,
+                            now,
+                        ),
+                    )
+                    c.execute(
+                        "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                        (
+                            rid,
+                            "resume_enqueued",
+                            "outbox",
+                            json.dumps({"mode": "webhook"}),
+                            now,
+                        ),
+                    )
             else:
                 c.execute("UPDATE requests SET status=?,updated_at=? WHERE id=?", (RequestStatus.claimed.value, now, rid))
                 c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (rid, "quorum_wait", actor, json.dumps({"required": required, "leading_votes": winning_count}), now))
@@ -477,6 +520,166 @@ class Store:
             )
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             return self._row_to_model(row, c)
+
+    def claim_resume_outbox(
+        self,
+        *,
+        request_id: str | None = None,
+        limit: int = 10,
+        lease_seconds: int = 30,
+    ) -> list[str]:
+        """Claim resume work exactly once per automatic attempt.
+
+        Expired processing leases become uncertain rather than being replayed.
+        Once an external side effect may have happened, automatic retry would risk
+        duplicate execution.
+        """
+
+        now_dt = self._now()
+        now = now_dt.isoformat()
+        lease_until = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
+        with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+
+            stale = c.execute(
+                """
+                SELECT request_id FROM resume_outbox
+                WHERE status='processing'
+                  AND lease_until IS NOT NULL
+                  AND lease_until<=?
+                """,
+                (now,),
+            ).fetchall()
+            for row in stale:
+                rid = str(row["request_id"])
+                c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status='uncertain',
+                        lease_until=NULL,
+                        last_error=?,
+                        updated_at=?
+                    WHERE request_id=? AND status='processing'
+                    """,
+                    (
+                        "worker disappeared during resume attempt; delivery state is uncertain",
+                        now,
+                        rid,
+                    ),
+                )
+                c.execute(
+                    "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                    (
+                        rid,
+                        "resume_delivery_uncertain",
+                        "outbox",
+                        json.dumps({
+                            "reason": "processing lease expired",
+                            "automatic_retry": False,
+                        }),
+                        now,
+                    ),
+                )
+
+            params: list[Any] = [now]
+            where = "status='pending' AND available_at<=?"
+            if request_id is not None:
+                where += " AND request_id=?"
+                params.append(request_id)
+            params.append(limit)
+            rows = c.execute(
+                f"SELECT request_id FROM resume_outbox WHERE {where} ORDER BY created_at LIMIT ?",
+                tuple(params),
+            ).fetchall()
+            ids = [str(row["request_id"]) for row in rows]
+            for rid in ids:
+                c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status='processing',
+                        attempts=attempts+1,
+                        lease_until=?,
+                        updated_at=?
+                    WHERE request_id=? AND status='pending'
+                    """,
+                    (lease_until, now, rid),
+                )
+                c.execute(
+                    "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                    (
+                        rid,
+                        "resume_delivery_claimed",
+                        "outbox",
+                        json.dumps({"lease_until": lease_until, "automatic_attempt": 1}),
+                        now,
+                    ),
+                )
+            return ids
+
+    def complete_resume_outbox(
+        self,
+        rid: str,
+        *,
+        result: dict[str, Any],
+        event_type: str,
+    ) -> None:
+        now = self._now().isoformat()
+        encoded = json.dumps(result, default=str)
+        with self.lock, self._conn() as c:
+            c.execute(
+                """
+                UPDATE resume_outbox
+                SET status='done',
+                    lease_until=NULL,
+                    last_error=NULL,
+                    result=?,
+                    updated_at=?
+                WHERE request_id=? AND status='processing'
+                """,
+                (encoded, now, rid),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, event_type, "resume", encoded, now),
+            )
+
+    def fail_resume_outbox(
+        self,
+        rid: str,
+        *,
+        result: dict[str, Any],
+        event_type: str = "resume_undeliverable",
+    ) -> None:
+        """Record one failed or ambiguous automatic attempt without scheduling replay."""
+
+        now = self._now().isoformat()
+        encoded = json.dumps(result, default=str)
+        error = str(result.get("error") or result.get("reason") or "resume failed")
+        with self.lock, self._conn() as c:
+            c.execute(
+                """
+                UPDATE resume_outbox
+                SET status='failed',
+                    lease_until=NULL,
+                    last_error=?,
+                    result=?,
+                    updated_at=?
+                WHERE request_id=? AND status='processing'
+                """,
+                (error[:2000], encoded, now, rid),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, event_type, "resume", encoded, now),
+            )
+
+    def resume_outbox(self, rid: str) -> dict[str, Any] | None:
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+        return dict(row) if row else None
 
     def claim_channel_outbox(
         self,
@@ -610,6 +813,7 @@ class Store:
             c.execute("DELETE FROM votes")
             c.execute("DELETE FROM events")
             c.execute("DELETE FROM channel_outbox")
+            c.execute("DELETE FROM resume_outbox")
             c.execute("DELETE FROM requests")
 
     def policy_sandbox(self, policy_key: str, proposed_action: str | None = None) -> dict[str, Any]:
@@ -669,6 +873,9 @@ class Store:
                   AND type IN (
                     'channel_delivered',
                     'channel_undeliverable',
+                    'resume_enqueued',
+                    'resume_delivery_claimed',
+                    'resume_delivery_uncertain',
                     'resume_confirmed',
                     'resume_delivered_unconfirmed',
                     'resume_undeliverable',
@@ -677,6 +884,9 @@ class Store:
                 GROUP BY type
                 """,
                 (day,),
+            ).fetchall()
+            resume_rows = c.execute(
+                "SELECT status,COUNT(*) n FROM resume_outbox GROUP BY status"
             ).fetchall()
         attention_seconds = 0
         resolved = 0
@@ -708,6 +918,7 @@ class Store:
                 "avg_time_to_resolution_seconds": round(sum(decision_seconds)/len(decision_seconds), 1) if decision_seconds else None,
             },
             "integrity_last_24h": {r["type"]: r["n"] for r in integrity_rows},
+            "resume_outbox": {r["status"]: r["n"] for r in resume_rows},
         }
 
     def frontier(self, min_samples: int = 5, min_agreement: float = 0.9) -> list[dict[str, Any]]:

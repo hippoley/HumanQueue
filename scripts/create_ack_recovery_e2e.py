@@ -276,7 +276,12 @@ print("CREATE_ACK_SIDE_EFFECT_EXECUTED True", flush=True)
                     for row in queue.get("items", [])
                     if row.get("source") == "create-ack-e2e"
                 ]
-                if matches and state.human_posts >= 2:
+                if (
+                    matches
+                    and state.human_posts >= 2
+                    and len(state.response_request_ids) >= 2
+                    and len(state.created_flags) >= 2
+                ):
                     item = matches[0]
                     break
                 if child.poll() is not None:

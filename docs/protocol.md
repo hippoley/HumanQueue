@@ -132,9 +132,30 @@ This avoids treating “HTTP 200” as proof that the correct waiting session co
 
 ### Resume retry / dedup semantics
 
-human:// currently makes **one webhook resume attempt per finalized boundary**. It does not automatically retry an ambiguous resume transport failure.
+For webhook-backed boundaries, the human resolution and the intent to resume the machine are committed in the **same SQLite transaction**. A finalized request therefore creates a durable `resume_outbox` row before the resolve transaction can become visible.
 
-That choice is deliberate: a target may execute the side effect and then lose the HTTP acknowledgement. Blindly retrying from the Gateway could execute the same machine action twice.
+The automatic state machine is:
+
+```
+resolved + webhook
+        ↓
+pending resume intent
+        ↓
+processing (one automatic attempt)
+        ├─ confirmed / transport accepted → done
+        ├─ explicit transport failure     → failed
+        └─ worker disappears mid-attempt → uncertain
+```
+
+This closes the crash window where a human decision is durable but the Gateway dies before it even begins the callback. On restart, a still-`pending` intent is safe to claim and send.
+
+Once an attempt has entered `processing`, the rule changes. If that worker disappears and its lease expires, human:// marks the row `uncertain` and **does not automatically replay it**. The remote system may already have executed the side effect even though the local completion record was never committed.
+
+So human:// makes **at most one automatic webhook resume attempt per finalized boundary**. It does not automatically retry an ambiguous resume transport failure or an abandoned in-flight attempt.
+
+That choice is deliberate: a target may execute the side effect and then lose the HTTP acknowledgement, or the Gateway may crash immediately after remote acceptance. Blindly retrying could execute the same machine action twice.
+
+The outbox status is exposed on request details and in integrity metrics as `pending | processing | done | failed | uncertain`. `uncertain` is an operator-visible integrity condition, not a hidden retry queue.
 
 For the same canonical request + same canonical resolution, the callback transport identity is stable:
 
@@ -148,13 +169,21 @@ A target that supports replay/manual retry should therefore deduplicate by canon
 Current guarantee:
 
 ```
-one finalized boundary
-→ at most one automatic resume attempt from human://
+resolved decision + webhook target
+→ durable pre-send intent
+→ at most one automatic resume attempt
+
+crash before attempt
+→ recover automatically
+
+crash / ACK loss after attempt may have reached receiver
+→ failed or uncertain
+→ no automatic replay
 ```
 
-—not distributed exactly-once execution.
+This is **not distributed exactly-once execution**.
 
-A dropped acknowledgement after receiver-side execution is audited as `resume_undeliverable`; human:// does not infer that the side effect did not happen and does not automatically resend it.
+A dropped acknowledgement after receiver-side execution is audited as `resume_undeliverable`; an abandoned processing lease becomes `resume_delivery_uncertain`. human:// does not infer that the side effect did not happen and does not automatically resend either case.
 
 ## Durable human-facing channel delivery
 
