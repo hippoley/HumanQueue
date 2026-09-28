@@ -23,6 +23,7 @@ from .models import (
     ImportEnvelope,
     MachineOutcomeRequest,
     ResolveRequest,
+    ResumeReconcileRequest,
 )
 from .protocol import uri_for_kind
 from .presence_registry import PresenceRegistry, PresenceUpdate
@@ -591,6 +592,40 @@ async def resolve_request(rid: str, decision: ResolveRequest):
     if finalized:
         delivery = await _resume_and_record(req, req.resolution or resolution)
     return {"request": req, "finalized": finalized, "resume": delivery}
+
+
+@app.post("/v1/requests/{rid}/resume-reconcile")
+async def reconcile_resume(
+    rid: str,
+    reconciliation: ResumeReconcileRequest,
+    background_tasks: BackgroundTasks,
+):
+    req = store.get(rid)
+    if not req:
+        raise HTTPException(404, "request not found")
+    try:
+        outbox = store.reconcile_resume_outbox(
+            rid,
+            actor=reconciliation.actor,
+            action=reconciliation.action,
+            reason=reconciliation.reason,
+            receiver_dedup_confirmed=reconciliation.receiver_dedup_confirmed,
+        )
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    if reconciliation.action == "retry":
+        background_tasks.add_task(_drain_resume_outbox_request, rid)
+
+    return {
+        "request": store.get(rid),
+        "resume_outbox": outbox,
+        "reconciliation": reconciliation,
+    }
 
 
 @app.post("/v1/requests/{rid}/outcome")
