@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import socket
@@ -28,12 +29,25 @@ def request_json(method: str, url: str, token: str | None = None, payload: dict 
         return json.loads(response.read().decode("utf-8"))
 
 
-def wait_for_opencode_server(url: str, timeout: float = 15.0) -> dict:
+def wait_for_opencode_server(
+    url: str,
+    *,
+    username: str,
+    password: str,
+    timeout: float = 15.0,
+) -> dict:
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
+    auth = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
     while time.monotonic() < deadline:
         try:
-            body = request_json("GET", url + "/api/info")
+            req = urllib.request.Request(
+                url + "/api/info",
+                headers={"Authorization": "Basic " + auth},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=2) as response:
+                body = json.loads(response.read().decode("utf-8"))
             if body.get("version"):
                 return body
         except Exception as exc:
@@ -381,6 +395,10 @@ def main() -> None:
             child_env["OPENCODE_DISABLE_MODELS_FETCH"] = "1"
             child_env["OPENCODE_DISABLE_LSP_DOWNLOAD"] = "1"
             child_env["HUMANQ_STUB_API_KEY"] = "humanq-ci-dummy"
+            server_username = "opencode"
+            server_password = "humanq-ci-server"
+            child_env["OPENCODE_SERVER_USERNAME"] = server_username
+            child_env["OPENCODE_SERVER_PASSWORD"] = server_password
 
             debug_config = subprocess.run(
                 ["opencode", "debug", "config"],
@@ -447,7 +465,11 @@ def main() -> None:
                 stderr=subprocess.STDOUT,
             )
             server_url = f"http://127.0.0.1:{opencode_port}"
-            server_info = wait_for_opencode_server(server_url)
+            server_info = wait_for_opencode_server(
+                server_url,
+                username=server_username,
+                password=server_password,
+            )
             print("attached_server_info=" + json.dumps(server_info, sort_keys=True), flush=True)
 
             child = subprocess.Popen(
@@ -456,6 +478,10 @@ def main() -> None:
                     "run",
                     "--attach",
                     server_url,
+                    "--username",
+                    server_username,
+                    "--password",
+                    server_password,
                     "--model",
                     "local/coder",
                     (
