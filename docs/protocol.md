@@ -130,6 +130,32 @@ The resulting audit semantics are:
 
 This avoids treating “HTTP 200” as proof that the correct waiting session consumed the decision.
 
+### Resume retry / dedup semantics
+
+human:// currently makes **one webhook resume attempt per finalized boundary**. It does not automatically retry an ambiguous resume transport failure.
+
+That choice is deliberate: a target may execute the side effect and then lose the HTTP acknowledgement. Blindly retrying from the Gateway could execute the same machine action twice.
+
+For the same canonical request + same canonical resolution, the callback transport identity is stable:
+
+- JSON body is deterministic;
+- `request_id` is the canonical deduplication identity;
+- `x-attention-request-id` is the same canonical ID;
+- when a secret is configured, the HMAC signature is deterministic for the same body.
+
+A target that supports replay/manual retry should therefore deduplicate by canonical `request_id` before executing the external side effect.
+
+Current guarantee:
+
+```
+one finalized boundary
+→ at most one automatic resume attempt from human://
+```
+
+—not distributed exactly-once execution.
+
+A dropped acknowledgement after receiver-side execution is audited as `resume_undeliverable`; human:// does not infer that the side effect did not happen and does not automatically resend it.
+
 ## Durable human-facing channel delivery
 
 Request creation and the intent to notify configured human-facing channels are committed in the **same SQLite transaction**.
