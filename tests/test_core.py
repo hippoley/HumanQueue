@@ -826,3 +826,131 @@ def test_concurrent_conflicting_quorum_votes_never_finalize(tmp_path: Path):
             (item.id,),
         ).fetchall()
     assert resolved_events == []
+
+
+def test_concurrent_resolvers_produce_one_canonical_winner(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "concurrent-resolution.db")
+    seed = Store(db)
+    left = Store(db)
+    right = Store(db)
+    item = seed.create(req())
+    start = threading.Barrier(2)
+
+    def resolve(store: Store, actor: str, action: str):
+        start.wait(timeout=5)
+        resolved, finalized = store.resolve(
+            item.id,
+            actor,
+            {"action": action, "values": {"actor": actor}},
+            actor_kind="human",
+        )
+        return {
+            "actor": actor,
+            "action": action,
+            "finalized": finalized,
+            "status": resolved.status.value if resolved else None,
+            "resolution": resolved.resolution if resolved else None,
+        }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(resolve, left, "alice", "approve")
+        b = pool.submit(resolve, right, "bob", "reject")
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    winners = [result for result in results if result["finalized"]]
+    losers = [result for result in results if not result["finalized"]]
+    assert len(winners) == 1, results
+    assert len(losers) == 1, results
+
+    canonical = seed.get(item.id)
+    assert canonical is not None
+    assert canonical.status.value == "resolved"
+    assert canonical.resolution is not None
+    assert canonical.resolution["action"] == winners[0]["action"]
+    assert canonical.resolution["provenance"]["actor"] == winners[0]["actor"]
+
+    assert losers[0]["status"] == "resolved"
+    assert losers[0]["resolution"] == canonical.resolution
+
+    events = seed.events(item.id)
+    resolved_events = [event for event in events if event["type"] == "resolved"]
+    vote_events = [event for event in events if event["type"] == "vote"]
+    assert len(resolved_events) == 1, events
+    assert len(vote_events) == 1, events
+    assert resolved_events[0]["data"]["action"] == canonical.resolution["action"]
+
+    with seed._conn() as c:
+        votes = c.execute(
+            "SELECT actor,resolution FROM votes WHERE request_id=?",
+            (item.id,),
+        ).fetchall()
+    assert len(votes) == 1
+
+
+def test_human_resolution_and_machine_timeout_race_has_one_terminal_outcome(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "human-vs-timeout-race.db")
+    seed = Store(db)
+    human_store = Store(db)
+    system_store = Store(db)
+    item = seed.create(req())
+    start = threading.Barrier(2)
+
+    def human():
+        start.wait(timeout=5)
+        resolved, finalized = human_store.resolve(
+            item.id,
+            "alice",
+            {"action": "approve", "values": {"safe": True}},
+            actor_kind="human",
+        )
+        return {
+            "kind": "human",
+            "finalized": finalized,
+            "status": resolved.status.value if resolved else None,
+        }
+
+    def timeout():
+        start.wait(timeout=5)
+        result = system_store.apply_machine_outcome(
+            item.id,
+            actor="deadline-worker",
+            actor_kind="system",
+            outcome="expired",
+            reason="approval deadline elapsed",
+        )
+        return {
+            "kind": "system",
+            "status": result.status.value if result else None,
+        }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(human)
+        b = pool.submit(timeout)
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    canonical = seed.get(item.id)
+    assert canonical is not None
+    assert canonical.status.value in {"resolved", "expired"}
+
+    events = seed.events(item.id)
+    resolved_events = [event for event in events if event["type"] == "resolved"]
+    expired_events = [event for event in events if event["type"] == "machine_expired"]
+
+    assert len(resolved_events) + len(expired_events) == 1, (results, events)
+
+    if canonical.status.value == "resolved":
+        assert len(resolved_events) == 1
+        assert len(expired_events) == 0
+        assert canonical.resolution is not None
+        assert canonical.resolution["action"] == "approve"
+        assert canonical.resolution["provenance"]["actor_kind"] == "human"
+    else:
+        assert len(expired_events) == 1
+        assert len(resolved_events) == 0
+        assert canonical.resolution is None
