@@ -190,6 +190,90 @@ print("RESTART_SIDE_EFFECT_EXECUTED True", flush=True)
 
             print("PACKAGED_GATEWAY_RESTART_RECOVERY_OK")
             print(f"request_id={request_id}")
+
+            timeout_code = r'''
+import json
+from humanqueue import HumanBoundary
+
+print("TIMEOUT_ASK_STARTED", flush=True)
+try:
+    HumanBoundary(timeout=0.25).ask(
+        "human://clarify",
+        source="gateway-timeout-e2e",
+        ref="timeout-run-001",
+        title="Keep canonical boundary pending after caller timeout?",
+        wait=True,
+        wait_timeout=1.0,
+        poll_interval=0.1,
+    )
+except TimeoutError as exc:
+    print("WAIT_TIMEOUT_OK " + str(exc), flush=True)
+else:
+    raise AssertionError("wait unexpectedly returned without a human decision")
+'''
+            timeout_child = subprocess.Popen(
+                [sys.executable, "-c", timeout_code],
+                cwd=root,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            timeout_item = wait_for_pending(base_url, token, timeout_child)
+            timeout_request_id = str(timeout_item["id"])
+
+            stop_gateway(gateway)
+            print("GATEWAY_LONG_OUTAGE_INJECTED")
+            time.sleep(1.4)
+
+            timeout_output, _ = timeout_child.communicate(timeout=5)
+            if timeout_child.returncode != 0:
+                raise RuntimeError(
+                    "wait_timeout probe failed unexpectedly:\n" + timeout_output
+                )
+            if "WAIT_TIMEOUT_OK" not in timeout_output:
+                raise RuntimeError(
+                    "caller did not honor wait_timeout during persistent outage:\n"
+                    + timeout_output
+                )
+            if "last transport error" not in timeout_output:
+                raise RuntimeError(
+                    "timeout did not retain transport failure context:\n" + timeout_output
+                )
+
+            gateway = start_gateway(root, env)
+            wait_for_health(base_url)
+
+            timeout_detail = request_json(
+                "GET",
+                base_url + f"/v1/requests/{timeout_request_id}",
+                token,
+            )
+            timeout_request = timeout_detail["request"]
+            if timeout_request["status"] != "pending":
+                raise RuntimeError(
+                    "caller wait timeout mutated canonical boundary lifecycle: "
+                    + json.dumps(timeout_request)
+                )
+            if timeout_request.get("resolution") is not None:
+                raise RuntimeError(
+                    "caller wait timeout fabricated a human resolution: "
+                    + json.dumps(timeout_request)
+                )
+
+            request_json(
+                "POST",
+                base_url + f"/v1/requests/{timeout_request_id}/outcome",
+                token,
+                {
+                    "actor": "restart-e2e-cleanup",
+                    "actor_kind": "service",
+                    "outcome": "cancelled",
+                    "reason": "test cleanup after proving caller timeout semantics",
+                },
+            )
+            print("PACKAGED_WAIT_TIMEOUT_PRESERVES_BOUNDARY_OK")
+            print(f"timeout_request_id={timeout_request_id}")
         finally:
             if child is not None and child.poll() is None:
                 child.kill()
