@@ -214,6 +214,7 @@ A native hook returning a decision proves only that human:// returned a decision
 - A system event, timeout, policy action, or service callback is not a human answer.
 - Source `Stop`, turn completion, or session teardown does not implicitly resolve a still-pending human boundary; clearing it requires an explicit answered/dismissed/expired/cancelled/replaced transition.
 - Terminal transitions are single-winner compare-and-set operations. Concurrent human decisions and human-vs-machine outcome races may produce only one canonical terminal event; losing contenders must leave no semantic side effects.
+- Supersession competes on the same lifecycle boundary: a resolved request cannot later become superseded, a superseded request cannot later resolve, and concurrent replacements must leave exactly one active tip.
 - A human-only boundary must reject non-human `actor_kind` on the resolution path.
 - `batch` means “review together,” not “approve together automatically.”
 - `defer` means “do not interrupt now,” not “discard the obligation.”
