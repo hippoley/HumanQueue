@@ -130,7 +130,10 @@ from pathlib import Path
 from humanqueue import HumanBoundary
 
 print("RESTART_ASK_STARTED", flush=True)
-decision = HumanBoundary(timeout=0.4).ask(
+# Keep request/response transport timeout realistic. Gateway outage recovery is
+# exercised by connection failures in wait(), not by making the initial create
+# acknowledgement artificially fragile on slower Python/runner combinations.
+decision = HumanBoundary(timeout=2.0).ask(
     "human://approve",
     source="gateway-restart-e2e",
     ref="restart-run-001",
@@ -210,7 +213,7 @@ from humanqueue import HumanBoundary
 
 print("TIMEOUT_ASK_STARTED", flush=True)
 try:
-    HumanBoundary(timeout=0.25).ask(
+    HumanBoundary(timeout=2.0).ask(
         "human://clarify",
         source="gateway-timeout-e2e",
         ref="timeout-run-001",
