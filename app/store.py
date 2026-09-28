@@ -360,6 +360,9 @@ class Store:
 
         now = self._now().isoformat()
         with self.lock, self._conn() as c:
+            # Human resolution and machine terminal outcomes must contend on
+            # the same database transaction boundary across Gateway workers.
+            c.execute("BEGIN IMMEDIATE")
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             if not row:
                 return None
