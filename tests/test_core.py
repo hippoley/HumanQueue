@@ -954,3 +954,57 @@ def test_human_resolution_and_machine_timeout_race_has_one_terminal_outcome(tmp_
         assert len(expired_events) == 1
         assert len(resolved_events) == 0
         assert canonical.resolution is None
+
+
+def test_concurrent_duplicate_same_actor_resolution_is_idempotent(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "concurrent-same-actor-resolution.db")
+    seed = Store(db)
+    left = Store(db)
+    right = Store(db)
+    item = seed.create(req())
+    start = threading.Barrier(2)
+
+    def submit(store: Store):
+        start.wait(timeout=5)
+        resolved, finalized = store.resolve(
+            item.id,
+            "alice",
+            {"action": "approve", "values": {"ticket": "same"}},
+            actor_kind="human",
+        )
+        return {
+            "finalized": finalized,
+            "status": resolved.status.value if resolved else None,
+            "resolution": resolved.resolution if resolved else None,
+        }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(submit, left)
+        b = pool.submit(submit, right)
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert sum(1 for result in results if result["finalized"]) == 1, results
+
+    canonical = seed.get(item.id)
+    assert canonical is not None
+    assert canonical.status.value == "resolved"
+    assert canonical.resolution is not None
+    assert canonical.resolution["action"] == "approve"
+
+    # Both callers converge on the exact same canonical decision.
+    assert all(result["resolution"] == canonical.resolution for result in results)
+
+    events = seed.events(item.id)
+    assert len([event for event in events if event["type"] == "vote"]) == 1, events
+    assert len([event for event in events if event["type"] == "resolved"]) == 1, events
+
+    with seed._conn() as c:
+        votes = c.execute(
+            "SELECT actor,resolution FROM votes WHERE request_id=?",
+            (item.id,),
+        ).fetchall()
+    assert len(votes) == 1
+    assert votes[0]["actor"] == "alice"
