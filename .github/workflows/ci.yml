@@ -113,6 +113,10 @@ jobs:
         run: |
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/resume_ack_loss_e2e.py"
+      - name: Probe crash after decision commit before resume
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/resume_commit_crash_probe.py"
       - name: Verify packaged runtime assets
         run: |
           python - <<'PY'
