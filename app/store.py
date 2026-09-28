@@ -75,6 +75,18 @@ class Store:
                   policy TEXT NOT NULL,
                   updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS resume_outbox (
+                  request_id TEXT PRIMARY KEY,
+                  state TEXT NOT NULL,
+                  attempts INTEGER NOT NULL DEFAULT 0,
+                  next_attempt_at TEXT NOT NULL,
+                  lease_until TEXT,
+                  last_result TEXT,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_resume_outbox_due
+                  ON resume_outbox(state, next_attempt_at, lease_until);
                 """
             )
             # Forward-migrate older MVP databases.
@@ -303,12 +315,215 @@ class Store:
                 final_encoded = json.dumps(winning)
                 c.execute("UPDATE requests SET status=?,resolved_by=?,resolution=?,updated_at=? WHERE id=?", (RequestStatus.resolved.value, actor, final_encoded, now, rid))
                 c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (rid, "resolved", actor, final_encoded, now))
+                if req.resume.mode == "webhook" and req.resume.url:
+                    queued = c.execute(
+                        """
+                        INSERT OR IGNORE INTO resume_outbox(
+                          request_id,state,attempts,next_attempt_at,lease_until,last_result,created_at,updated_at
+                        ) VALUES (?,?,?,?,?,?,?,?)
+                        """,
+                        (rid, "pending", 0, now, None, None, now, now),
+                    )
+                    if queued.rowcount:
+                        c.execute(
+                            "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                            (
+                                rid,
+                                "resume_queued",
+                                "resume",
+                                json.dumps({"delivery": "webhook", "idempotency_key": rid}),
+                                now,
+                            ),
+                        )
             else:
                 c.execute("UPDATE requests SET status=?,updated_at=? WHERE id=?", (RequestStatus.claimed.value, now, rid))
                 c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (rid, "quorum_wait", actor, json.dumps({"required": required, "leading_votes": winning_count}), now))
 
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             return self._row_to_model(row, c), finalized
+
+    def claim_resume(
+        self,
+        rid: str,
+        *,
+        lease_seconds: int = 30,
+    ) -> AttentionRequest | None:
+        """Lease one durable resume obligation across Gateway workers."""
+
+        now_dt = self._now()
+        now = now_dt.isoformat()
+        lease_until = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
+        with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            outbox = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            if not outbox:
+                return None
+
+            eligible = (
+                outbox["state"] == "pending"
+                and outbox["next_attempt_at"] <= now
+            ) or (
+                outbox["state"] == "in_flight"
+                and (not outbox["lease_until"] or outbox["lease_until"] <= now)
+            )
+            if not eligible:
+                return None
+
+            updated = c.execute(
+                """
+                UPDATE resume_outbox
+                SET state='in_flight',
+                    attempts=attempts+1,
+                    lease_until=?,
+                    updated_at=?
+                WHERE request_id=?
+                  AND (
+                    (state='pending' AND next_attempt_at<=?)
+                    OR
+                    (state='in_flight' AND (lease_until IS NULL OR lease_until<=?))
+                  )
+                """,
+                (lease_until, now, rid, now, now),
+            )
+            if updated.rowcount != 1:
+                return None
+
+            row = c.execute(
+                "SELECT * FROM requests WHERE id=?",
+                (rid,),
+            ).fetchone()
+            if not row:
+                c.execute("DELETE FROM resume_outbox WHERE request_id=?", (rid,))
+                return None
+            return self._row_to_model(row, c)
+
+    def claim_due_resumes(
+        self,
+        *,
+        limit: int = 20,
+        lease_seconds: int = 30,
+    ) -> list[AttentionRequest]:
+        """Claim due or abandoned resume obligations with a bounded lease."""
+
+        now_dt = self._now()
+        now = now_dt.isoformat()
+        lease_until = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
+        claimed: list[AttentionRequest] = []
+        with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            rows = c.execute(
+                """
+                SELECT request_id
+                FROM resume_outbox
+                WHERE
+                  (state='pending' AND next_attempt_at<=?)
+                  OR
+                  (state='in_flight' AND (lease_until IS NULL OR lease_until<=?))
+                ORDER BY next_attempt_at, created_at
+                LIMIT ?
+                """,
+                (now, now, limit),
+            ).fetchall()
+
+            for outbox in rows:
+                rid = outbox["request_id"]
+                updated = c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET state='in_flight',
+                        attempts=attempts+1,
+                        lease_until=?,
+                        updated_at=?
+                    WHERE request_id=?
+                      AND (
+                        (state='pending' AND next_attempt_at<=?)
+                        OR
+                        (state='in_flight' AND (lease_until IS NULL OR lease_until<=?))
+                      )
+                    """,
+                    (lease_until, now, rid, now, now),
+                )
+                if updated.rowcount != 1:
+                    continue
+                row = c.execute(
+                    "SELECT * FROM requests WHERE id=?",
+                    (rid,),
+                ).fetchone()
+                if not row:
+                    c.execute("DELETE FROM resume_outbox WHERE request_id=?", (rid,))
+                    continue
+                claimed.append(self._row_to_model(row, c))
+        return claimed
+
+    def finish_resume_attempt(
+        self,
+        rid: str,
+        result: dict[str, Any],
+        *,
+        retry_delay_seconds: float | None = None,
+    ) -> None:
+        """Persist the transport result and either complete or requeue the obligation."""
+
+        now_dt = self._now()
+        now = now_dt.isoformat()
+        encoded = json.dumps(result, default=str)
+        with self.lock, self._conn() as c:
+            row = c.execute(
+                "SELECT attempts FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            if not row:
+                return
+
+            if result.get("confirmed") is True:
+                c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET state='done', lease_until=NULL, last_result=?, updated_at=?
+                    WHERE request_id=?
+                    """,
+                    (encoded, now, rid),
+                )
+                return
+
+            attempts = int(row["attempts"] or 0)
+            delay = (
+                float(retry_delay_seconds)
+                if retry_delay_seconds is not None
+                else min(30.0, max(1.0, 2.0 ** min(attempts - 1, 5)))
+            )
+            next_attempt = (
+                now_dt + timedelta(seconds=max(0.0, delay))
+            ).isoformat()
+            c.execute(
+                """
+                UPDATE resume_outbox
+                SET state='pending',
+                    next_attempt_at=?,
+                    lease_until=NULL,
+                    last_result=?,
+                    updated_at=?
+                WHERE request_id=?
+                """,
+                (next_attempt, encoded, now, rid),
+            )
+
+    def resume_outbox(self, rid: str) -> dict[str, Any] | None:
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            if not row:
+                return None
+            out = dict(row)
+            out["last_result"] = (
+                json.loads(out["last_result"]) if out["last_result"] else None
+            )
+            return out
 
     def resolve_batch(
         self,
@@ -430,6 +645,7 @@ class Store:
     def clear_all(self) -> None:
         """Developer/demo helper. Production deployments should manage retention explicitly."""
         with self.lock, self._conn() as c:
+            c.execute("DELETE FROM resume_outbox")
             c.execute("DELETE FROM votes")
             c.execute("DELETE FROM events")
             c.execute("DELETE FROM requests")
