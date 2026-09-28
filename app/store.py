@@ -873,6 +873,9 @@ class Store:
                   AND type IN (
                     'channel_delivered',
                     'channel_undeliverable',
+                    'resume_enqueued',
+                    'resume_delivery_claimed',
+                    'resume_delivery_uncertain',
                     'resume_confirmed',
                     'resume_delivered_unconfirmed',
                     'resume_undeliverable',
@@ -881,6 +884,9 @@ class Store:
                 GROUP BY type
                 """,
                 (day,),
+            ).fetchall()
+            resume_rows = c.execute(
+                "SELECT status,COUNT(*) n FROM resume_outbox GROUP BY status"
             ).fetchall()
         attention_seconds = 0
         resolved = 0
@@ -912,6 +918,7 @@ class Store:
                 "avg_time_to_resolution_seconds": round(sum(decision_seconds)/len(decision_seconds), 1) if decision_seconds else None,
             },
             "integrity_last_24h": {r["type"]: r["n"] for r in integrity_rows},
+            "resume_outbox": {r["status"]: r["n"] for r in resume_rows},
         }
 
     def frontier(self, min_samples: int = 5, min_agreement: float = 0.9) -> list[dict[str, Any]]:
