@@ -378,6 +378,16 @@ async def resolve_request(rid: str, decision: ResolveRequest):
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
 
+    if not req:
+        raise HTTPException(404, "request not found")
+
+    # The optimistic pre-check above is only a UX fast path. Another Gateway
+    # worker may finalize the same boundary before this worker acquires the
+    # SQLite write lock. Store.resolve returns finalized=False for that race so
+    # this worker must not deliver/resume the same machine action again.
+    if not finalized and req.status.value in {"resolved", "cancelled", "expired", "superseded"}:
+        raise HTTPException(409, f"request is already {req.status.value}")
+
     delivery = {"delivered": False, "reason": "waiting_for_quorum"}
     if finalized:
         delivery = await _resume_and_record(req, req.resolution or resolution)

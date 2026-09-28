@@ -235,11 +235,23 @@ class Store:
     ) -> tuple[AttentionRequest | None, bool]:
         now = self._now().isoformat()
         with self.lock, self._conn() as c:
+            # Serialize the read-modify-write decision across independent Store
+            # instances / Gateway workers sharing the same SQLite database.
+            # A per-process threading.Lock cannot protect another worker.
+            c.execute("BEGIN IMMEDIATE")
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             if not row:
                 return None, False
-            if row["status"] in (RequestStatus.resolved.value, RequestStatus.cancelled.value, RequestStatus.expired.value, RequestStatus.superseded.value):
-                return self._row_to_model(row, c), row["status"] == RequestStatus.resolved.value
+            if row["status"] in (
+                RequestStatus.resolved.value,
+                RequestStatus.cancelled.value,
+                RequestStatus.expired.value,
+                RequestStatus.superseded.value,
+            ):
+                # False means *this call* did not finalize the boundary. This is
+                # crucial because callers use the flag to decide whether to
+                # resume the underlying machine execution.
+                return self._row_to_model(row, c), False
 
             req = AttentionRequestCreate.model_validate(json.loads(row["payload"]))
             if req.route.actors and actor not in req.route.actors:
