@@ -130,9 +130,39 @@ The resulting audit semantics are:
 
 This avoids treating “HTTP 200” as proof that the correct waiting session consumed the decision.
 
-## Responder identity boundary
+## Decision provenance and responder identity
 
-human:// currently enforces responder policy with `route.actors`, but those actor strings are only as trustworthy as the surface that supplies them.
+A human boundary must distinguish **who/what produced an outcome** from the outcome itself.
+
+By default, `RoutePolicy.required_actor_kind = "human"`. The normal resolve path accepts an explicit provenance class:
+
+```json
+{
+  "actor": "alice",
+  "actor_kind": "human",
+  "action": "approve"
+}
+```
+
+`actor_kind` may be `human`, `system`, `policy`, or `service`. A request that requires human authority rejects non-human provenance on the resolution path.
+
+Machine lifecycle events use a separate endpoint and terminal state:
+
+```json
+POST /v1/requests/attn_.../outcome
+{
+  "actor": "timeout-worker",
+  "actor_kind": "system",
+  "outcome": "expired",
+  "reason": "deadline elapsed"
+}
+```
+
+That transition leaves `resolution = null`. Timeout, cancellation, scheduler action, or policy action therefore cannot be encoded as if a human answered.
+
+A boundary may explicitly set `required_actor_kind = "any"` when a deployment intentionally permits policy/service resolution. That is opt-in.
+
+human:// also enforces responder policy with `route.actors`, but those actor strings and actor-kind assertions are only as trustworthy as the surface that supplies them.
 
 Current trust model:
 
@@ -156,6 +186,8 @@ A native hook returning a decision proves only that human:// returned a decision
 ## Safety invariants
 
 - Notification priority is not authorization.
+- A system event, timeout, policy action, or service callback is not a human answer.
+- A human-only boundary must reject non-human `actor_kind` on the resolution path.
 - `batch` means “review together,” not “approve together automatically.”
 - `defer` means “do not interrupt now,” not “discard the obligation.”
 - An unreachable human:// must never fail open.
