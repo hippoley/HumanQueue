@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 from typing import Any
 
 import httpx
@@ -83,7 +84,43 @@ class HumanQueue:
         if resume_url:
             payload["resume"] = {"mode": "webhook", "url": resume_url, "secret": resume_secret}
 
-        response = httpx.post(f"{self.base_url}/v1/human", json=payload, headers=self._headers(), timeout=self.timeout)
+        # A transport failure after the Gateway commits the canonical request
+        # leaves the caller in an ambiguous state: the human obligation may exist
+        # even though its request_id never reached the client. Every SDK ask uses
+        # one stable idempotency key for the whole create attempt so a retry can
+        # recover the already-committed request instead of creating a duplicate.
+        effective_idempotency_key = idempotency_key or f"humanq-client:{uuid.uuid4().hex}"
+        payload["idempotency_key"] = effective_idempotency_key
+
+        response = None
+        last_transport_error: httpx.TransportError | None = None
+        for attempt in range(3):
+            try:
+                response = httpx.post(
+                    f"{self.base_url}/v1/human",
+                    json=payload,
+                    headers=self._headers(),
+                    timeout=self.timeout,
+                )
+            except httpx.TransportError as exc:
+                last_transport_error = exc
+                if attempt >= 2:
+                    raise
+                time.sleep(0.1 * (attempt + 1))
+                continue
+
+            # 5xx is also an ambiguous create outcome: the request may have been
+            # committed before a later server-side failure. Retrying the same
+            # idempotency key is safe; 4xx remains a caller/protocol error.
+            if response.status_code >= 500 and attempt < 2:
+                time.sleep(0.1 * (attempt + 1))
+                continue
+            break
+
+        if response is None:
+            assert last_transport_error is not None
+            raise last_transport_error
+
         self._raise(response)
         item = response.json()["request"]
         if not wait:
