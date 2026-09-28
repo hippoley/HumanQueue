@@ -50,7 +50,13 @@ async def resume(req: AttentionRequest, resolution: dict[str, Any]) -> dict[str,
         return {"delivered": False, "confirmed": False, "reason": "no_resume_target"}
 
     body, signature = signed_payload(req, resolution)
-    headers = {"content-type": "application/json", "x-attention-request-id": req.id}
+    headers = {
+        "content-type": "application/json",
+        "x-attention-request-id": req.id,
+        # Webhook resume is at-least-once under crash recovery. Receivers must
+        # deduplicate by the stable canonical request id before applying side effects.
+        "Idempotency-Key": req.id,
+    }
     if signature:
         headers["x-attention-signature"] = signature
 
