@@ -415,6 +415,17 @@ def machine_outcome(rid: str, outcome: MachineOutcomeRequest):
         raise HTTPException(403, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+    if not req:
+        raise HTTPException(404, "request not found")
+
+    # The optimistic pre-check may race with a human resolver in another
+    # Gateway worker. If the database transaction reports a different terminal
+    # status, this machine outcome did not win and must not be presented as if
+    # it did.
+    if req.status.value != outcome.outcome:
+        raise HTTPException(409, f"request is already {req.status.value}")
+
     return {
         "request": req,
         "human_resolution": False,
