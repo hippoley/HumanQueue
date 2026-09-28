@@ -81,6 +81,10 @@ jobs:
         run: |
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/gateway_restart_e2e.py"
+      - name: Packaged resume crash-recovery E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/resume_crash_recovery_e2e.py"
       - name: Packaged Codex permission-hook E2E
         run: |
           cd /tmp
