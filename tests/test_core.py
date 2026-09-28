@@ -2083,3 +2083,101 @@ def test_resume_changed_decision_changes_signed_transport_identity(tmp_path: Pat
 
     assert approve_body != reject_body
     assert approve_sig != reject_sig
+
+
+def test_resolution_atomically_enqueues_webhook_resume_intent(tmp_path: Path):
+    from app.models import ResumeTarget
+
+    store = Store(str(tmp_path / "resume-intent.db"))
+    item = store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="http://127.0.0.1:9999/resume",
+                secret="test-secret",
+            )
+        )
+    )
+
+    resolved, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {"ok": True}},
+    )
+
+    assert finalized is True
+    assert resolved is not None
+    assert resolved.status.value == "resolved"
+
+    outbox = store.resume_outbox(item.id)
+    assert outbox is not None
+    assert outbox["status"] == "pending"
+    assert int(outbox["attempts"]) == 0
+
+    events = store.events(item.id)
+    event_types = [event["type"] for event in events]
+    assert "resolved" in event_types
+    assert "resume_enqueued" in event_types
+    assert event_types.index("resolved") < event_types.index("resume_enqueued")
+
+
+def test_abandoned_resume_attempt_becomes_uncertain_and_is_not_replayed(tmp_path: Path):
+    from app.models import ResumeTarget
+
+    db = str(tmp_path / "resume-uncertain.db")
+    first = Store(db)
+    item = first.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="http://127.0.0.1:9999/resume",
+            )
+        )
+    )
+    _, finalized = first.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+
+    claimed = first.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=0,
+    )
+    assert claimed == [item.id]
+
+    # A different worker observes the expired processing lease. It must not
+    # automatically replay a callback whose remote side effect is unknown.
+    second = Store(db)
+    replay = second.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    )
+    assert replay == []
+
+    outbox = second.resume_outbox(item.id)
+    assert outbox is not None
+    assert outbox["status"] == "uncertain"
+    assert int(outbox["attempts"]) == 1
+
+    # Repeated reconciliation remains fail-closed and does not increment attempts.
+    assert second.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    outbox_again = second.resume_outbox(item.id)
+    assert outbox_again is not None
+    assert outbox_again["status"] == "uncertain"
+    assert int(outbox_again["attempts"]) == 1
+
+    uncertain = [
+        event
+        for event in second.events(item.id)
+        if event["type"] == "resume_delivery_uncertain"
+    ]
+    assert len(uncertain) == 1
+    assert uncertain[0]["data"]["automatic_retry"] is False
