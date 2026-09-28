@@ -63,6 +63,10 @@ For semantic confirmation, the target can return:
 
 human:// accepts this as confirmed only when the returned `request_id` exactly matches the request being resumed.
 
+Webhook resume is crash-recovered with a durable outbox and is therefore **at least once**. Each attempt uses the canonical request id as `Idempotency-Key`. Receivers that cause side effects must deduplicate that key. This is required even when the previous attempt timed out or the Gateway crashed, because the sender cannot know whether the remote side committed before the connection disappeared.
+
+The durable outbox prevents the opposite failure: a human decision cannot be committed successfully and then lose its unsent resume obligation merely because the Gateway process exits.
+
 ## Identity integrity
 
 human:// does not use placeholder identity as authority.
@@ -92,7 +96,8 @@ The following must not mean “approve”:
 - stale or superseded request;
 - ambiguous owner/session;
 - resume transport failure;
-- unconfirmed HTTP callback.
+- unconfirmed HTTP callback;
+- duplicate webhook transport treated as a second logical authorization rather than deduplicated by canonical request id.
 
 Native connectors should fall back to the host runtime's own permission path when human:// cannot produce a valid decision.
 
@@ -124,7 +129,9 @@ human:// currently provides:
 - request idempotency and supersession;
 - bounded external context projection;
 - auditable delivery and resume outcome events;
-- exact-request semantic resume receipts for webhook targets that opt in.
+- exact-request semantic resume receipts for webhook targets that opt in;
+- durable webhook resume obligations with leased retry after Gateway crashes;
+- stable request-id idempotency keys for at-least-once webhook delivery.
 
 human:// does **not** currently claim:
 
@@ -132,7 +139,8 @@ human:// does **not** currently claim:
 - enterprise RBAC;
 - CODEOWNER/directory-backed responder authorization;
 - cryptographic proof that a native agent runtime consumed a returned hook decision;
-- security isolation between mutually untrusted users sharing one Gateway process.
+- security isolation between mutually untrusted users sharing one Gateway process;
+- network-level exactly-once delivery to arbitrary webhook receivers.
 
 ## Reporting a vulnerability
 
