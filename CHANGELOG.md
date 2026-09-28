@@ -24,6 +24,10 @@
 - Fixed the first-run E2E harness after Windows proved that intentional process teardown may return exit code 1 even though the complete human boundary round-trip succeeded.
 - Hardened Python SDK create semantics against ambiguous transport failures: every `ask()` invocation now carries one stable client idempotency key (caller-provided or generated) and retries transport/5xx create outcomes with that same key.
 - Added packaged fault-injection E2E where Gateway commits and returns 201 but a proxy deliberately drops the response; SDK retries, recovers the same request with `created=false`, observes only one canonical `created` event, then receives the real human decision and continues.
+- Added authenticated `GET /v1/idempotency/lookup` for exact source + idempotency-key recovery after all create acknowledgements remain ambiguous.
+- After exhausting three ambiguous create POSTs, the SDK now performs idempotent read recovery before failing; if both create and lookup paths are unavailable it raises `HumanQueueCreateError` carrying the stable recovery key.
+- Added packaged exhaustion E2E that drops all three successful 201 create responses, requires `created=true,false,false` for one request, recovers via lookup, and proves the original blocked caller continues after resolution.
+- Removed a race from the earlier lost-ack E2E by waiting for the second real backend create response, not merely the second proxy arrival.
 
 
 ## 0.7.0 — human-boundary integrity

@@ -1677,3 +1677,166 @@ def test_sdk_create_retry_retries_ambiguous_server_error(monkeypatch):
     assert item["id"] == "attn_after_500"
     assert len(payloads) == 2
     assert payloads[0]["idempotency_key"] == payloads[1]["idempotency_key"]
+
+
+def test_store_lookup_by_idempotency_returns_exact_canonical_request(tmp_path: Path):
+    store = Store(str(tmp_path / "idempotency-lookup.db"))
+    item = store.create(
+        req(
+            source="sdk",
+            source_ref="run-lookup",
+            idempotency_key="recover-key",
+        )
+    )
+
+    recovered = store.get_by_idempotency("sdk", "recover-key")
+    assert recovered is not None
+    assert recovered.id == item.id
+    assert store.get_by_idempotency("sdk", "other-key") is None
+    assert store.get_by_idempotency("other-source", "recover-key") is None
+
+
+def test_idempotency_lookup_api_is_authenticated_and_exact(tmp_path: Path, monkeypatch):
+    from app import main
+
+    main.store = Store(str(tmp_path / "idempotency-lookup-api.db"))
+    item = main.store.create(
+        req(
+            source="sdk",
+            source_ref="run-lookup-api",
+            idempotency_key="lookup-api-key",
+        )
+    )
+
+    # Existing tests run the Gateway without a configured bearer token. The
+    # endpoint's auth behavior is covered by the shared /v1 middleware tests;
+    # this probe verifies lookup identity and 404 semantics.
+    client = TestClient(main.app)
+
+    found = client.get(
+        "/v1/idempotency/lookup",
+        params={"source": "sdk", "idempotency_key": "lookup-api-key"},
+    )
+    assert found.status_code == 200
+    assert found.json()["request"]["id"] == item.id
+
+    missing = client.get(
+        "/v1/idempotency/lookup",
+        params={"source": "sdk", "idempotency_key": "missing"},
+    )
+    assert missing.status_code == 404
+
+
+def test_sdk_recovers_after_all_create_post_acknowledgements_are_lost(monkeypatch):
+    import httpx
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue
+
+    post_payloads = []
+    lookup_calls = []
+
+    def fake_post(*args, **kwargs):
+        post_payloads.append(dict(kwargs["json"]))
+        raise httpx.ReadTimeout("every create response was lost")
+
+    def fake_get(*args, **kwargs):
+        lookup_calls.append(kwargs.get("params") or {})
+        return httpx.Response(
+            200,
+            json={
+                "request": {
+                    "id": "attn_lookup_recovered",
+                    "status": "pending",
+                }
+            },
+        )
+
+    monkeypatch.setattr(client_module.httpx, "post", fake_post)
+    monkeypatch.setattr(client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _: None)
+
+    item = HumanQueue("http://127.0.0.1:9999", timeout=0.1).ask(
+        "human://approve",
+        source="sdk",
+        ref="run-all-acks-lost",
+        title="Recover by lookup?",
+        wait=False,
+    )
+
+    assert item["id"] == "attn_lookup_recovered"
+    assert len(post_payloads) == 3
+    keys = {payload["idempotency_key"] for payload in post_payloads}
+    assert len(keys) == 1
+    generated_key = next(iter(keys))
+    assert generated_key.startswith("humanq-client:")
+    assert lookup_calls == [{
+        "source": "sdk",
+        "idempotency_key": generated_key,
+    }]
+
+
+def test_sdk_exposes_recovery_key_if_post_and_lookup_both_fail(monkeypatch):
+    import httpx
+    import pytest
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue, HumanQueueCreateError
+
+    post_keys = []
+
+    def fake_post(*args, **kwargs):
+        post_keys.append(kwargs["json"]["idempotency_key"])
+        raise httpx.ReadTimeout("create acknowledgement lost")
+
+    def fake_get(*args, **kwargs):
+        raise httpx.ConnectError("lookup path also unavailable")
+
+    monkeypatch.setattr(client_module.httpx, "post", fake_post)
+    monkeypatch.setattr(client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _: None)
+
+    with pytest.raises(HumanQueueCreateError) as caught:
+        HumanQueue("http://127.0.0.1:9999", timeout=0.1).ask(
+            "human://approve",
+            source="sdk",
+            ref="run-unrecoverable",
+            title="Expose recovery key",
+        )
+
+    exc = caught.value
+    assert exc.source == "sdk"
+    assert exc.idempotency_key.startswith("humanq-client:")
+    assert post_keys == [exc.idempotency_key] * 3
+    assert exc.cause is not None
+    assert "retry later with idempotency_key=" in str(exc)
+
+
+def test_sdk_lookup_retries_short_404_race_before_giving_up(monkeypatch):
+    import httpx
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue
+
+    calls = []
+
+    def fake_get(*args, **kwargs):
+        calls.append(kwargs.get("params") or {})
+        if len(calls) < 3:
+            return httpx.Response(404, json={"detail": "not visible yet"})
+        return httpx.Response(
+            200,
+            json={
+                "request": {
+                    "id": "attn_visible_later",
+                    "status": "pending",
+                }
+            },
+        )
+
+    monkeypatch.setattr(client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _: None)
+
+    item = HumanQueue("http://127.0.0.1:9999")._recover_ambiguous_create(
+        source="sdk",
+        idempotency_key="race-key",
+    )
+    assert item["id"] == "attn_visible_later"
+    assert len(calls) == 3

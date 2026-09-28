@@ -85,6 +85,10 @@ jobs:
         run: |
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/create_ack_recovery_e2e.py"
+      - name: Packaged create acknowledgement exhaustion recovery E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/create_ack_exhaustion_e2e.py"
       - name: Packaged Codex permission-hook E2E
         run: |
           cd /tmp
