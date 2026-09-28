@@ -1250,3 +1250,140 @@ def test_store_connection_context_releases_sqlite_handle(tmp_path: Path):
 
     with pytest.raises(sqlite3.ProgrammingError, match="closed"):
         conn.execute("SELECT 1")
+
+
+def test_webhook_resolution_atomically_queues_durable_resume(tmp_path: Path):
+    store = Store(str(tmp_path / "resume-outbox.db"))
+    item = store.create(req(
+        resume={
+            "mode": "webhook",
+            "url": "https://example.invalid/resume",
+        }
+    ))
+
+    resolved, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {"ok": True}},
+    )
+
+    assert finalized is True
+    assert resolved is not None
+    outbox = store.resume_outbox(item.id)
+    assert outbox is not None
+    assert outbox["state"] == "pending"
+    assert outbox["attempts"] == 0
+    events = store.events(item.id)
+    assert any(event["type"] == "resume_queued" for event in events)
+
+
+def test_native_blocking_resolution_does_not_enter_webhook_outbox(tmp_path: Path):
+    store = Store(str(tmp_path / "native-no-outbox.db"))
+    item = store.create(req())
+
+    resolved, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+
+    assert finalized is True
+    assert resolved is not None
+    assert store.resume_outbox(item.id) is None
+
+
+def test_resume_outbox_lease_is_exclusive_across_store_instances(tmp_path: Path):
+    db = str(tmp_path / "resume-lease.db")
+    creator = Store(db)
+    other = Store(db)
+    item = creator.create(req(
+        resume={
+            "mode": "webhook",
+            "url": "https://example.invalid/resume",
+        }
+    ))
+    creator.resolve(item.id, "alice", {"action": "approve", "values": {}})
+
+    first = creator.claim_resume(item.id, lease_seconds=30)
+    second = other.claim_resume(item.id, lease_seconds=30)
+
+    assert first is not None
+    assert first.id == item.id
+    assert second is None
+    outbox = creator.resume_outbox(item.id)
+    assert outbox["state"] == "in_flight"
+    assert outbox["attempts"] == 1
+
+
+def test_confirmed_resume_finishes_outbox_and_audit_together(tmp_path: Path):
+    store = Store(str(tmp_path / "resume-finish.db"))
+    item = store.create(req(
+        resume={
+            "mode": "webhook",
+            "url": "https://example.invalid/resume",
+        }
+    ))
+    store.resolve(item.id, "alice", {"action": "approve", "values": {}})
+    claimed = store.claim_resume(item.id)
+    assert claimed is not None
+
+    result = {
+        "delivered": True,
+        "confirmed": True,
+        "status_code": 200,
+        "receipt": {"request_id": item.id, "resumed": True},
+    }
+    store.finish_resume_attempt(item.id, result)
+
+    outbox = store.resume_outbox(item.id)
+    assert outbox is not None
+    assert outbox["state"] == "done"
+    assert outbox["last_result"]["confirmed"] is True
+    confirmed = [
+        event for event in store.events(item.id)
+        if event["type"] == "resume_confirmed"
+    ]
+    assert len(confirmed) == 1
+    assert confirmed[0]["data"]["outbox_state"] == "done"
+
+
+def test_resume_webhook_exposes_canonical_idempotency_key(tmp_path: Path, monkeypatch):
+    import app.resume as resume_module
+
+    item = Store(str(tmp_path / "resume-idempotency.db")).create(
+        req(
+            resume={
+                "mode": "webhook",
+                "url": "https://example.invalid/resume",
+            }
+        )
+    )
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, *, content, headers):
+            captured["url"] = url
+            captured["headers"] = dict(headers)
+            return httpx.Response(
+                200,
+                json={"request_id": item.id, "resumed": True},
+            )
+
+    monkeypatch.setattr(resume_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = asyncio.run(
+        resume_module.resume(item, {"action": "approve", "values": {}})
+    )
+
+    assert result["confirmed"] is True
+    assert captured["headers"]["Idempotency-Key"] == item.id
+    assert captured["headers"]["x-attention-request-id"] == item.id
