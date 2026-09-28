@@ -108,7 +108,7 @@ def main() -> None:
                 source_ref="crash-window-001",
                 title="Recover a persisted decision after Gateway crash",
                 summary="The decision commits before the resume transport runs.",
-                kind=RequestKind.approve,
+                kind=RequestKind.approval,
                 resume=ResumeTarget(
                     mode="webhook",
                     url=f"http://127.0.0.1:{receiver_port}/resume",
