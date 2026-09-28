@@ -10,6 +10,11 @@
 - Added durable Codex proof receipts under `~/.human-queue/evidence/codex/`; resolution alone can never manufacture a green native-host proof.
 - Added typed resolution provenance (`human|system|policy|service`) and human-only authority by default.
 - Added a separate machine outcome path for `expired` / `cancelled` so timeouts, schedulers and policies cannot be represented as human consent.
+- Added `humanq trust codex` as an explicit operator action: it trusts only the exact hook key/current hash returned by Codex itself, refuses stale-runtime hooks, and re-verifies the result through `hooks/list`.
+- Added recurring latest-official-Codex CI for discovery → untrusted → explicit trust → trusted/managed while keeping `real_host_e2e_verified=false` until an authenticated model turn is proven.
+- Added clean-wheel first-run E2E on Ubuntu/Python 3.10 + 3.12, macOS/Python 3.12 and Windows/Python 3.12.
+- Added real installer-entrypoint E2E for shipped `install.sh` on Ubuntu/macOS and `install.ps1` on Windows.
+- Fixed the first-run E2E harness after Windows proved that intentional process teardown may return exit code 1 even though the complete human boundary round-trip succeeded.
 
 
 ## 0.7.0 — human-boundary integrity
