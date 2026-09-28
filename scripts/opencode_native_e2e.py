@@ -397,8 +397,6 @@ def main() -> None:
             child_env["HUMANQ_STUB_API_KEY"] = "humanq-ci-dummy"
             server_username = "opencode"
             server_password = "humanq-ci-server"
-            child_env["OPENCODE_SERVER_USERNAME"] = server_username
-            child_env["OPENCODE_SERVER_PASSWORD"] = server_password
 
             debug_config = subprocess.run(
                 ["opencode", "debug", "config"],
@@ -449,6 +447,9 @@ def main() -> None:
                     + model_catalog.stderr
                 )
 
+            server_env = child_env.copy()
+            server_env["OPENCODE_SERVER_USERNAME"] = server_username
+            server_env["OPENCODE_SERVER_PASSWORD"] = server_password
             server = subprocess.Popen(
                 [
                     "opencode",
@@ -459,7 +460,7 @@ def main() -> None:
                     str(opencode_port),
                 ],
                 cwd=workspace,
-                env=child_env,
+                env=server_env,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
