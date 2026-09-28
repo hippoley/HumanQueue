@@ -165,7 +165,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run install.sh exactly as shipped
+      - name: Run install.sh twice and preserve existing state
         if: runner.os != 'Windows'
         env:
           HUMAN_QUEUE_HOME: ${{ runner.temp }}/humanq-installer-state
@@ -173,14 +173,32 @@ jobs:
           bash scripts/install.sh
           "$HOME/.local/bin/humanq" doctor
           test -f "$HUMAN_QUEUE_HOME/config.json"
+
           python - <<'PY'
           import json, os
           from pathlib import Path
-          cfg = json.loads((Path(os.environ["HUMAN_QUEUE_HOME"]) / "config.json").read_text())
+          home = Path(os.environ["HUMAN_QUEUE_HOME"])
+          cfg = json.loads((home / "config.json").read_text())
           assert str(cfg["token"]).startswith("hq_")
-          print("INSTALLER_ENTRYPOINT_OK")
+          (home / "token-before.txt").write_text(cfg["token"])
+          (home / "upgrade-sentinel.txt").write_text("preserve-me")
+          print("INSTALLER_FIRST_PASS_OK")
           PY
-      - name: Run install.ps1 exactly as shipped
+
+          bash scripts/install.sh
+          "$HOME/.local/bin/humanq" doctor
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          home = Path(os.environ["HUMAN_QUEUE_HOME"])
+          cfg = json.loads((home / "config.json").read_text())
+          token_before = (home / "token-before.txt").read_text()
+          assert cfg["token"] == token_before, (cfg["token"], token_before)
+          assert (home / "upgrade-sentinel.txt").read_text() == "preserve-me"
+          print("INSTALLER_REINSTALL_PRESERVES_STATE_OK")
+          PY
+      - name: Run install.ps1 twice and preserve existing state
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -191,11 +209,28 @@ jobs:
           if (-not (Test-Path (Join-Path $env:HUMAN_QUEUE_HOME "config.json"))) {
             throw "installer did not create config.json"
           }
+
           $cfg = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "config.json") | ConvertFrom-Json
           if (-not $cfg.token.StartsWith("hq_")) {
             throw "installer did not create a valid gateway token"
           }
-          Write-Host "INSTALLER_ENTRYPOINT_OK"
+          Set-Content -Path (Join-Path $env:HUMAN_QUEUE_HOME "token-before.txt") -Value $cfg.token -NoNewline
+          Set-Content -Path (Join-Path $env:HUMAN_QUEUE_HOME "upgrade-sentinel.txt") -Value "preserve-me" -NoNewline
+          Write-Host "INSTALLER_FIRST_PASS_OK"
+
+          .\scripts\install.ps1
+          & $humanq doctor
+
+          $cfgAfter = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "config.json") | ConvertFrom-Json
+          $tokenBefore = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "token-before.txt") -Raw
+          $sentinel = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "upgrade-sentinel.txt") -Raw
+          if ($cfgAfter.token -ne $tokenBefore) {
+            throw "reinstall rotated the existing gateway token"
+          }
+          if ($sentinel -ne "preserve-me") {
+            throw "reinstall destroyed existing human:// state"
+          }
+          Write-Host "INSTALLER_REINSTALL_PRESERVES_STATE_OK"
 
 
   codex-native-discovery:
@@ -287,4 +322,48 @@ jobs:
           print("trust_before=" + str(before["trust_status"]))
           print("trust_after=" + str(after["trust_status"]))
           print("hook_hash=" + str(after["native_current_hash"]))
+          PY
+
+          python -m venv .codex-upgrade-venv
+          .codex-upgrade-venv/bin/python -m pip install .
+          .codex-upgrade-venv/bin/humanq connect codex
+          .codex-upgrade-venv/bin/humanq verify codex --json > codex-runtime-moved.json
+          cat codex-runtime-moved.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          before = json.loads(Path("codex-readiness-after.json").read_text())
+          moved = json.loads(Path("codex-runtime-moved.json").read_text())
+
+          assert moved["hook_command_matches_current_runtime"] is True, moved
+          assert moved["native_hook_discovered"] is True, moved
+          assert moved["native_current_hash"], moved
+          assert moved["native_current_hash"] != before["native_current_hash"], (before, moved)
+          assert moved["trust_status"] in {"untrusted", "modified"}, moved
+          assert moved["ready_for_real_host_probe"] is False, moved
+          print("CODEX_RUNTIME_MOVE_INVALIDATES_TRUST_OK")
+          print("old_hash=" + str(before["native_current_hash"]))
+          print("new_hash=" + str(moved["native_current_hash"]))
+          print("trust_after_runtime_move=" + str(moved["trust_status"]))
+          PY
+
+          .codex-upgrade-venv/bin/humanq trust codex --json > codex-runtime-moved-trust.json
+          .codex-upgrade-venv/bin/humanq verify codex --json > codex-runtime-moved-after.json
+          cat codex-runtime-moved-trust.json
+          cat codex-runtime-moved-after.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          trust = json.loads(Path("codex-runtime-moved-trust.json").read_text())
+          after = json.loads(Path("codex-runtime-moved-after.json").read_text())
+
+          assert trust["trust_before"] in {"untrusted", "modified"}, trust
+          assert trust["trust_after"] in {"trusted", "managed"}, trust
+          assert after["trust_status"] in {"trusted", "managed"}, after
+          assert after["ready_for_real_host_probe"] is True, after
+          print("CODEX_RUNTIME_MOVE_RETRUST_OK")
           PY
