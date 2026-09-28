@@ -14,6 +14,23 @@ class HumanQueueError(RuntimeError):
     pass
 
 
+class HumanQueueCreateError(HumanQueueError):
+    """Create outcome is still ambiguous after retry + recovery lookup."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        source: str,
+        idempotency_key: str,
+        cause: Exception | None = None,
+    ):
+        super().__init__(message)
+        self.source = source
+        self.idempotency_key = idempotency_key
+        self.cause = cause
+
+
 class HumanQueue:
     """Tiny synchronous client for the human:// protocol.
 
@@ -94,6 +111,8 @@ class HumanQueue:
 
         response = None
         last_transport_error: httpx.TransportError | None = None
+        ambiguous_server_error: httpx.Response | None = None
+        create_acknowledged = False
         for attempt in range(3):
             try:
                 response = httpx.post(
@@ -104,25 +123,53 @@ class HumanQueue:
                 )
             except httpx.TransportError as exc:
                 last_transport_error = exc
-                if attempt >= 2:
-                    raise
-                time.sleep(0.1 * (attempt + 1))
-                continue
+                response = None
+                if attempt < 2:
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+                break
 
             # 5xx is also an ambiguous create outcome: the request may have been
             # committed before a later server-side failure. Retrying the same
             # idempotency key is safe; 4xx remains a caller/protocol error.
-            if response.status_code >= 500 and attempt < 2:
-                time.sleep(0.1 * (attempt + 1))
-                continue
+            if response.status_code >= 500:
+                ambiguous_server_error = response
+                if attempt < 2:
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+                break
+
+            self._raise(response)
+            create_acknowledged = True
             break
 
-        if response is None:
-            assert last_transport_error is not None
-            raise last_transport_error
-
-        self._raise(response)
-        item = response.json()["request"]
+        if create_acknowledged:
+            assert response is not None
+            item = response.json()["request"]
+        else:
+            item = self._recover_ambiguous_create(
+                source=source,
+                idempotency_key=effective_idempotency_key,
+            )
+            if item is None:
+                detail = (
+                    f"last transport error: {type(last_transport_error).__name__}: "
+                    f"{last_transport_error}"
+                    if last_transport_error is not None
+                    else (
+                        f"last server response: HTTP {ambiguous_server_error.status_code}"
+                        if ambiguous_server_error is not None
+                        else "no create acknowledgement"
+                    )
+                )
+                raise HumanQueueCreateError(
+                    "human:// create acknowledgement remained ambiguous after retries "
+                    f"and recovery lookup ({detail}); retry later with "
+                    f"idempotency_key={effective_idempotency_key!r}",
+                    source=source,
+                    idempotency_key=effective_idempotency_key,
+                    cause=last_transport_error,
+                )
         if not wait:
             return item
         return self.wait(item["id"], timeout=wait_timeout, poll_interval=poll_interval)
@@ -175,6 +222,39 @@ class HumanQueue:
                 time.sleep(min(poll_interval, remaining))
             else:
                 time.sleep(poll_interval)
+
+    def _recover_ambiguous_create(
+        self,
+        *,
+        source: str,
+        idempotency_key: str,
+    ) -> dict[str, Any] | None:
+        """Best-effort recovery after every create acknowledgement was ambiguous."""
+
+        for attempt in range(3):
+            try:
+                response = httpx.get(
+                    f"{self.base_url}/v1/idempotency/lookup",
+                    params={
+                        "source": source,
+                        "idempotency_key": idempotency_key,
+                    },
+                    headers=self._headers(),
+                    timeout=self.timeout,
+                )
+            except httpx.TransportError:
+                if attempt < 2:
+                    time.sleep(0.1 * (attempt + 1))
+                continue
+
+            if response.status_code == 404:
+                if attempt < 2:
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+                return None
+            self._raise(response)
+            return response.json()["request"]
+        return None
 
     @staticmethod
     def _headers() -> dict[str, str]:
