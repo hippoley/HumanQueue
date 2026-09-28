@@ -1171,3 +1171,52 @@ def test_same_actor_http_reclaim_is_idempotent(tmp_path: Path):
             (item.id,),
         ).fetchall()
     assert len(claim_events) == 1
+
+
+def test_concurrent_idempotent_create_returns_one_boundary(tmp_path: Path):
+    """Connector retries from separate workers must converge on one request."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "idempotent-create-race.db")
+    left = Store(db)
+    right = Store(db)
+    start = threading.Barrier(2)
+
+    def create(store: Store):
+        start.wait(timeout=5)
+        try:
+            item = store.create(
+                req(
+                    source="codex",
+                    source_ref="native-session-1",
+                    idempotency_key="codex:session-1:turn-1:Bash:abc",
+                )
+            )
+            return {"error": None, "id": item.id}
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}", "id": None}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(create, left)
+        b = pool.submit(create, right)
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert all(row["error"] is None for row in results), results
+    ids = {row["id"] for row in results}
+    assert len(ids) == 1, results
+    rid = next(iter(ids))
+
+    verifier = Store(db)
+    with verifier._conn() as c:
+        request_rows = c.execute(
+            "SELECT id FROM requests WHERE source=? AND idempotency_key=?",
+            ("codex", "codex:session-1:turn-1:Bash:abc"),
+        ).fetchall()
+        created_events = c.execute(
+            "SELECT seq FROM events WHERE request_id=? AND type='created'",
+            (rid,),
+        ).fetchall()
+
+    assert len(request_rows) == 1
+    assert len(created_events) == 1
