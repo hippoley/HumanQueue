@@ -29,6 +29,23 @@ def request_json(method: str, url: str, token: str | None = None, payload: dict 
         return json.loads(response.read().decode("utf-8"))
 
 
+def opencode_server_json(
+    url: str,
+    path: str,
+    *,
+    username: str,
+    password: str,
+) -> dict:
+    auth = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        url + path,
+        headers={"Authorization": "Basic " + auth, "Accept": "application/json"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=3) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def wait_for_opencode_server(
     url: str,
     *,
@@ -472,6 +489,26 @@ def main() -> None:
                 password=server_password,
             )
             print("attached_server_info=" + json.dumps(server_info, sort_keys=True), flush=True)
+            server_config = opencode_server_json(
+                server_url,
+                "/config",
+                username=server_username,
+                password=server_password,
+            )
+            server_providers = opencode_server_json(
+                server_url,
+                "/provider",
+                username=server_username,
+                password=server_password,
+            )
+            print(
+                "attached_server_config=" + json.dumps(server_config, sort_keys=True),
+                flush=True,
+            )
+            print(
+                "attached_server_providers=" + json.dumps(server_providers, sort_keys=True),
+                flush=True,
+            )
 
             attach_env = child_env.copy()
             attach_env["OPENCODE_SERVER_USERNAME"] = server_username
@@ -496,12 +533,28 @@ def main() -> None:
                 stderr=subprocess.STDOUT,
             )
 
-            item = wait_for_opencode_boundary(
-                base_url,
-                token,
-                marker=marker,
-                child=child,
-            )
+            try:
+                item = wait_for_opencode_boundary(
+                    base_url,
+                    token,
+                    marker=marker,
+                    child=child,
+                )
+            except Exception as exc:
+                server_output = ""
+                if server.stdout:
+                    try:
+                        server.terminate()
+                        server.wait(timeout=3)
+                    except Exception:
+                        pass
+                    try:
+                        server_output = server.stdout.read()
+                    except Exception:
+                        server_output = ""
+                raise RuntimeError(
+                    f"{exc}\nOpenCode server output:\n{server_output}"
+                ) from exc
             request_id = str(item["id"])
             if item.get("status") != "pending":
                 raise RuntimeError(f"OpenCode boundary was not pending: {item}")
