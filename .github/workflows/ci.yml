@@ -77,6 +77,10 @@ jobs:
           /tmp/humanq-e2e-venv/bin/python -m pip install dist/human_queue-*.whl
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/first_run_e2e.py"
+      - name: Packaged Gateway restart recovery E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/gateway_restart_e2e.py"
       - name: Packaged Codex permission-hook E2E
         run: |
           cd /tmp
