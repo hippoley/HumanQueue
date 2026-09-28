@@ -593,7 +593,7 @@ class Store:
             ).fetchall()
             ids = [str(row["request_id"]) for row in rows]
             for rid in ids:
-                c.execute(
+                updated = c.execute(
                     """
                     UPDATE resume_outbox
                     SET status='processing',
@@ -604,13 +604,20 @@ class Store:
                     """,
                     (lease_until, now, rid),
                 )
+                if updated.rowcount != 1:
+                    continue
+                attempt_row = c.execute(
+                    "SELECT attempts FROM resume_outbox WHERE request_id=?",
+                    (rid,),
+                ).fetchone()
+                attempt = int(attempt_row["attempts"]) if attempt_row else 0
                 c.execute(
                     "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
                     (
                         rid,
                         "resume_delivery_claimed",
                         "outbox",
-                        json.dumps({"lease_until": lease_until, "automatic_attempt": 1}),
+                        json.dumps({"lease_until": lease_until, "attempt": attempt}),
                         now,
                     ),
                 )
@@ -672,6 +679,117 @@ class Store:
                 "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
                 (rid, event_type, "resume", encoded, now),
             )
+
+    def reconcile_resume_outbox(
+        self,
+        rid: str,
+        *,
+        actor: str,
+        action: str,
+        reason: str | None = None,
+        receiver_dedup_confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """Resolve an ambiguous/failed resume state through explicit operator action.
+
+        Retry is only accepted when the operator explicitly attests that the
+        receiver deduplicates by canonical request_id.
+        """
+
+        if action not in {"confirm_executed", "retry", "abandon"}:
+            raise ValueError("unsupported resume reconciliation action")
+        if action == "retry" and not receiver_dedup_confirmed:
+            raise PermissionError(
+                "retry requires receiver_dedup_confirmed=true"
+            )
+
+        now = self._now().isoformat()
+        with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            if not row:
+                raise KeyError("resume outbox not found")
+
+            current = str(row["status"])
+            if current not in {"uncertain", "failed"}:
+                raise ValueError(
+                    f"resume reconciliation requires failed/uncertain state, got {current}"
+                )
+
+            previous_result = None
+            if row["result"]:
+                try:
+                    previous_result = json.loads(row["result"])
+                except Exception:
+                    previous_result = row["result"]
+
+            audit = {
+                "action": action,
+                "reason": reason,
+                "previous_status": current,
+                "previous_result": previous_result,
+                "receiver_dedup_confirmed": bool(receiver_dedup_confirmed),
+            }
+
+            if action == "confirm_executed":
+                result = {
+                    "operator_reconciled": True,
+                    "assumed_executed": True,
+                    "actor": actor,
+                    "reason": reason,
+                }
+                c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status='done',
+                        lease_until=NULL,
+                        last_error=NULL,
+                        result=?,
+                        updated_at=?
+                    WHERE request_id=? AND status IN ('uncertain','failed')
+                    """,
+                    (json.dumps(result, default=str), now, rid),
+                )
+                event_type = "resume_reconciled_executed"
+            elif action == "retry":
+                c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status='pending',
+                        lease_until=NULL,
+                        available_at=?,
+                        last_error=NULL,
+                        updated_at=?
+                    WHERE request_id=? AND status IN ('uncertain','failed')
+                    """,
+                    (now, now, rid),
+                )
+                event_type = "resume_reconciled_retry_authorized"
+            else:
+                c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status='abandoned',
+                        lease_until=NULL,
+                        last_error=?,
+                        updated_at=?
+                    WHERE request_id=? AND status IN ('uncertain','failed')
+                    """,
+                    ((reason or "operator abandoned resume")[:2000], now, rid),
+                )
+                event_type = "resume_reconciled_abandoned"
+
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, event_type, actor, json.dumps(audit, default=str), now),
+            )
+            updated = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            return dict(updated)
 
     def resume_outbox(self, rid: str) -> dict[str, Any] | None:
         with self._conn() as c:
