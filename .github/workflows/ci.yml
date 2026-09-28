@@ -102,3 +102,49 @@ jobs:
           assert not missing, f"wheel is missing runtime assets: {missing}"
           print(f"verified {wheels[0]} with {len(required)} required runtime assets")
           PY
+
+
+  packaged-first-run-matrix:
+    name: packaged first-run (${{ matrix.os }} / py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build clean wheel
+        run: python -m pip wheel . --no-deps -w dist
+      - name: Create clean smoke venv
+        run: python -m venv .smoke-venv
+      - name: Install built wheel (Unix)
+        if: runner.os != 'Windows'
+        run: .smoke-venv/bin/python -m pip install dist/human_queue-*.whl
+      - name: Install built wheel (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wheel = Get-ChildItem dist\human_queue-*.whl | Select-Object -First 1
+          .\.smoke-venv\Scripts\python.exe -m pip install $wheel.FullName
+      - name: Run real packaged first-run (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd ${{ runner.temp }}
+          "$GITHUB_WORKSPACE/.smoke-venv/bin/python" "$GITHUB_WORKSPACE/scripts/first_run_e2e.py"
+      - name: Run real packaged first-run (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-Location $env:RUNNER_TEMP
+          & "$env:GITHUB_WORKSPACE\.smoke-venv\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\first_run_e2e.py"
