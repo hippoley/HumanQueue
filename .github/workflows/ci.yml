@@ -165,7 +165,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run install.sh exactly as shipped
+      - name: Run install.sh twice and preserve existing state
         if: runner.os != 'Windows'
         env:
           HUMAN_QUEUE_HOME: ${{ runner.temp }}/humanq-installer-state
@@ -173,14 +173,32 @@ jobs:
           bash scripts/install.sh
           "$HOME/.local/bin/humanq" doctor
           test -f "$HUMAN_QUEUE_HOME/config.json"
+
           python - <<'PY'
           import json, os
           from pathlib import Path
-          cfg = json.loads((Path(os.environ["HUMAN_QUEUE_HOME"]) / "config.json").read_text())
+          home = Path(os.environ["HUMAN_QUEUE_HOME"])
+          cfg = json.loads((home / "config.json").read_text())
           assert str(cfg["token"]).startswith("hq_")
-          print("INSTALLER_ENTRYPOINT_OK")
+          (home / "token-before.txt").write_text(cfg["token"])
+          (home / "upgrade-sentinel.txt").write_text("preserve-me")
+          print("INSTALLER_FIRST_PASS_OK")
           PY
-      - name: Run install.ps1 exactly as shipped
+
+          bash scripts/install.sh
+          "$HOME/.local/bin/humanq" doctor
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          home = Path(os.environ["HUMAN_QUEUE_HOME"])
+          cfg = json.loads((home / "config.json").read_text())
+          token_before = (home / "token-before.txt").read_text()
+          assert cfg["token"] == token_before, (cfg["token"], token_before)
+          assert (home / "upgrade-sentinel.txt").read_text() == "preserve-me"
+          print("INSTALLER_REINSTALL_PRESERVES_STATE_OK")
+          PY
+      - name: Run install.ps1 twice and preserve existing state
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -191,11 +209,28 @@ jobs:
           if (-not (Test-Path (Join-Path $env:HUMAN_QUEUE_HOME "config.json"))) {
             throw "installer did not create config.json"
           }
+
           $cfg = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "config.json") | ConvertFrom-Json
           if (-not $cfg.token.StartsWith("hq_")) {
             throw "installer did not create a valid gateway token"
           }
-          Write-Host "INSTALLER_ENTRYPOINT_OK"
+          Set-Content -Path (Join-Path $env:HUMAN_QUEUE_HOME "token-before.txt") -Value $cfg.token -NoNewline
+          Set-Content -Path (Join-Path $env:HUMAN_QUEUE_HOME "upgrade-sentinel.txt") -Value "preserve-me" -NoNewline
+          Write-Host "INSTALLER_FIRST_PASS_OK"
+
+          .\scripts\install.ps1
+          & $humanq doctor
+
+          $cfgAfter = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "config.json") | ConvertFrom-Json
+          $tokenBefore = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "token-before.txt") -Raw
+          $sentinel = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "upgrade-sentinel.txt") -Raw
+          if ($cfgAfter.token -ne $tokenBefore) {
+            throw "reinstall rotated the existing gateway token"
+          }
+          if ($sentinel -ne "preserve-me") {
+            throw "reinstall destroyed existing human:// state"
+          }
+          Write-Host "INSTALLER_REINSTALL_PRESERVES_STATE_OK"
 
 
   codex-native-discovery:
