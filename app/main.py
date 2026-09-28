@@ -264,7 +264,7 @@ def create_request(req: AttentionRequestCreate, background_tasks: BackgroundTask
     req = enrich_with_session_context(req, connector_registry)
     item, created = store.create_with_status(req)
     if created:
-        background_tasks.add_task(_publish_and_record, item)
+        background_tasks.add_task(_drain_channel_outbox_request, item.id)
     return item
 
 
@@ -272,7 +272,7 @@ def create_request(req: AttentionRequestCreate, background_tasks: BackgroundTask
 def import_request(env: ImportEnvelope, background_tasks: BackgroundTasks):
     item, created = store.create_with_status(ADAPTERS[env.adapter](env.payload))
     if created:
-        background_tasks.add_task(_publish_and_record, item)
+        background_tasks.add_task(_drain_channel_outbox_request, item.id)
     return item
 
 

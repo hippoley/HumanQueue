@@ -1411,3 +1411,128 @@ def test_expired_channel_publish_lease_is_reclaimable_by_another_worker(tmp_path
     assert outbox is not None
     assert outbox["status"] == "processing"
     assert outbox["attempts"] == 2
+
+
+def test_all_create_apis_publish_through_outbox_once(tmp_path: Path, monkeypatch):
+    """Every canonical create surface must have exactly one human-facing publish path."""
+    from app import main
+    from app.connector_registry import ConnectorRegistry
+
+    db = str(tmp_path / "all-create-paths-outbox.db")
+    main.store = Store(db)
+    main.connector_registry = ConnectorRegistry(db)
+
+    deliveries = []
+
+    def fake_publish(item):
+        deliveries.append(item.id)
+        return [{
+            "channel": "probe",
+            "delivered": True,
+            "request_id": item.id,
+        }]
+
+    monkeypatch.setattr(main, "publish_request", fake_publish)
+    client = TestClient(main.app)
+
+    human = client.post(
+        "/v1/human",
+        json={
+            "uri": "human://approve",
+            "source": "human-api",
+            "ref": "human-1",
+            "title": "Human API boundary",
+        },
+    )
+    assert human.status_code == 201
+    human_id = human.json()["request"]["id"]
+
+    canonical_payload = req(
+        source="requests-api",
+        source_ref="requests-1",
+        title="Canonical request boundary",
+    ).model_dump(mode="json")
+    canonical = client.post("/v1/requests", json=canonical_payload)
+    assert canonical.status_code == 201
+    canonical_id = canonical.json()["id"]
+
+    imported = client.post(
+        "/v1/import",
+        json={
+            "adapter": "a2a",
+            "payload": {
+                "task": {
+                    "id": "import-1",
+                    "status": {
+                        "state": "input-required",
+                        "message": "Imported boundary",
+                    },
+                }
+            },
+        },
+    )
+    assert imported.status_code == 201
+    import_id = imported.json()["id"]
+
+    ids = [human_id, canonical_id, import_id]
+    assert sorted(deliveries) == sorted(ids), deliveries
+
+    for rid in ids:
+        outbox = main.store.channel_outbox(rid)
+        assert outbox is not None
+        assert outbox["status"] == "done"
+        assert outbox["attempts"] == 1
+
+        events = main.store.events(rid)
+        delivered = [event for event in events if event["type"] == "channel_delivered"]
+        claimed = [event for event in events if event["type"] == "channel_publish_claimed"]
+        completed = [event for event in events if event["type"] == "channel_publish_completed"]
+        assert len(delivered) == 1, (rid, events)
+        assert len(claimed) == 1, (rid, events)
+        assert len(completed) == 1, (rid, events)
+
+
+def test_canonical_and_import_create_paths_never_call_legacy_direct_publisher(tmp_path: Path, monkeypatch):
+    """The durable outbox is the only supported API publish path."""
+    from app import main
+    from app.connector_registry import ConnectorRegistry
+
+    db = str(tmp_path / "no-legacy-direct-publish.db")
+    main.store = Store(db)
+    main.connector_registry = ConnectorRegistry(db)
+
+    async def fake_drain(rid):
+        # Leave the row pending so this test proves endpoint routing only.
+        assert main.store.channel_outbox(rid)["status"] == "pending"
+
+    def forbidden_direct_publish(item):
+        raise AssertionError(
+            f"API bypassed durable outbox for {item.id}"
+        )
+
+    monkeypatch.setattr(main, "_drain_channel_outbox_request", fake_drain)
+    monkeypatch.setattr(main, "_publish_and_record", forbidden_direct_publish)
+    client = TestClient(main.app)
+
+    canonical = client.post(
+        "/v1/requests",
+        json=req(source="canonical", source_ref="c-1").model_dump(mode="json"),
+    )
+    assert canonical.status_code == 201
+
+    imported = client.post(
+        "/v1/import",
+        json={
+            "adapter": "a2a",
+            "payload": {
+                "task": {
+                    "id": "i-1",
+                    "status": {
+                        "state": "input-required",
+                        "message": "Need input",
+                    },
+                }
+            },
+        },
+    )
+    assert imported.status_code == 201
