@@ -801,3 +801,105 @@ def test_codex_post_tool_proof_never_accepts_pre_boundary_event():
         tool_name="Bash",
     )
     assert proof is None
+
+
+def test_codex_trust_writes_only_exact_current_native_hash(monkeypatch):
+    from humanqueue.connectors import codex as codex_module
+
+    monkeypatch.setattr(
+        codex_module,
+        "codex_readiness",
+        lambda: {
+            "codex_path": "/usr/local/bin/codex",
+            "permission_hook_present": True,
+            "hook_command_matches_current_runtime": True,
+            "native_hook_discovered": True,
+            "native_hook_key": "user:permissionRequest:0:0",
+            "native_current_hash": "sha256:current",
+            "trust_status": "untrusted",
+        },
+    )
+    writes = []
+    monkeypatch.setattr(
+        codex_module,
+        "_codex_native_write_trust",
+        lambda codex_path, hook_key, current_hash: writes.append(
+            (codex_path, hook_key, current_hash)
+        ),
+    )
+    monkeypatch.setattr(
+        codex_module,
+        "_codex_native_hook_inventory",
+        lambda *a, **k: {
+            "permission_hook": {
+                "key": "user:permissionRequest:0:0",
+                "currentHash": "sha256:current",
+                "trustStatus": "trusted",
+            }
+        },
+    )
+
+    result = codex_module.trust_codex_hook()
+
+    assert writes == [
+        (
+            "/usr/local/bin/codex",
+            "user:permissionRequest:0:0",
+            "sha256:current",
+        )
+    ]
+    assert result["changed"] is True
+    assert result["trust_before"] == "untrusted"
+    assert result["trust_after"] == "trusted"
+
+
+def test_codex_trust_is_noop_when_current_hash_is_already_trusted(monkeypatch):
+    from humanqueue.connectors import codex as codex_module
+
+    monkeypatch.setattr(
+        codex_module,
+        "codex_readiness",
+        lambda: {
+            "codex_path": "/usr/local/bin/codex",
+            "permission_hook_present": True,
+            "hook_command_matches_current_runtime": True,
+            "native_hook_discovered": True,
+            "native_hook_key": "user:permissionRequest:0:0",
+            "native_current_hash": "sha256:current",
+            "trust_status": "trusted",
+        },
+    )
+    monkeypatch.setattr(
+        codex_module,
+        "_codex_native_write_trust",
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("already-trusted hook must not be rewritten")
+        ),
+    )
+
+    result = codex_module.trust_codex_hook()
+
+    assert result["changed"] is False
+    assert result["trust_after"] == "trusted"
+
+
+def test_codex_trust_refuses_stale_python_runtime(monkeypatch):
+    import pytest
+    from humanqueue.connectors import codex as codex_module
+
+    monkeypatch.setattr(
+        codex_module,
+        "codex_readiness",
+        lambda: {
+            "codex_path": "/usr/local/bin/codex",
+            "permission_hook_present": True,
+            "hook_command_matches_current_runtime": False,
+            "native_hook_discovered": True,
+            "native_hook_key": "user:permissionRequest:0:0",
+            "native_current_hash": "sha256:stale",
+            "trust_status": "untrusted",
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="different Python runtime"):
+        codex_module.trust_codex_hook()
