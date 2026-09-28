@@ -1346,14 +1346,11 @@ def test_concurrent_independent_store_instances_create_one_idempotent_request(tm
     assert [row["type"] for row in events].count("created") == 1
 
 
-def test_pending_request_without_publish_evidence_is_not_recovered_today(tmp_path: Path):
-    """Characterize the crash window before adding a durable channel outbox."""
-    from app import main
+def test_request_commit_persists_durable_channel_publish_intent(tmp_path: Path):
+    db = str(tmp_path / "durable-channel-outbox.db")
+    store = Store(db)
 
-    db = str(tmp_path / "pre-outbox-crash-window.db")
-    main.store = Store(db)
-
-    item, created = main.store.create_with_status(
+    item, created = store.create_with_status(
         req(
             source="agent",
             source_ref="crash-window",
@@ -1362,17 +1359,55 @@ def test_pending_request_without_publish_evidence_is_not_recovered_today(tmp_pat
     )
     assert created is True
 
-    events = main.store.events(item.id)
+    outbox = store.channel_outbox(item.id)
+    assert outbox is not None
+    assert outbox["status"] == "pending"
+    assert outbox["attempts"] == 0
+
+    # The publish intent is durable even before any Gateway background task
+    # gets a chance to run.
+    events = store.events(item.id)
     assert [event["type"] for event in events] == ["created"]
 
-    # There is currently no durable publish intent tied to the request commit.
-    # If the process dies here, a restarted Gateway has no canonical work item
-    # telling it to deliver this boundary to configured human-facing channels.
-    assert not any(
-        event["type"] in {
-            "channel_publish_enqueued",
-            "channel_delivery_attempted",
-            "channel_delivered",
-        }
-        for event in events
+
+def test_expired_channel_publish_lease_is_reclaimable_by_another_worker(tmp_path: Path):
+    from datetime import timedelta
+
+    db = str(tmp_path / "reclaim-outbox-lease.db")
+    left = Store(db)
+    right = Store(db)
+
+    item, created = left.create_with_status(
+        req(
+            source="agent",
+            source_ref="lease-crash",
+            idempotency_key="lease-crash:1",
+        )
     )
+    assert created is True
+
+    claimed = left.claim_channel_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    )
+    assert claimed == [item.id]
+
+    with left._conn() as c:
+        expired = (left._now() - timedelta(seconds=1)).isoformat()
+        c.execute(
+            "UPDATE channel_outbox SET lease_until=? WHERE request_id=?",
+            (expired, item.id),
+        )
+
+    reclaimed = right.claim_channel_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    )
+    assert reclaimed == [item.id]
+
+    outbox = right.channel_outbox(item.id)
+    assert outbox is not None
+    assert outbox["status"] == "processing"
+    assert outbox["attempts"] == 2
