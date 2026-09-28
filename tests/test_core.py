@@ -1025,3 +1025,149 @@ def test_http_human_resolution_racing_machine_expiry_has_one_winner(tmp_path: Pa
         assert final_status == "expired"
         assert resume_calls == []
         assert terminal_events[0]["type"] == "machine_expired"
+
+
+def test_concurrent_claim_has_one_owner(tmp_path: Path):
+    """Two workers racing to claim one boundary must not both take ownership."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "claim-race.db")
+    creator = Store(db)
+    item = creator.create(req())
+
+    left = Store(db)
+    right = Store(db)
+    start = threading.Barrier(2)
+
+    def claim(store: Store, actor: str):
+        start.wait(timeout=5)
+        try:
+            claimed = store.claim(item.id, actor)
+            return {
+                "error": None,
+                "claimed_by": claimed.claimed_by if claimed else None,
+                "status": claimed.status.value if claimed else None,
+            }
+        except Exception as exc:
+            return {
+                "error": f"{type(exc).__name__}: {exc}",
+                "claimed_by": None,
+                "status": None,
+            }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(claim, left, "alice")
+        b = pool.submit(claim, right, "bob")
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    final = creator.get(item.id)
+    assert final is not None
+    assert final.status.value == "claimed"
+    assert final.claimed_by in {"alice", "bob"}
+
+    with creator._conn() as c:
+        claim_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='claimed' ORDER BY seq",
+            (item.id,),
+        ).fetchall()
+
+    assert len(claim_events) == 1, [row["actor"] for row in claim_events]
+    winner = claim_events[0]["actor"]
+    assert final.claimed_by == winner
+
+    # Store.claim is a state-returning primitive: the racing loser is
+    # allowed to observe the winner's current ownership. Acquisition itself is
+    # proven by the single claimed event; HTTP converts a different-owner
+    # observation into 409.
+    assert all(row["error"] is None for row in results), results
+    assert {row["claimed_by"] for row in results} == {winner}, results
+
+
+def test_same_actor_reclaim_is_idempotent(tmp_path: Path):
+    s = Store(str(tmp_path / "claim-idempotent.db"))
+    item = s.create(req())
+
+    first = s.claim(item.id, "alice")
+    second = s.claim(item.id, "alice")
+
+    assert first.claimed_by == "alice"
+    assert second.claimed_by == "alice"
+
+    with s._conn() as c:
+        claim_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='claimed'",
+            (item.id,),
+        ).fetchall()
+    assert len(claim_events) == 1
+
+
+def test_concurrent_http_claim_has_one_winner(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from app import main
+
+    main.store = Store(str(tmp_path / "http-claim-race.db"))
+    item = main.store.create(req())
+    start = threading.Barrier(2)
+
+    def post(actor: str):
+        client = TestClient(main.app)
+        start.wait(timeout=5)
+        response = client.post(
+            f"/v1/requests/{item.id}/claim",
+            json={"actor": actor},
+        )
+        return actor, response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(post, "alice")
+        b = pool.submit(post, "bob")
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert sorted(status for _, status, _ in results) == [200, 409], results
+
+    winner = next(actor for actor, status, _ in results if status == 200)
+    loser = next(actor for actor, status, _ in results if status == 409)
+    assert winner != loser
+
+    final = main.store.get(item.id)
+    assert final is not None
+    assert final.status.value == "claimed"
+    assert final.claimed_by == winner
+
+    with main.store._conn() as c:
+        claim_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='claimed'",
+            (item.id,),
+        ).fetchall()
+
+    assert [row["actor"] for row in claim_events] == [winner]
+
+
+def test_same_actor_http_reclaim_is_idempotent(tmp_path: Path):
+    from app import main
+
+    main.store = Store(str(tmp_path / "http-claim-idempotent.db"))
+    item = main.store.create(req())
+    client = TestClient(main.app)
+
+    first = client.post(
+        f"/v1/requests/{item.id}/claim",
+        json={"actor": "alice"},
+    )
+    second = client.post(
+        f"/v1/requests/{item.id}/claim",
+        json={"actor": "alice"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["claimed_by"] == "alice"
+
+    with main.store._conn() as c:
+        claim_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='claimed'",
+            (item.id,),
+        ).fetchall()
+    assert len(claim_events) == 1

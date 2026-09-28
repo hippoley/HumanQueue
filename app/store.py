@@ -213,16 +213,31 @@ class Store:
     def claim(self, rid: str, actor: str) -> AttentionRequest | None:
         now = self._now().isoformat()
         with self.lock, self._conn() as c:
+            # Ownership acquisition must be atomic across Gateway workers.
+            c.execute("BEGIN IMMEDIATE")
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             if not row:
                 return None
             if row["status"] not in (RequestStatus.pending.value, RequestStatus.claimed.value):
                 return self._row_to_model(row, c)
+
             req = AttentionRequestCreate.model_validate(json.loads(row["payload"]))
             if req.route.actors and actor not in req.route.actors:
                 raise PermissionError("actor is not eligible for this request")
-            c.execute("UPDATE requests SET status=?,claimed_by=?,updated_at=? WHERE id=?", (RequestStatus.claimed.value, actor, now, rid))
-            c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (rid, "claimed", actor, "{}", now))
+
+            if row["status"] == RequestStatus.claimed.value:
+                # Reclaim by the same actor is idempotent. A different actor
+                # observes the current owner but cannot silently steal it.
+                return self._row_to_model(row, c)
+
+            c.execute(
+                "UPDATE requests SET status=?,claimed_by=?,updated_at=? WHERE id=?",
+                (RequestStatus.claimed.value, actor, now, rid),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, "claimed", actor, "{}", now),
+            )
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             return self._row_to_model(row, c)
 
