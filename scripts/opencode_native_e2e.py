@@ -312,9 +312,11 @@ def main() -> None:
                     "providers": {
                         "local": {
                             "name": "human:// CI stub",
+                            "env": ["HUMANQ_STUB_API_KEY"],
                             "package": "@opencode/ai/providers/openai-compatible",
                             "settings": {
-                                "baseURL": f"http://127.0.0.1:{model_port}/v1"
+                                "baseURL": f"http://127.0.0.1:{model_port}/v1",
+                                "apiKey": "{env:HUMANQ_STUB_API_KEY}"
                             },
                             "models": {
                                 "coder": {
@@ -362,6 +364,57 @@ def main() -> None:
             child_env = os.environ.copy()
             child_env["OPENCODE_DISABLE_MODELS_FETCH"] = "1"
             child_env["OPENCODE_DISABLE_LSP_DOWNLOAD"] = "1"
+            child_env["HUMANQ_STUB_API_KEY"] = "humanq-ci-dummy"
+
+            debug_config = subprocess.run(
+                ["opencode", "debug", "config"],
+                cwd=workspace,
+                env=child_env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=20,
+            )
+            print("resolved_config_begin", flush=True)
+            print(debug_config.stdout, flush=True)
+            print(debug_config.stderr, flush=True)
+            print("resolved_config_end", flush=True)
+            if debug_config.returncode != 0:
+                raise RuntimeError(
+                    "OpenCode rejected the local provider config:\n"
+                    + debug_config.stdout
+                    + "\n"
+                    + debug_config.stderr
+                )
+
+            model_catalog = subprocess.run(
+                ["opencode", "models"],
+                cwd=workspace,
+                env=child_env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=20,
+            )
+            print("model_catalog_begin", flush=True)
+            print(model_catalog.stdout, flush=True)
+            print(model_catalog.stderr, flush=True)
+            print("model_catalog_end", flush=True)
+            if model_catalog.returncode != 0:
+                raise RuntimeError(
+                    "OpenCode could not resolve its model catalog:\n"
+                    + model_catalog.stdout
+                    + "\n"
+                    + model_catalog.stderr
+                )
+            if "local/coder" not in model_catalog.stdout:
+                raise RuntimeError(
+                    "OpenCode resolved config but did not activate local/coder:\n"
+                    + model_catalog.stdout
+                    + "\n"
+                    + model_catalog.stderr
+                )
+
             child = subprocess.Popen(
                 [
                     "opencode",
