@@ -213,6 +213,9 @@ class Store:
     def claim(self, rid: str, actor: str) -> AttentionRequest | None:
         now = self._now().isoformat()
         with self.lock, self._conn() as c:
+            # Human decisions and machine terminal outcomes share the same
+            # exactly-once lifecycle boundary across Gateway workers.
+            c.execute("BEGIN IMMEDIATE")
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             if not row:
                 return None
