@@ -570,3 +570,64 @@ def test_explicit_any_authority_can_accept_policy_resolution(tmp_path: Path):
     assert resolved is not None
     assert resolved.status.value == "resolved"
     assert resolved.resolution["provenance"]["actor_kind"] == "policy"
+
+
+def test_source_turn_completion_does_not_clear_pending_human_boundary(tmp_path: Path):
+    from app import main
+    from app.connector_registry import ConnectorRegistry
+    from app.presence_registry import PresenceRegistry
+
+    db = str(tmp_path / "turn-complete-boundary.db")
+    main.store = Store(db)
+    main.connector_registry = ConnectorRegistry(db)
+    main.presence_registry = PresenceRegistry(db)
+    client = TestClient(main.app)
+
+    created = client.post(
+        "/v1/human",
+        json={
+            "uri": "human://clarify",
+            "source": "codex",
+            "ref": "session-1:turn-1",
+            "title": "Which deployment target?",
+            "context": {
+                "session_id": "session-1",
+                "turn_id": "turn-1",
+            },
+        },
+    )
+    assert created.status_code == 201
+    rid = created.json()["request"]["id"]
+
+    # The source runtime can finish/stop the turn that created the question.
+    # That lifecycle observation must not imply that the human obligation was answered.
+    stopped = client.post(
+        "/v1/connectors/events",
+        json={
+            "provider": "codex",
+            "event_name": "Stop",
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+        },
+    )
+    assert stopped.status_code == 202
+
+    ended = client.post(
+        "/v1/connectors/events",
+        json={
+            "provider": "codex",
+            "event_name": "SessionEnd",
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+        },
+    )
+    assert ended.status_code == 202
+
+    boundary = main.store.get(rid)
+    assert boundary is not None
+    assert boundary.status.value == "pending"
+    assert boundary.resolution is None
+    assert not any(
+        event["type"] in {"resolved", "machine_expired", "machine_cancelled"}
+        for event in main.store.events(rid)
+    )
