@@ -193,3 +193,54 @@ jobs:
             throw "installer did not create a valid gateway token"
           }
           Write-Host "INSTALLER_ENTRYPOINT_OK"
+
+
+  codex-native-discovery:
+    name: latest Codex native hook discovery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install latest official Codex CLI
+        run: |
+          npm install -g @openai/codex@latest
+          codex --version
+      - name: Install human:// and connect Codex
+        run: |
+          python -m pip install .
+          humanq onboard --force
+          humanq connect codex
+      - name: Ask Codex app-server what it actually discovered
+        run: |
+          humanq verify codex --json > codex-readiness.json
+          cat codex-readiness.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          status = json.loads(Path("codex-readiness.json").read_text())
+          assert status["codex_detected"] is True, status
+          assert status["codex_version"], status
+          assert status["hooks_file_present"] is True, status
+          assert status["permission_hook_present"] is True, status
+          assert status["hook_command_matches_current_runtime"] is True, status
+          assert sorted(status["observer_events_present"]) == sorted([
+              "PreToolUse", "PostToolUse", "SessionStart",
+              "UserPromptSubmit", "Stop", "SessionEnd",
+          ]), status
+          assert status["native_hook_discovered"] is True, status
+          assert status["native_current_hash"], status
+          assert status["native_timeout_sec"] == 600, status
+          assert status["native_status_message"] == "Waiting for human://", status
+          assert status["trust_status"] in {"untrusted", "trusted", "managed"}, status
+          assert status["real_host_e2e_verified"] is False, status
+          print("CODEX_NATIVE_DISCOVERY_OK")
+          print("codex_version=" + str(status["codex_version"]))
+          print("trust_status=" + str(status["trust_status"]))
+          print("hook_hash=" + str(status["native_current_hash"]))
+          PY
