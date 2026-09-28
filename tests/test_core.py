@@ -694,3 +694,49 @@ def test_concurrent_independent_store_instances_resolve_once(tmp_path: Path):
     # Once one single-resolver decision wins, a racing second worker must not
     # create a second vote that could be mistaken for another human decision.
     assert len(votes) == 1, [row["actor"] for row in votes]
+
+
+def test_concurrent_api_resolve_resumes_machine_once(tmp_path: Path, monkeypatch):
+    """Two HTTP workers racing the same boundary must produce one resume."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from app import main
+
+    main.store = Store(str(tmp_path / "concurrent-api-resolve.db"))
+    item = main.store.create(req())
+
+    resume_calls = []
+    resume_lock = threading.Lock()
+
+    async def fake_resume(resolved, resolution):
+        with resume_lock:
+            resume_calls.append((resolved.id, resolution.get("action")))
+        return {"delivered": True, "semantic_confirmed": True}
+
+    monkeypatch.setattr(main, "_resume_and_record", fake_resume)
+
+    start = threading.Barrier(2)
+
+    def post(actor: str):
+        client = TestClient(main.app)
+        start.wait(timeout=5)
+        response = client.post(
+            f"/v1/requests/{item.id}/resolve",
+            json={"actor": actor, "action": "approve"},
+        )
+        return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(post, "alice")
+        b = pool.submit(post, "bob")
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert sorted(status for status, _ in results) == [200, 409], results
+    assert resume_calls == [(item.id, "approve")], resume_calls
+
+    detail = TestClient(main.app).get(f"/v1/requests/{item.id}").json()
+    resolved_events = [
+        event for event in detail["events"]
+        if event["type"] == "resolved"
+    ]
+    assert len(resolved_events) == 1, resolved_events
