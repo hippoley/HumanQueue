@@ -473,16 +473,15 @@ def main() -> None:
             )
             print("attached_server_info=" + json.dumps(server_info, sort_keys=True), flush=True)
 
+            attach_env = child_env.copy()
+            attach_env["OPENCODE_SERVER_USERNAME"] = server_username
+            attach_env["OPENCODE_SERVER_PASSWORD"] = server_password
             child = subprocess.Popen(
                 [
                     "opencode",
                     "run",
-                    "--attach",
+                    "--server",
                     server_url,
-                    "--username",
-                    server_username,
-                    "--password",
-                    server_password,
                     "--model",
                     "local/coder",
                     (
@@ -491,7 +490,7 @@ def main() -> None:
                     ),
                 ],
                 cwd=workspace,
-                env=child_env,
+                env=attach_env,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
