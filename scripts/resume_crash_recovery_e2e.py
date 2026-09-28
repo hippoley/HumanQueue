@@ -129,8 +129,20 @@ def main() -> None:
         # This is the crash window: the canonical decision is durable, but no
         # resume transport has run and therefore no resume_* evidence exists.
         event_types = [event["type"] for event in store.events(item.id)]
-        if any(event.startswith("resume_") for event in event_types):
-            raise RuntimeError(f"unexpected pre-crash resume evidence: {event_types}")
+        if "resume_queued" not in event_types:
+            raise RuntimeError(
+                "resolved webhook request did not durably queue its resume obligation: "
+                + json.dumps(event_types)
+            )
+        forbidden = {
+            "resume_confirmed",
+            "resume_delivered_unconfirmed",
+            "resume_undeliverable",
+        }
+        if forbidden.intersection(event_types):
+            raise RuntimeError(
+                f"unexpected pre-crash resume attempt evidence: {event_types}"
+            )
         print(f"CRASH_WINDOW_PERSISTED request_id={item.id}")
 
         gateway = subprocess.Popen(
