@@ -161,7 +161,8 @@ def main() -> None:
                 [
                     "opencode",
                     "api",
-                    "v2.session.create",
+                    "POST",
+                    "/api/session",
                     "--data",
                     json.dumps({"title": "human:// native permission probe"}),
                 ],
