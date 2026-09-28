@@ -25,6 +25,7 @@
 - Fixed a human-vs-timeout terminal race where separate workers could each emit a different terminal event for one boundary.
 - Terminal resolution/expiry now uses database compare-and-set semantics; losing contenders roll back vote/event side effects and read the canonical winner.
 - Added duplicate same-actor and repeated 20-race stress coverage.
+- Added resolve-vs-supersede and concurrent-replacement regression coverage; supersession already serialized correctly through the shared SQLite write transaction.
 - Hardened Python SDK create semantics against ambiguous transport failures: every `ask()` invocation now carries one stable client idempotency key (caller-provided or generated) and retries transport/5xx create outcomes with that same key.
 - Added packaged fault-injection E2E where Gateway commits and returns 201 but a proxy deliberately drops the response; SDK retries, recovers the same request with `created=false`, observes only one canonical `created` event, then receives the real human decision and continues.
 
