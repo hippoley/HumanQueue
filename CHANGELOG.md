@@ -15,6 +15,10 @@
 - Added clean-wheel first-run E2E on Ubuntu/Python 3.10 + 3.12, macOS/Python 3.12 and Windows/Python 3.12.
 - Added real installer-entrypoint E2E for shipped `install.sh` on Ubuntu/macOS and `install.ps1` on Windows.
 - Fixed the first-run E2E harness after Windows proved that intentional process teardown may return exit code 1 even though the complete human boundary round-trip succeeded.
+- Added a durable SQLite resume outbox that is committed atomically with finalized webhook-backed human decisions.
+- Added leased Gateway reconciliation so a restart recovers decisions that crashed before resume transport.
+- Added canonical `Idempotency-Key=request_id` to resume webhooks and documented at-least-once transport / receiver-dedup semantics instead of claiming exactly-once delivery.
+- Added packaged fault injection for both crash-before-send and crash-after-remote-delivery/before-local-ack windows; the latter proves two transports can produce one logical execution at an idempotent receiver.
 
 
 ## 0.7.0 — human-boundary integrity
