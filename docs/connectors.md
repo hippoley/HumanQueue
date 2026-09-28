@@ -2,7 +2,7 @@
 
 human:// treats every editor and channel as an adapter around one source of truth: the local Human Gateway.
 
-> **Status:** Codex now has a packaged hook-process E2E for native `PermissionRequest` stdin → human:// → allow/deny stdout, but Codex host loading/trust/consumption is still a separate pending proof. Cursor is implemented and tested. Claude Code and OpenCode connectors are implemented, but real-host end-to-end validation is still pending. Slack and Telegram channel adapters are implemented; Slack workspace E2E is still pending. OpenClaw and Muse live workers are not implemented yet.
+> **Status:** Codex has a packaged hook-process E2E plus recurring verification against the latest official Codex CLI for native hook discovery and explicit exact-hash trust. Authenticated model-turn consumption is still a separate pending proof. Cursor is implemented and tested. Claude Code and OpenCode connectors are implemented, but real-host end-to-end validation is still pending. Slack and Telegram channel adapters are implemented; Slack workspace E2E is still pending. OpenClaw and Muse live workers are not implemented yet.
 
 ```text
 Agent/editor native event
@@ -43,15 +43,19 @@ This installs user-level hooks in `~/.codex/hooks.json` for:
 
 Codex exposes `session_id`, `transcript_path`, `cwd`, and the current model to command hooks. Turn hooks also expose `turn_id`. The connector stores a bounded context capsule and transcript pointer; it does not require parsing the whole transcript to function.
 
-After installation, Codex requires you to review/trust the new non-managed hook definition once with `/hooks`. human:// deliberately does not infer that trust state from the hook file.
+After installation, Codex requires explicit trust for a new or changed non-managed hook. human:// does **not** auto-trust during `connect`, and it never infers trust from the local hook file.
 
-Check everything that can be established **before** the final native-host proof:
+Use this explicit path:
 
 ```bash
 humanq verify codex
+humanq trust codex
+humanq verify codex
 ```
 
-The verifier reports the Codex binary/version, Gateway health, installed PermissionRequest + observer hooks, whether the hook command still points at the Python runtime that installed it, **and Codex's own `hooks/list` result** including trust status/current hash. A local JSON file alone cannot make trust green. Even a Codex-reported `trusted` hook still does not mark native host E2E as proven until a real PermissionRequest consumes the decision.
+The first verifier asks the real Codex `app-server hooks/list` endpoint for the discovered hook key, current hash, timeout/status message and trust state. `humanq trust codex` then asks Codex itself to trust **that exact current key/hash** and immediately re-queries `hooks/list`. It refuses stale Python-runtime hooks, unexpected trust states, or any key/hash that changes during the operation. If you prefer, Codex `/hooks` remains the native UI alternative.
+
+A local JSON file alone can never make trust green. Even a Codex-reported `trusted` hook still does not mark native host E2E as proven until a real PermissionRequest is consumed.
 
 Once readiness is green, capture the final native proof:
 
