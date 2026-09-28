@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import socket
@@ -12,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from app.models import AttentionRequestCreate, RequestKind, ResumeTarget
+from app.resume import resume
 from app.store import Store
 
 
@@ -38,7 +40,7 @@ def wait_for_health(url: str, timeout: float = 10.0) -> None:
 
 def main() -> None:
     receipts: list[dict] = []
-    executions: set[str] = set()
+    execution_counts: dict[str, int] = {}
     lock = threading.Lock()
 
     class Receiver(BaseHTTPRequestHandler):
@@ -46,15 +48,21 @@ def main() -> None:
             length = int(self.headers.get("content-length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             request_id = str(payload["request_id"])
+            idempotency_key = self.headers.get("Idempotency-Key")
             with lock:
                 receipts.append(
                     {
                         "request_id": request_id,
-                        "idempotency_key": self.headers.get("Idempotency-Key"),
+                        "idempotency_key": idempotency_key,
                         "payload": payload,
                     }
                 )
-                executions.add(request_id)
+                # This receiver intentionally models the required webhook
+                # contract: the stable request id is the idempotency key.
+                # A transport retry may arrive twice, but the machine side
+                # effect is applied once.
+                if execution_counts.get(request_id, 0) == 0:
+                    execution_counts[request_id] = 1
 
             body = json.dumps(
                 {"request_id": request_id, "resumed": True}
@@ -165,7 +173,7 @@ def main() -> None:
 
             with lock:
                 seen = list(receipts)
-                execution_count = len(executions)
+                execution_count = execution_counts.get(item.id, 0)
 
             if not seen:
                 raise RuntimeError(
@@ -195,6 +203,130 @@ def main() -> None:
             print("PACKAGED_RESUME_CRASH_RECOVERY_OK")
             print(f"request_id={item.id}")
             print("lifecycle=" + " -> ".join(final_events))
+
+            # Second crash window: the receiver has already accepted and
+            # semantically confirmed the callback, but the Gateway dies before
+            # recording that confirmation / completing the outbox lease.
+            stop_gateway(gateway)
+
+            ambiguous = store.create(
+                AttentionRequestCreate(
+                    source="resume-after-delivery-crash-e2e",
+                    source_ref="post-delivery-crash-001",
+                    title="Retry safely after delivery-before-ack crash",
+                    summary="Receiver executed once; Gateway lost the local ack.",
+                    kind=RequestKind.approval,
+                    resume=ResumeTarget(
+                        mode="webhook",
+                        url=f"http://127.0.0.1:{receiver_port}/resume",
+                    ),
+                )
+            )
+            ambiguous_resolved, ambiguous_finalized = store.resolve(
+                ambiguous.id,
+                "crash-ci-human",
+                {
+                    "action": "approve",
+                    "values": {"receiver_dedup": True},
+                },
+            )
+            if not ambiguous_finalized or ambiguous_resolved is None:
+                raise RuntimeError("failed to persist second crash-window decision")
+
+            claimed = store.claim_resume(ambiguous.id, lease_seconds=1)
+            if claimed is None:
+                raise RuntimeError("could not lease second crash-window resume")
+
+            delivered = asyncio.run(
+                resume(claimed, claimed.resolution or {})
+            )
+            if not delivered.get("confirmed"):
+                raise RuntimeError(
+                    "receiver did not confirm the first pre-crash delivery: "
+                    + json.dumps(delivered)
+                )
+
+            # Intentionally DO NOT call finish_resume_attempt. This simulates a
+            # process death after the receiver committed the side effect but
+            # before the local outbox/audit transaction was written.
+            pre_recovery_outbox = store.resume_outbox(ambiguous.id)
+            if pre_recovery_outbox["state"] != "in_flight":
+                raise RuntimeError(
+                    "second crash window was not left in-flight: "
+                    + json.dumps(pre_recovery_outbox)
+                )
+            with lock:
+                first_delivery_count = sum(
+                    1 for row in receipts
+                    if row["request_id"] == ambiguous.id
+                )
+                first_execution_count = execution_counts.get(ambiguous.id, 0)
+            if first_delivery_count != 1 or first_execution_count != 1:
+                raise RuntimeError(
+                    "receiver did not execute the first delivery exactly once"
+                )
+            print(
+                "POST_DELIVERY_CRASH_WINDOW_PERSISTED "
+                f"request_id={ambiguous.id}"
+            )
+
+            time.sleep(1.2)
+            gateway = subprocess.Popen(
+                [sys.executable, "-m", "humanqueue", "gateway", "run"],
+                cwd=root,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            wait_for_health(f"http://127.0.0.1:{gateway_port}")
+
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                recovered = Store(db).resume_outbox(ambiguous.id)
+                with lock:
+                    deliveries_for_request = [
+                        row for row in receipts
+                        if row["request_id"] == ambiguous.id
+                    ]
+                    logical_executions = execution_counts.get(ambiguous.id, 0)
+                if (
+                    recovered
+                    and recovered["state"] == "done"
+                    and len(deliveries_for_request) >= 2
+                ):
+                    break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError(
+                    "expired resume lease was not replayed and completed after restart"
+                )
+
+            if logical_executions != 1:
+                raise RuntimeError(
+                    f"idempotent receiver applied {logical_executions} logical side effects"
+                )
+            if any(
+                row["idempotency_key"] != ambiguous.id
+                for row in deliveries_for_request
+            ):
+                raise RuntimeError(
+                    "resume retries did not preserve the canonical idempotency key"
+                )
+
+            ambiguous_events = [
+                event["type"] for event in Store(db).events(ambiguous.id)
+            ]
+            if ambiguous_events.count("resume_confirmed") != 1:
+                raise RuntimeError(
+                    "recovered retry did not record exactly one canonical confirmation: "
+                    + json.dumps(ambiguous_events)
+                )
+
+            print("PACKAGED_POST_DELIVERY_CRASH_DEDUP_OK")
+            print(f"request_id={ambiguous.id}")
+            print(f"transport_attempts={len(deliveries_for_request)}")
+            print(f"logical_executions={logical_executions}")
         finally:
             if gateway.poll() is None:
                 gateway.terminate()
