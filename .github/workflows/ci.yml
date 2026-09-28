@@ -17,6 +17,7 @@ jobs:
       - run: humanq connect --help
       - run: humanq verify --help
       - run: humanq verify codex --json
+      - run: humanq trust --help
       - run: humanq prove --help
       - run: humanq mcp --help
       - run: humanq channel --help
@@ -215,32 +216,72 @@ jobs:
           python -m pip install .
           humanq onboard --force
           humanq connect codex
-      - name: Ask Codex app-server what it actually discovered
+      - name: Prove Codex-native discovery and explicit trust
         run: |
-          humanq verify codex --json > codex-readiness.json
-          cat codex-readiness.json
+          humanq gateway run > humanq-gateway.log 2>&1 &
+          GATEWAY_PID=$!
+          trap 'kill "$GATEWAY_PID" >/dev/null 2>&1 || true' EXIT
+
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          deadline = time.monotonic() + 10
+          while time.monotonic() < deadline:
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:7482/health", timeout=1) as r:
+                      if json.load(r).get("ok") is True:
+                          break
+              except Exception:
+                  time.sleep(0.1)
+          else:
+              raise SystemExit("Gateway did not become healthy")
+          PY
+
+          humanq verify codex --json > codex-readiness-before.json
+          cat codex-readiness-before.json
+          humanq trust codex --json > codex-trust.json
+          cat codex-trust.json
+          humanq verify codex --json > codex-readiness-after.json
+          cat codex-readiness-after.json
+
           python - <<'PY'
           import json
           from pathlib import Path
 
-          status = json.loads(Path("codex-readiness.json").read_text())
-          assert status["codex_detected"] is True, status
-          assert status["codex_version"], status
-          assert status["hooks_file_present"] is True, status
-          assert status["permission_hook_present"] is True, status
-          assert status["hook_command_matches_current_runtime"] is True, status
-          assert sorted(status["observer_events_present"]) == sorted([
+          before = json.loads(Path("codex-readiness-before.json").read_text())
+          trust = json.loads(Path("codex-trust.json").read_text())
+          after = json.loads(Path("codex-readiness-after.json").read_text())
+
+          assert before["codex_detected"] is True, before
+          assert before["codex_version"], before
+          assert before["hooks_file_present"] is True, before
+          assert before["permission_hook_present"] is True, before
+          assert before["hook_command_matches_current_runtime"] is True, before
+          assert sorted(before["observer_events_present"]) == sorted([
               "PreToolUse", "PostToolUse", "SessionStart",
               "UserPromptSubmit", "Stop", "SessionEnd",
-          ]), status
-          assert status["native_hook_discovered"] is True, status
-          assert status["native_current_hash"], status
-          assert status["native_timeout_sec"] == 600, status
-          assert status["native_status_message"] == "Waiting for human://", status
-          assert status["trust_status"] in {"untrusted", "trusted", "managed"}, status
-          assert status["real_host_e2e_verified"] is False, status
-          print("CODEX_NATIVE_DISCOVERY_OK")
-          print("codex_version=" + str(status["codex_version"]))
-          print("trust_status=" + str(status["trust_status"]))
-          print("hook_hash=" + str(status["native_current_hash"]))
+          ]), before
+          assert before["native_hook_discovered"] is True, before
+          assert before["native_current_hash"], before
+          assert before["native_timeout_sec"] == 600, before
+          assert before["native_status_message"] == "Waiting for human://", before
+          assert before["trust_status"] in {"untrusted", "modified", "trusted", "managed"}, before
+
+          assert trust["current_hash"] == before["native_current_hash"], (trust, before)
+          assert trust["trust_after"] in {"trusted", "managed"}, trust
+
+          assert after["native_hook_discovered"] is True, after
+          assert after["native_current_hash"] == before["native_current_hash"], (after, before)
+          assert after["trust_status"] in {"trusted", "managed"}, after
+          assert after["gateway_online"] is True, after
+          assert after["ready_for_real_host_probe"] is True, after
+          assert after["real_host_e2e_verified"] is False, after
+
+          print("CODEX_NATIVE_DISCOVERY_AND_TRUST_OK")
+          print("codex_version=" + str(after["codex_version"]))
+          print("trust_before=" + str(before["trust_status"]))
+          print("trust_after=" + str(after["trust_status"]))
+          print("hook_hash=" + str(after["native_current_hash"]))
           PY
