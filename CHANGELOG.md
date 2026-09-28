@@ -3,6 +3,7 @@
 ## Unreleased — native host verification
 
 - Added a durable SQLite channel outbox committed atomically with request creation, closing the crash window between canonical request commit and human-facing notification.
+- Fixed `POST /v1/requests` and `POST /v1/import` still bypassing that outbox with a legacy direct background publisher; all three canonical create APIs now drain the same durable publish intent and cannot double-notify through direct + outbox paths.
 - Added leased outbox workers with abandoned-lease recovery on Gateway restart.
 - Added packaged crash-recovery E2E proving a request committed before Gateway startup is automatically delivered after startup and the outbox reaches `done`.
 - Documented channel semantics as durable **at-least-once** delivery keyed by canonical request ID, not cross-system exactly-once delivery.
