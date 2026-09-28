@@ -2181,3 +2181,7 @@ def test_abandoned_resume_attempt_becomes_uncertain_and_is_not_replayed(tmp_path
     ]
     assert len(uncertain) == 1
     assert uncertain[0]["data"]["automatic_retry"] is False
+
+    metrics = second.metrics()
+    assert metrics["resume_outbox"]["uncertain"] == 1
+    assert metrics["integrity_last_24h"]["resume_delivery_uncertain"] == 1
