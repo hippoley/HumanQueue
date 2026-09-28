@@ -958,3 +958,70 @@ def test_human_resolution_racing_machine_cancel_has_one_terminal_outcome(tmp_pat
         ).fetchall()
 
     assert len(terminal_events) == 1, [row["type"] for row in terminal_events]
+
+
+def test_http_human_resolution_racing_machine_expiry_has_one_winner(tmp_path: Path, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from app import main
+
+    main.store = Store(str(tmp_path / "http-human-vs-expiry.db"))
+    item = main.store.create(req())
+
+    resume_calls = []
+    resume_lock = threading.Lock()
+
+    async def fake_resume(resolved, resolution):
+        with resume_lock:
+            resume_calls.append(resolved.id)
+        return {"delivered": True, "semantic_confirmed": True}
+
+    monkeypatch.setattr(main, "_resume_and_record", fake_resume)
+
+    start = threading.Barrier(2)
+
+    def human():
+        client = TestClient(main.app)
+        start.wait(timeout=5)
+        response = client.post(
+            f"/v1/requests/{item.id}/resolve",
+            json={"actor": "alice", "action": "approve"},
+        )
+        return response.status_code, response.json()
+
+    def machine():
+        client = TestClient(main.app)
+        start.wait(timeout=5)
+        response = client.post(
+            f"/v1/requests/{item.id}/outcome",
+            json={
+                "actor": "expiry-worker",
+                "actor_kind": "system",
+                "outcome": "expired",
+                "reason": "deadline elapsed",
+            },
+        )
+        return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(human)
+        b = pool.submit(machine)
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert sorted(status for status, _ in results) == [200, 409], results
+
+    detail = TestClient(main.app).get(f"/v1/requests/{item.id}").json()
+    terminal_events = [
+        event for event in detail["events"]
+        if event["type"] in {"resolved", "machine_expired"}
+    ]
+    assert len(terminal_events) == 1, terminal_events
+
+    final_status = detail["request"]["status"]
+    if final_status == "resolved":
+        assert resume_calls == [item.id]
+        assert terminal_events[0]["type"] == "resolved"
+    else:
+        assert final_status == "expired"
+        assert resume_calls == []
+        assert terminal_events[0]["type"] == "machine_expired"
