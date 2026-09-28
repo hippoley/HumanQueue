@@ -477,3 +477,96 @@ def test_python_sdk_default_constructor_uses_gateway_config(monkeypatch):
 
     assert human.base_url == "http://127.0.0.1:9999"
     assert human._headers() == {"Authorization": "Bearer hq_test_client"}
+
+
+def test_machine_provenance_cannot_resolve_human_boundary(tmp_path: Path):
+    from app import main
+
+    main.store = Store(str(tmp_path / "machine-cannot-resolve-human.db"))
+    client = TestClient(main.app)
+    item = main.store.create(req())
+
+    response = client.post(
+        f"/v1/requests/{item.id}/resolve",
+        json={
+            "actor": "scheduler",
+            "actor_kind": "system",
+            "action": "approve",
+        },
+    )
+
+    assert response.status_code == 403
+    current = main.store.get(item.id)
+    assert current is not None
+    assert current.status.value == "pending"
+    assert current.resolution is None
+    assert not any(e["type"] == "resolved" for e in main.store.events(item.id))
+
+
+def test_machine_outcome_expires_without_fabricating_human_resolution(tmp_path: Path):
+    from app import main
+
+    main.store = Store(str(tmp_path / "machine-expiry.db"))
+    client = TestClient(main.app)
+    item = main.store.create(req())
+
+    response = client.post(
+        f"/v1/requests/{item.id}/outcome",
+        json={
+            "actor": "timeout-worker",
+            "actor_kind": "system",
+            "outcome": "expired",
+            "reason": "deadline elapsed",
+            "metadata": {"timer": "60s"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["human_resolution"] is False
+    assert body["request"]["status"] == "expired"
+    assert body["request"]["resolution"] is None
+    assert body["outcome"]["actor_kind"] == "system"
+
+    events = main.store.events(item.id)
+    expired = [e for e in events if e["type"] == "machine_expired"]
+    assert len(expired) == 1
+    assert expired[0]["actor"] == "timeout-worker"
+    assert expired[0]["data"]["actor_kind"] == "system"
+    assert expired[0]["data"]["reason"] == "deadline elapsed"
+
+
+def test_human_resolution_records_typed_provenance(tmp_path: Path):
+    store = Store(str(tmp_path / "human-provenance.db"))
+    item = store.create(req())
+
+    resolved, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+        actor_kind="human",
+    )
+
+    assert finalized is True
+    assert resolved is not None
+    assert resolved.resolution["provenance"] == {
+        "actor": "alice",
+        "actor_kind": "human",
+    }
+
+
+def test_explicit_any_authority_can_accept_policy_resolution(tmp_path: Path):
+    store = Store(str(tmp_path / "policy-authority.db"))
+    item = store.create(req(route=RoutePolicy(required_actor_kind="any")))
+
+    resolved, finalized = store.resolve(
+        item.id,
+        "low-risk-policy",
+        {"action": "approve", "values": {}},
+        actor_kind="policy",
+    )
+
+    assert finalized is True
+    assert resolved is not None
+    assert resolved.status.value == "resolved"
+    assert resolved.resolution["provenance"]["actor_kind"] == "policy"

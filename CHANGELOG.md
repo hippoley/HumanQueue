@@ -8,6 +8,8 @@
 - Added `PreToolUse` / `PostToolUse` Codex observers and preserve native `tool_use_id` + `tool_response` as bounded connector evidence.
 - Added `humanq prove codex`: it ignores pre-existing pending requests, captures a new PermissionRequest, waits for the human resolution, and only marks an approval verified after a later matching `PostToolUse` on the same native session/turn/tool.
 - Added durable Codex proof receipts under `~/.human-queue/evidence/codex/`; resolution alone can never manufacture a green native-host proof.
+- Added typed resolution provenance (`human|system|policy|service`) and human-only authority by default.
+- Added a separate machine outcome path for `expired` / `cancelled` so timeouts, schedulers and policies cannot be represented as human consent.
 
 
 ## 0.7.0 — human-boundary integrity
