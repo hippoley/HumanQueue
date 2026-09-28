@@ -58,6 +58,7 @@ class AttentionSignals(BaseModel):
 class RoutePolicy(BaseModel):
     mode: Literal["single", "any_of", "quorum", "all_of"] = "single"
     actors: list[str] = Field(default_factory=list)
+    required_actor_kind: Literal["human", "any"] = "human"
     quorum: int = Field(default=1, ge=1, le=1000)
     team: str | None = None
     escalation_after_seconds: int | None = Field(default=None, ge=60, le=604800)
@@ -140,6 +141,7 @@ class HumanAsk(BaseModel):
 
 class ResolveRequest(BaseModel):
     actor: str
+    actor_kind: Literal["human", "system", "policy", "service"] = "human"
     action: str | None = None
     values: dict[str, Any] = Field(default_factory=dict)
     comment: str | None = None
@@ -165,5 +167,16 @@ class BudgetPolicy(BaseModel):
 
 class BatchResolveRequest(BaseModel):
     actor: str
+    actor_kind: Literal["human", "system", "policy", "service"] = "human"
     action: str
     comment: str | None = None
+
+
+class MachineOutcomeRequest(BaseModel):
+    """Terminal machine/runtime outcome that must not masquerade as a human decision."""
+
+    actor: str
+    actor_kind: Literal["system", "policy", "service"]
+    outcome: Literal["expired", "cancelled"]
+    reason: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
