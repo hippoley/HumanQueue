@@ -1099,3 +1099,74 @@ def test_same_actor_reclaim_is_idempotent(tmp_path: Path):
             (item.id,),
         ).fetchall()
     assert len(claim_events) == 1
+
+
+def test_concurrent_http_claim_has_one_winner(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from app import main
+
+    main.store = Store(str(tmp_path / "http-claim-race.db"))
+    item = main.store.create(req())
+    start = threading.Barrier(2)
+
+    def post(actor: str):
+        client = TestClient(main.app)
+        start.wait(timeout=5)
+        response = client.post(
+            f"/v1/requests/{item.id}/claim",
+            json={"actor": actor},
+        )
+        return actor, response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(post, "alice")
+        b = pool.submit(post, "bob")
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert sorted(status for _, status, _ in results) == [200, 409], results
+
+    winner = next(actor for actor, status, _ in results if status == 200)
+    loser = next(actor for actor, status, _ in results if status == 409)
+    assert winner != loser
+
+    final = main.store.get(item.id)
+    assert final is not None
+    assert final.status.value == "claimed"
+    assert final.claimed_by == winner
+
+    with main.store._conn() as c:
+        claim_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='claimed'",
+            (item.id,),
+        ).fetchall()
+
+    assert [row["actor"] for row in claim_events] == [winner]
+
+
+def test_same_actor_http_reclaim_is_idempotent(tmp_path: Path):
+    from app import main
+
+    main.store = Store(str(tmp_path / "http-claim-idempotent.db"))
+    item = main.store.create(req())
+    client = TestClient(main.app)
+
+    first = client.post(
+        f"/v1/requests/{item.id}/claim",
+        json={"actor": "alice"},
+    )
+    second = client.post(
+        f"/v1/requests/{item.id}/claim",
+        json={"actor": "alice"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["claimed_by"] == "alice"
+
+    with main.store._conn() as c:
+        claim_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='claimed'",
+            (item.id,),
+        ).fetchall()
+    assert len(claim_events) == 1
