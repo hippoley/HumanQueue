@@ -124,11 +124,18 @@ human:// treats this as semantic confirmation only when the receipt's `request_i
 
 The resulting audit semantics are:
 
+- `resume_queued` — a webhook-backed resume obligation was durably committed with the human decision;
 - `resume_confirmed` — transport succeeded and the target explicitly acknowledged the same request;
 - `resume_delivered_unconfirmed` — transport succeeded but no exact-request receipt was returned;
 - `resume_undeliverable` — the callback could not be delivered.
 
-This avoids treating “HTTP 200” as proof that the correct waiting session consumed the decision.
+Webhook resume uses a durable SQLite outbox. The outbox record is created in the **same transaction** that finalizes the human decision, so a Gateway crash after `resolved` but before network delivery does not erase the obligation. A restarted Gateway leases and retries due outbox work.
+
+Crash recovery makes webhook delivery **at least once**, not exactly once. Every callback carries the canonical request id in the body, `X-Attention-Request-Id`, and the standard `Idempotency-Key` header. A webhook receiver that performs consequential side effects **must deduplicate by that request id** and return the same exact-request receipt on retries.
+
+This also covers the harder failure window where the receiver already applied the side effect but the Gateway crashed before persisting `resume_confirmed`: after the lease expires the transport may be repeated, while an idempotent receiver applies the logical action once.
+
+This avoids treating “HTTP 200” as proof that the correct waiting session consumed the decision and avoids pretending distributed HTTP transport can guarantee exactly-once execution.
 
 ## Decision provenance and responder identity
 
@@ -195,6 +202,7 @@ A native hook returning a decision proves only that human:// returned a decision
 - An unauthorized response must not consume the pending request.
 - An obsolete request must not remain approvable after supersession.
 - A callback must bind back to the original request/session, not only to display text.
+- Webhook receivers must treat canonical `request_id` / `Idempotency-Key` as a deduplication key because crash recovery may retry transport.
 
 ## Idempotency and supersession
 
