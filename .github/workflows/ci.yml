@@ -381,6 +381,8 @@ jobs:
           service_code=$?
           opencode api get /api/info >opencode-api.txt 2>opencode-api.err
           api_code=$?
+          opencode plugin list >opencode-plugins.txt 2>opencode-plugins.err
+          plugins_code=$?
           set -e
 
           cat opencode-config.txt || true
@@ -389,13 +391,17 @@ jobs:
           cat opencode-service.err || true
           cat opencode-api.txt || true
           cat opencode-api.err || true
+          cat opencode-plugins.txt || true
+          cat opencode-plugins.err || true
 
           echo "config_code=$config_code"
           echo "service_code=$service_code"
           echo "api_code=$api_code"
+          echo "plugins_code=$plugins_code"
 
           test "$config_code" -eq 0
           test "$api_code" -eq 0
+          test "$plugins_code" -eq 0
 
           python - <<'PY'
           from pathlib import Path
@@ -409,10 +415,17 @@ jobs:
                   "opencode-service.err",
                   "opencode-api.txt",
                   "opencode-api.err",
+                  "opencode-plugins.txt",
+                  "opencode-plugins.err",
               ]
               if Path(name).exists()
           )
           lower = combined.lower()
+          plugins = Path("opencode-plugins.txt").read_text(errors="replace").lower()
+          assert "human-queue" in plugins, (
+              "OpenCode service is healthy, but human:// is absent from the active plugin list:\n"
+              + plugins
+          )
           bad = [
               "cannot find package '@opencode/plugin'",
               "cannot find module '@opencode/plugin'",
@@ -422,5 +435,5 @@ jobs:
               "error loading plugin",
           ]
           assert not any(x in lower for x in bad), combined
-          print("OPENCODE_NATIVE_PLUGIN_LOAD_OK")
+          print("OPENCODE_ACTIVE_PLUGIN_DISCOVERY_OK")
           PY
