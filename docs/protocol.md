@@ -130,6 +130,31 @@ The resulting audit semantics are:
 
 This avoids treating “HTTP 200” as proof that the correct waiting session consumed the decision.
 
+## Durable human-facing channel delivery
+
+Request creation and the intent to notify configured human-facing channels are committed in the **same SQLite transaction**.
+
+The Gateway then leases durable `channel_outbox` rows and projects the canonical request into Slack, Telegram, or webhook channels. A process crash before publication therefore does not lose the human obligation: a restarted Gateway reclaims pending or expired leases and retries the publish work.
+
+The delivery guarantee is intentionally:
+
+```
+durable at-least-once attention delivery
++ stable canonical request_id
+```
+
+—not cross-system exactly-once delivery.
+
+There is an unavoidable distributed-systems window where an external channel may accept a message and the Gateway may crash before recording `done`. After the lease expires, the request may be replayed. Channel consumers should therefore treat the canonical human:// request ID as the deduplication identity.
+
+Current retry semantics are deliberately narrow:
+
+- process crash / abandoned lease → automatically recoverable;
+- unexpected publisher exception → scheduled retry;
+- a channel that responds with an explicit `delivered=false` result → audited as `channel_undeliverable`, not retried forever automatically.
+
+This keeps a failing or misconfigured human surface from becoming an unbounded retry loop while still closing the commit-before-publish crash window.
+
 ## Decision provenance and responder identity
 
 A human boundary must distinguish **who/what produced an outcome** from the outcome itself.
