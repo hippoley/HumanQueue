@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from urllib.error import HTTPError, URLError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -29,21 +30,46 @@ def request_json(method: str, url: str, token: str | None = None, payload: dict 
         return json.loads(response.read().decode("utf-8"))
 
 
-def opencode_server_json(
+def opencode_server_probe(
     url: str,
     path: str,
     *,
     username: str,
     password: str,
 ) -> dict:
+    """Record stable-server evidence without assuming one docs/API generation."""
+
     auth = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
     req = urllib.request.Request(
         url + path,
         headers={"Authorization": "Basic " + auth, "Accept": "application/json"},
         method="GET",
     )
-    with urllib.request.urlopen(req, timeout=3) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=3) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+            return {
+                "path": path,
+                "status": int(response.status),
+                "content_type": response.headers.get("Content-Type"),
+                "body": raw[:4000],
+            }
+    except HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        return {
+            "path": path,
+            "status": int(exc.code),
+            "content_type": exc.headers.get("Content-Type") if exc.headers else None,
+            "body": raw[:4000],
+        }
+    except (URLError, TimeoutError, OSError) as exc:
+        return {
+            "path": path,
+            "status": None,
+            "content_type": None,
+            "body": "",
+            "error": str(exc),
+        }
 
 
 def wait_for_opencode_server(
@@ -489,24 +515,26 @@ def main() -> None:
                 password=server_password,
             )
             print("attached_server_info=" + json.dumps(server_info, sort_keys=True), flush=True)
-            server_config = opencode_server_json(
-                server_url,
-                "/config",
-                username=server_username,
-                password=server_password,
-            )
-            server_providers = opencode_server_json(
-                server_url,
-                "/provider",
-                username=server_username,
-                password=server_password,
-            )
+            server_probes = [
+                opencode_server_probe(
+                    server_url,
+                    path,
+                    username=server_username,
+                    password=server_password,
+                )
+                for path in (
+                    "/config",
+                    "/api/config",
+                    "/config/providers",
+                    "/api/config/providers",
+                    "/provider",
+                    "/api/provider",
+                    "/openapi.json",
+                    "/api/openapi.json",
+                )
+            ]
             print(
-                "attached_server_config=" + json.dumps(server_config, sort_keys=True),
-                flush=True,
-            )
-            print(
-                "attached_server_providers=" + json.dumps(server_providers, sort_keys=True),
+                "attached_server_probes=" + json.dumps(server_probes, sort_keys=True),
                 flush=True,
             )
 
