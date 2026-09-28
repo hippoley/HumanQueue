@@ -539,6 +539,7 @@ def get_request(rid: str):
         "request": req,
         "human_uri": uri_for_kind(req.kind),
         "events": store.events(rid),
+        "resume_outbox": store.resume_outbox(rid),
     }
 
 
