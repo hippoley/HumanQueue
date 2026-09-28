@@ -1807,8 +1807,10 @@ def test_terminal_compare_and_set_survives_repeated_human_timeout_races(tmp_path
             )
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            pool.submit(human).result(timeout=10)
-            pool.submit(timeout).result(timeout=10)
+            human_future = pool.submit(human)
+            timeout_future = pool.submit(timeout)
+            human_future.result(timeout=10)
+            timeout_future.result(timeout=10)
 
         canonical = seed.get(item.id)
         assert canonical is not None
