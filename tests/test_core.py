@@ -1954,3 +1954,132 @@ def test_two_concurrent_replacements_leave_one_active_tip(tmp_path: Path):
         for row in superseded
     }
     assert all(len(events) == 1 for events in terminal_events.values())
+
+
+def test_resume_payload_and_signature_are_stable_for_same_canonical_decision(tmp_path: Path):
+    import json
+    from app.resume import signed_payload
+
+    item = Store(str(tmp_path / "stable-resume-payload.db")).create(
+        req(
+            source="agent",
+            source_ref="run-stable",
+            resume={
+                "mode": "webhook",
+                "url": "https://example.invalid/resume",
+                "secret": "stable-secret",
+            },
+        )
+    )
+
+    first_resolution = {
+        "action": "approve",
+        "values": {"target": "prod", "count": 2},
+        "provenance": {"actor": "alice", "actor_kind": "human"},
+    }
+    # Same semantic object with deliberately different Python dict key order.
+    second_resolution = {
+        "provenance": {"actor_kind": "human", "actor": "alice"},
+        "values": {"count": 2, "target": "prod"},
+        "action": "approve",
+    }
+
+    body1, sig1 = signed_payload(item, first_resolution)
+    body2, sig2 = signed_payload(item, second_resolution)
+
+    assert body1 == body2
+    assert sig1 == sig2
+    assert sig1 is not None and sig1.startswith("sha256=")
+
+    decoded = json.loads(body1)
+    assert decoded["event"] == "attention.resolved"
+    assert decoded["request_id"] == item.id
+    assert decoded["source"] == "agent"
+    assert decoded["source_ref"] == "run-stable"
+    assert decoded["resolution"]["action"] == "approve"
+
+
+def test_resume_repeated_attempt_keeps_same_transport_identity(tmp_path: Path, monkeypatch):
+    import app.resume as resume_module
+
+    item = Store(str(tmp_path / "stable-resume-attempt.db")).create(
+        req(
+            source="agent",
+            source_ref="run-transport",
+            resume={
+                "mode": "webhook",
+                "url": "https://example.invalid/resume",
+                "secret": "transport-secret",
+            },
+        )
+    )
+    resolution = {
+        "action": "approve",
+        "values": {"ticket": "42"},
+        "provenance": {"actor": "alice", "actor_kind": "human"},
+    }
+    attempts = []
+
+    class RecordingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, *, content, headers):
+            attempts.append({
+                "url": str(url),
+                "content": bytes(content),
+                "headers": dict(headers),
+            })
+            return httpx.Response(
+                200,
+                json={"request_id": item.id, "resumed": True},
+            )
+
+    monkeypatch.setattr(resume_module.httpx, "AsyncClient", RecordingAsyncClient)
+
+    first = asyncio.run(resume_module.resume(item, resolution))
+    second = asyncio.run(resume_module.resume(item, resolution))
+
+    assert first["confirmed"] is True
+    assert second["confirmed"] is True
+    assert len(attempts) == 2
+
+    assert attempts[0]["content"] == attempts[1]["content"]
+    assert attempts[0]["headers"]["x-attention-request-id"] == item.id
+    assert attempts[1]["headers"]["x-attention-request-id"] == item.id
+    assert (
+        attempts[0]["headers"]["x-attention-signature"]
+        == attempts[1]["headers"]["x-attention-signature"]
+    )
+
+
+def test_resume_changed_decision_changes_signed_transport_identity(tmp_path: Path):
+    from app.resume import signed_payload
+
+    item = Store(str(tmp_path / "changed-resume-payload.db")).create(
+        req(
+            resume={
+                "mode": "webhook",
+                "url": "https://example.invalid/resume",
+                "secret": "change-secret",
+            }
+        )
+    )
+
+    approve_body, approve_sig = signed_payload(
+        item,
+        {"action": "approve", "values": {}},
+    )
+    reject_body, reject_sig = signed_payload(
+        item,
+        {"action": "reject", "values": {}},
+    )
+
+    assert approve_body != reject_body
+    assert approve_sig != reject_sig
