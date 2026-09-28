@@ -1288,3 +1288,59 @@ def test_duplicate_idempotent_human_post_does_not_republish_channel(tmp_path: Pa
     events = main.store.events(first_id)
     assert len([event for event in events if event["type"] == "created"]) == 1
     assert len([event for event in events if event["type"] == "channel_delivered"]) == 1
+
+
+def test_concurrent_independent_store_instances_create_one_idempotent_request(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "concurrent-idempotent-create.db")
+    left = Store(db)
+    right = Store(db)
+    start = threading.Barrier(2)
+
+    def create(store: Store):
+        start.wait(timeout=5)
+        try:
+            item, created = store.create_with_status(
+                req(
+                    source="agent",
+                    source_ref="same-operation",
+                    idempotency_key="same-idempotency-key",
+                )
+            )
+            return {
+                "error": None,
+                "id": item.id,
+                "created": created,
+            }
+        except Exception as exc:
+            return {
+                "error": f"{type(exc).__name__}: {exc}",
+                "id": None,
+                "created": None,
+            }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(create, left)
+        b = pool.submit(create, right)
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert all(result["error"] is None for result in results), results
+    ids = {result["id"] for result in results}
+    assert len(ids) == 1, results
+    assert sorted(result["created"] for result in results) == [False, True]
+
+    item_id = next(iter(ids))
+    with left._conn() as c:
+        rows = c.execute(
+            "SELECT id FROM requests WHERE source=? AND idempotency_key=?",
+            ("agent", "same-idempotency-key"),
+        ).fetchall()
+        events = c.execute(
+            "SELECT type FROM events WHERE request_id=? ORDER BY seq",
+            (item_id,),
+        ).fetchall()
+
+    assert len(rows) == 1
+    assert [row["type"] for row in events].count("created") == 1
