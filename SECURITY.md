@@ -27,6 +27,16 @@ Channel identity is only as strong as the channel that supplies it.
 
 A string such as `slack:U123` is meaningful only when it came through the authenticated Slack connector path.
 
+### Decision provenance
+
+The resolution API records a typed provenance class: `human`, `system`, `policy`, or `service`.
+
+Human boundaries default to requiring `actor_kind=human`. A caller that identifies itself as a machine/system/policy cannot resolve such a boundary through the supported API.
+
+Machine lifecycle outcomes use a separate `/outcome` path and may only produce terminal `expired` or `cancelled` states; they do not create a human `resolution`.
+
+This is a protocol integrity property, not an independent identity provider. A caller holding the Gateway administrative token could still lie about provenance, so authenticated channel/application code remains responsible for asserting the correct actor kind.
+
 ### Resume callbacks
 
 A signed resume callback binds:
@@ -76,6 +86,7 @@ The following must not mean “approve”:
 - Gateway unavailable;
 - channel unreachable;
 - timeout;
+- a system/policy/service outcome represented as a human resolution;
 - malformed callback;
 - unauthorized responder;
 - stale or superseded request;
@@ -108,6 +119,8 @@ human:// currently provides:
 - per-channel signed webhook callbacks;
 - duplicate terminal-resolution protection;
 - route actor constraints;
+- typed decision provenance and human-only authority gates;
+- separate machine outcome semantics for expiry/cancellation;
 - request idempotency and supersession;
 - bounded external context projection;
 - auditable delivery and resume outcome events;
