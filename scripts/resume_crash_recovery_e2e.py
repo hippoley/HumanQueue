@@ -23,6 +23,17 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def stop_gateway(gateway: subprocess.Popen[str]) -> None:
+    if gateway.poll() is not None:
+        return
+    gateway.terminate()
+    try:
+        gateway.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        gateway.kill()
+        gateway.wait(timeout=5)
+
+
 def wait_for_health(url: str, timeout: float = 10.0) -> None:
     import urllib.request
 
