@@ -1677,3 +1677,147 @@ def test_sdk_create_retry_retries_ambiguous_server_error(monkeypatch):
     assert item["id"] == "attn_after_500"
     assert len(payloads) == 2
     assert payloads[0]["idempotency_key"] == payloads[1]["idempotency_key"]
+
+
+def test_human_resolution_and_machine_timeout_race_has_one_terminal_outcome(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "human-vs-timeout-race.db")
+    seed = Store(db)
+    human_store = Store(db)
+    system_store = Store(db)
+    item = seed.create(req())
+    start = threading.Barrier(2)
+
+    def human():
+        start.wait(timeout=5)
+        resolved, finalized = human_store.resolve(
+            item.id, "alice",
+            {"action": "approve", "values": {"safe": True}},
+            actor_kind="human",
+        )
+        return finalized, resolved.status.value if resolved else None
+
+    def timeout():
+        start.wait(timeout=5)
+        result = system_store.apply_machine_outcome(
+            item.id,
+            actor="deadline-worker",
+            actor_kind="system",
+            outcome="expired",
+            reason="approval deadline elapsed",
+        )
+        return result.status.value if result else None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(human)
+        b = pool.submit(timeout)
+        a.result(timeout=10)
+        b.result(timeout=10)
+
+    canonical = seed.get(item.id)
+    assert canonical is not None
+    assert canonical.status.value in {"resolved", "expired"}
+
+    events = seed.events(item.id)
+    resolved_events = [e for e in events if e["type"] == "resolved"]
+    expired_events = [e for e in events if e["type"] == "machine_expired"]
+    assert len(resolved_events) + len(expired_events) == 1, events
+
+    if canonical.status.value == "resolved":
+        assert len(resolved_events) == 1
+        assert canonical.resolution is not None
+        assert canonical.resolution["provenance"]["actor_kind"] == "human"
+    else:
+        assert len(expired_events) == 1
+        assert canonical.resolution is None
+
+
+def test_concurrent_duplicate_same_actor_resolution_is_idempotent(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "concurrent-same-actor-resolution.db")
+    seed = Store(db)
+    left = Store(db)
+    right = Store(db)
+    item = seed.create(req())
+    start = threading.Barrier(2)
+
+    def submit(store: Store):
+        start.wait(timeout=5)
+        return store.resolve(
+            item.id,
+            "alice",
+            {"action": "approve", "values": {"ticket": "same"}},
+            actor_kind="human",
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(submit, left)
+        b = pool.submit(submit, right)
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert sum(1 for _, finalized in results if finalized) == 1
+
+    canonical = seed.get(item.id)
+    assert canonical is not None
+    assert canonical.status.value == "resolved"
+    assert canonical.resolution is not None
+    assert all(resolved.resolution == canonical.resolution for resolved, _ in results)
+
+    events = seed.events(item.id)
+    assert len([e for e in events if e["type"] == "vote"]) == 1, events
+    assert len([e for e in events if e["type"] == "resolved"]) == 1, events
+
+
+def test_terminal_compare_and_set_survives_repeated_human_timeout_races(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "terminal-cas-stress.db")
+    seed = Store(db)
+    human_store = Store(db)
+    system_store = Store(db)
+
+    for index in range(20):
+        item = seed.create(
+            req(source="stress", source_ref=f"race-{index}", title=f"Race {index}")
+        )
+        start = threading.Barrier(2)
+
+        def human():
+            start.wait(timeout=5)
+            return human_store.resolve(
+                item.id,
+                f"human-{index}",
+                {"action": "approve", "values": {"iteration": index}},
+                actor_kind="human",
+            )
+
+        def timeout():
+            start.wait(timeout=5)
+            return system_store.apply_machine_outcome(
+                item.id,
+                actor="deadline-worker",
+                actor_kind="system",
+                outcome="expired",
+                reason=f"deadline {index}",
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            human_future = pool.submit(human)
+            timeout_future = pool.submit(timeout)
+            human_future.result(timeout=10)
+            timeout_future.result(timeout=10)
+
+        canonical = seed.get(item.id)
+        assert canonical is not None
+        assert canonical.status.value in {"resolved", "expired"}
+
+        terminal = [
+            e for e in seed.events(item.id)
+            if e["type"] in {"resolved", "machine_expired"}
+        ]
+        assert len(terminal) == 1, (index, canonical, terminal)
