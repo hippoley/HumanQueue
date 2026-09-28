@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+
+def free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def request_json(method: str, url: str, token: str | None = None, payload: dict | None = None) -> dict:
@@ -33,37 +42,226 @@ def wait_for_health(url: str, timeout: float = 15.0) -> None:
     raise RuntimeError(f"human:// Gateway did not become healthy: {last_error}")
 
 
-def run_json(args: list[str], *, cwd: Path) -> dict:
-    completed = subprocess.run(
-        args,
-        cwd=cwd,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=20,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"command failed ({completed.returncode}): {' '.join(args)}\n"
-            f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
-        )
-    try:
-        return json.loads(completed.stdout)
-    except Exception as exc:
-        raise RuntimeError(
-            f"command did not return JSON: {' '.join(args)}\n"
-            f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
-        ) from exc
+def _tool_name(body: dict) -> str:
+    tools = body.get("tools") or []
+    names: list[str] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        fn = tool.get("function") if isinstance(tool.get("function"), dict) else tool
+        name = str(fn.get("name") or "")
+        if not name:
+            continue
+        names.append(name)
+        low = name.lower()
+        if low in {"bash", "shell"} or "shell" in low or "bash" in low:
+            return name
+        params = fn.get("parameters") or {}
+        props = params.get("properties") if isinstance(params, dict) else {}
+        if isinstance(props, dict) and "command" in props:
+            return name
+    raise RuntimeError(f"stub model did not receive a shell-like tool; got {names}")
+
+
+def start_stub_model(port: int, marker: Path, request_log: Path):
+    command = f"printf HUMANQ_OPENCODE_NATIVE > {marker}"
+
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "humanq-openai-stub/1"
+
+        def log_message(self, format: str, *args) -> None:  # noqa: A002
+            return
+
+        def _json(self, status: int, payload: dict) -> None:
+            data = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path.rstrip("/") == "/v1/models":
+                self._json(
+                    200,
+                    {
+                        "object": "list",
+                        "data": [
+                            {
+                                "id": "stub-coder",
+                                "object": "model",
+                                "created": 0,
+                                "owned_by": "humanq-ci",
+                            }
+                        ],
+                    },
+                )
+                return
+            self._json(404, {"error": {"message": "not found"}})
+
+        def do_POST(self) -> None:  # noqa: N802
+            if self.path.rstrip("/") != "/v1/chat/completions":
+                self._json(404, {"error": {"message": f"unsupported path {self.path}"}})
+                return
+
+            length = int(self.headers.get("Content-Length") or "0")
+            body = json.loads(self.rfile.read(length) or b"{}")
+            with request_log.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(body, sort_keys=True, default=str) + "\n")
+
+            messages = body.get("messages") or []
+            has_tool_result = any(
+                isinstance(message, dict)
+                and str(message.get("role") or "").lower() == "tool"
+                for message in messages
+            )
+            stream = bool(body.get("stream"))
+
+            if has_tool_result:
+                message = {
+                    "role": "assistant",
+                    "content": "Native shell completed after human approval.",
+                }
+                finish = "stop"
+            else:
+                name = _tool_name(body)
+                args = {"command": command}
+                message = {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_humanq_native",
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": json.dumps(args),
+                            },
+                        }
+                    ],
+                }
+                finish = "tool_calls"
+
+            if not stream:
+                self._json(
+                    200,
+                    {
+                        "id": "chatcmpl-humanq",
+                        "object": "chat.completion",
+                        "created": int(time.time()),
+                        "model": "stub-coder",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": message,
+                                "finish_reason": finish,
+                            }
+                        ],
+                        "usage": {
+                            "prompt_tokens": 1,
+                            "completion_tokens": 1,
+                            "total_tokens": 2,
+                        },
+                    },
+                )
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+
+            if has_tool_result:
+                chunks = [
+                    {
+                        "id": "chatcmpl-humanq",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": "stub-coder",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {
+                                    "role": "assistant",
+                                    "content": "Native shell completed after human approval.",
+                                },
+                                "finish_reason": None,
+                            }
+                        ],
+                    },
+                    {
+                        "id": "chatcmpl-humanq",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": "stub-coder",
+                        "choices": [
+                            {"index": 0, "delta": {}, "finish_reason": "stop"}
+                        ],
+                    },
+                ]
+            else:
+                call = message["tool_calls"][0]
+                chunks = [
+                    {
+                        "id": "chatcmpl-humanq",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": "stub-coder",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {
+                                    "role": "assistant",
+                                    "tool_calls": [
+                                        {
+                                            "index": 0,
+                                            "id": call["id"],
+                                            "type": "function",
+                                            "function": {
+                                                "name": call["function"]["name"],
+                                                "arguments": call["function"]["arguments"],
+                                            },
+                                        }
+                                    ],
+                                },
+                                "finish_reason": None,
+                            }
+                        ],
+                    },
+                    {
+                        "id": "chatcmpl-humanq",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": "stub-coder",
+                        "choices": [
+                            {"index": 0, "delta": {}, "finish_reason": "tool_calls"}
+                        ],
+                    },
+                ]
+
+            for chunk in chunks:
+                self.wfile.write(
+                    ("data: " + json.dumps(chunk, separators=(",", ":")) + "\n\n").encode(
+                        "utf-8"
+                    )
+                )
+                self.wfile.flush()
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server
 
 
 def wait_for_opencode_boundary(
     base_url: str,
     token: str,
     *,
-    session_id: str,
     marker: Path,
-    shell_call: subprocess.Popen[str],
-    timeout: float = 15.0,
+    child: subprocess.Popen[str],
+    timeout: float = 25.0,
 ) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -71,20 +269,30 @@ def wait_for_opencode_boundary(
         for item in body.get("items", []):
             if item.get("source") != "opencode":
                 continue
-            context = item.get("context") or {}
-            native = context.get("native_handle") or {}
-            if str(native.get("session_id") or "") != session_id:
-                continue
-            if shell_call.poll() is not None:
-                output = shell_call.stdout.read() if shell_call.stdout else ""
+            if child.poll() is not None:
+                output = child.stdout.read() if child.stdout else ""
                 raise RuntimeError(
-                    "OpenCode shell call exited before the human decision:\n" + output
+                    "OpenCode agent exited before the human decision:\n" + output
                 )
             if marker.exists():
                 raise RuntimeError("OpenCode shell side effect happened before human approval")
             return item
+        if child.poll() is not None:
+            output = child.stdout.read() if child.stdout else ""
+            raise RuntimeError(
+                "OpenCode agent exited without creating a human:// boundary:\n" + output
+            )
         time.sleep(0.1)
-    raise RuntimeError("timed out waiting for native OpenCode permission boundary")
+    output = ""
+    if child.stdout:
+        try:
+            output = child.stdout.read()
+        except Exception:
+            pass
+    raise RuntimeError(
+        "timed out waiting for native OpenCode permission boundary\n"
+        + ("OpenCode output:\n" + output if output else "")
+    )
 
 
 def main() -> None:
@@ -93,14 +301,36 @@ def main() -> None:
         workspace = root / "workspace"
         workspace.mkdir()
         marker = workspace / "native-approved.txt"
+        request_log = root / "stub-requests.jsonl"
+        model_port = free_port()
 
-        # V2 permission rules: force the direct shell API to ask.
         (workspace / "opencode.jsonc").write_text(
             json.dumps(
                 {
                     "$schema": "https://opencode.ai/config.json",
+                    "model": "local/coder",
+                    "providers": {
+                        "local": {
+                            "name": "human:// CI stub",
+                            "package": "@opencode/ai/providers/openai-compatible",
+                            "settings": {
+                                "baseURL": f"http://127.0.0.1:{model_port}/v1"
+                            },
+                            "models": {
+                                "coder": {
+                                    "modelID": "stub-coder",
+                                    "capabilities": {
+                                        "tools": True,
+                                        "input": ["text"],
+                                        "output": ["text"],
+                                    },
+                                    "limit": {"context": 32768, "output": 4096},
+                                }
+                            },
+                        }
+                    },
                     "permissions": [
-                        {"action": "shell", "resource": "*", "effect": "ask"},
+                        {"action": "shell", "resource": "*", "effect": "ask"}
                     ],
                 },
                 indent=2,
@@ -123,83 +353,29 @@ def main() -> None:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
-        shell_call: subprocess.Popen[str] | None = None
+        stub = start_stub_model(model_port, marker, request_log)
+        child: subprocess.Popen[str] | None = None
 
         try:
             wait_for_health(base_url)
 
-            # Ensure the real OpenCode service is alive for this location.
-            service = subprocess.run(
-                ["opencode", "service", "start"],
-                cwd=workspace,
-                text=True,
-                capture_output=True,
-                check=False,
-                timeout=20,
-            )
-            if service.returncode != 0:
-                raise RuntimeError(
-                    f"OpenCode service failed to start:\n{service.stdout}\n{service.stderr}"
-                )
-
-            # Plugin discovery is Location-aware in the shared OpenCode service.
-            # The preceding CI step already proves the real runtime loads the global
-            # human:// plugin. In a brand-new temporary Location, the useful test is
-            # whether a permission evaluation actually reaches human://, not whether
-            # plugin-list has projected the Location before a session exists.
-            plugins_before = subprocess.run(
-                ["opencode", "plugin", "list"],
-                cwd=workspace,
-                text=True,
-                capture_output=True,
-                check=False,
-                timeout=20,
-            )
-            print("plugins_before_session=" + plugins_before.stdout.strip(), flush=True)
-
-            session = run_json(
+            child_env = os.environ.copy()
+            child_env["OPENCODE_DISABLE_MODELS_FETCH"] = "1"
+            child_env["OPENCODE_DISABLE_LSP_DOWNLOAD"] = "1"
+            child = subprocess.Popen(
                 [
                     "opencode",
-                    "api",
-                    "POST",
-                    "/api/session",
-                    "--data",
-                    json.dumps({"title": "human:// native permission probe"}),
+                    "run",
+                    "--standalone",
+                    "--model",
+                    "local/coder",
+                    (
+                        "Use the shell tool to create the requested marker. "
+                        "Do not skip the tool call."
+                    ),
                 ],
                 cwd=workspace,
-            )
-            session_id = str(
-                session.get("id")
-                or (session.get("data") or {}).get("id")
-                or (session.get("session") or {}).get("id")
-                or ""
-            )
-            if not session_id:
-                raise RuntimeError(f"OpenCode session create returned no id: {session}")
-            print(f"created_opencode_session={session_id}", flush=True)
-
-            plugins_after = subprocess.run(
-                ["opencode", "plugin", "list"],
-                cwd=workspace,
-                text=True,
-                capture_output=True,
-                check=False,
-                timeout=20,
-            )
-            print("plugins_after_session=" + plugins_after.stdout.strip(), flush=True)
-
-            command = f"printf HUMANQ_OPENCODE_NATIVE > {marker}"
-            body = json.dumps({"agent": "build", "command": command})
-            shell_call = subprocess.Popen(
-                [
-                    "opencode",
-                    "api",
-                    "POST",
-                    f"/api/session/{session_id}/shell",
-                    "--data",
-                    body,
-                ],
-                cwd=workspace,
+                env=child_env,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -208,9 +384,8 @@ def main() -> None:
             item = wait_for_opencode_boundary(
                 base_url,
                 token,
-                session_id=session_id,
                 marker=marker,
-                shell_call=shell_call,
+                child=child,
             )
             request_id = str(item["id"])
             if item.get("status") != "pending":
@@ -220,10 +395,12 @@ def main() -> None:
             native = context.get("native_handle") or {}
             if native.get("provider") != "opencode":
                 raise RuntimeError(f"wrong native provider: {native}")
-            if str(native.get("session_id") or "") != session_id:
-                raise RuntimeError(
-                    f"wrong native session identity: expected {session_id}, got {native}"
-                )
+            session_id = str(native.get("session_id") or "")
+            if not session_id:
+                raise RuntimeError(f"OpenCode native session identity is missing: {native}")
+
+            if marker.exists():
+                raise RuntimeError("native marker exists before human approval")
 
             resolved = request_json(
                 "POST",
@@ -234,22 +411,24 @@ def main() -> None:
                     "actor_kind": "human",
                     "action": "approve",
                     "values": {"verified": True},
-                    "comment": "OpenCode native permission E2E",
+                    "comment": "OpenCode native agent permission E2E",
                 },
             )
             if resolved["request"]["id"] != request_id or resolved["finalized"] is not True:
                 raise RuntimeError(f"human:// did not finalize exact request: {resolved}")
 
-            output, _ = shell_call.communicate(timeout=15)
-            if shell_call.returncode != 0:
+            output, _ = child.communicate(timeout=25)
+            if child.returncode != 0:
+                requests = request_log.read_text(encoding="utf-8") if request_log.exists() else ""
                 raise RuntimeError(
-                    f"OpenCode shell did not continue after approval ({shell_call.returncode}):\n"
-                    + output
+                    f"OpenCode agent did not continue after approval ({child.returncode}):\n"
+                    f"{output}\nstub requests:\n{requests}"
                 )
             if not marker.exists():
+                requests = request_log.read_text(encoding="utf-8") if request_log.exists() else ""
                 raise RuntimeError(
-                    "OpenCode shell returned after approval but native side effect is missing:\n"
-                    + output
+                    "OpenCode agent completed but native shell side effect is missing:\n"
+                    f"{output}\nstub requests:\n{requests}"
                 )
             if marker.read_text(encoding="utf-8") != "HUMANQ_OPENCODE_NATIVE":
                 raise RuntimeError("OpenCode marker contents were unexpected")
@@ -284,10 +463,13 @@ def main() -> None:
             print(f"human_request_id={request_id}")
             print("lifecycle=" + " -> ".join(events))
             print(f"marker={marker.read_text(encoding='utf-8')}")
+            print("agent_output=" + output.strip().replace("\n", " ")[:500])
         finally:
-            if shell_call is not None and shell_call.poll() is None:
-                shell_call.kill()
-                shell_call.wait(timeout=5)
+            if child is not None and child.poll() is None:
+                child.kill()
+                child.wait(timeout=5)
+            stub.shutdown()
+            stub.server_close()
             if gateway.poll() is None:
                 gateway.terminate()
                 try:
