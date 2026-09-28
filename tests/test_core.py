@@ -1250,3 +1250,41 @@ def test_store_connection_context_releases_sqlite_handle(tmp_path: Path):
 
     with pytest.raises(sqlite3.ProgrammingError, match="closed"):
         conn.execute("SELECT 1")
+
+
+def test_duplicate_idempotent_human_post_does_not_republish_channel(tmp_path: Path, monkeypatch):
+    from app import main
+
+    main.store = Store(str(tmp_path / "idempotent-publish.db"))
+    publishes = []
+
+    monkeypatch.setattr(
+        main,
+        "publish_request",
+        lambda item: publishes.append(item.id) or [{"channel": "test", "delivered": True}],
+    )
+
+    client = TestClient(main.app)
+    payload = {
+        "uri": "human://approve",
+        "source": "agent",
+        "ref": "retryable-operation",
+        "title": "Continue?",
+        "idempotency_key": "agent:retryable-operation:approval",
+    }
+
+    first = client.post("/v1/human", json=payload)
+    second = client.post("/v1/human", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    first_id = first.json()["request"]["id"]
+    second_id = second.json()["request"]["id"]
+    assert first_id == second_id
+
+    # A transport retry must not create another human-facing notification.
+    assert publishes == [first_id]
+
+    events = main.store.events(first_id)
+    assert len([event for event in events if event["type"] == "created"]) == 1
+    assert len([event for event in events if event["type"] == "channel_delivered"]) == 1

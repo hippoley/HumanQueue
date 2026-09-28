@@ -162,25 +162,32 @@ def _publish_and_record(item):
 def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
     try:
         req = enrich_with_session_context(to_attention_request(ask), connector_registry)
-        item = store.create(req)
+        item, created = store.create_with_status(req)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    background_tasks.add_task(_publish_and_record, item)
-    return {"human_uri": uri_for_kind(item.kind), "request": item}
+    if created:
+        background_tasks.add_task(_publish_and_record, item)
+    return {
+        "human_uri": uri_for_kind(item.kind),
+        "request": item,
+        "created": created,
+    }
 
 
 @app.post("/v1/requests", status_code=201)
 def create_request(req: AttentionRequestCreate, background_tasks: BackgroundTasks):
     req = enrich_with_session_context(req, connector_registry)
-    item = store.create(req)
-    background_tasks.add_task(_publish_and_record, item)
+    item, created = store.create_with_status(req)
+    if created:
+        background_tasks.add_task(_publish_and_record, item)
     return item
 
 
 @app.post("/v1/import", status_code=201)
 def import_request(env: ImportEnvelope, background_tasks: BackgroundTasks):
-    item = store.create(ADAPTERS[env.adapter](env.payload))
-    background_tasks.add_task(_publish_and_record, item)
+    item, created = store.create_with_status(ADAPTERS[env.adapter](env.payload))
+    if created:
+        background_tasks.add_task(_publish_and_record, item)
     return item
 
 

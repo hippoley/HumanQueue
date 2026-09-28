@@ -89,6 +89,10 @@ jobs:
         run: |
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/concurrent_terminal_e2e.py"
+      - name: Packaged idempotent retry E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/idempotent_retry_e2e.py"
       - name: Verify packaged runtime assets
         run: |
           python - <<'PY'
