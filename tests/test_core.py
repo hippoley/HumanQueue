@@ -2185,3 +2185,195 @@ def test_abandoned_resume_attempt_becomes_uncertain_and_is_not_replayed(tmp_path
     metrics = second.metrics()
     assert metrics["resume_outbox"]["uncertain"] == 1
     assert metrics["integrity_last_24h"]["resume_delivery_uncertain"] == 1
+
+
+def _make_uncertain_resume(store: Store, tmp_url: str = "http://127.0.0.1:9999/resume"):
+    from app.models import ResumeTarget
+
+    item = store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url=tmp_url,
+            )
+        )
+    )
+    _, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=0,
+    ) == [item.id]
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    row = store.resume_outbox(item.id)
+    assert row is not None
+    assert row["status"] == "uncertain"
+    return item
+
+
+def test_uncertain_resume_retry_requires_receiver_dedup_attestation(tmp_path: Path):
+    import pytest
+
+    store = Store(str(tmp_path / "reconcile-retry-guard.db"))
+    item = _make_uncertain_resume(store)
+
+    with pytest.raises(PermissionError, match="receiver_dedup_confirmed"):
+        store.reconcile_resume_outbox(
+            item.id,
+            actor="operator",
+            action="retry",
+            reason="receiver inspected",
+            receiver_dedup_confirmed=False,
+        )
+
+    row = store.resume_outbox(item.id)
+    assert row is not None
+    assert row["status"] == "uncertain"
+    assert int(row["attempts"]) == 1
+
+
+def test_operator_authorized_retry_is_audited_and_becomes_attempt_two(tmp_path: Path):
+    store = Store(str(tmp_path / "reconcile-retry.db"))
+    item = _make_uncertain_resume(store)
+
+    reconciled = store.reconcile_resume_outbox(
+        item.id,
+        actor="operator",
+        action="retry",
+        reason="receiver deduplicates on canonical request_id",
+        receiver_dedup_confirmed=True,
+    )
+    assert reconciled["status"] == "pending"
+    assert int(reconciled["attempts"]) == 1
+
+    claimed = store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    )
+    assert claimed == [item.id]
+
+    row = store.resume_outbox(item.id)
+    assert row is not None
+    assert row["status"] == "processing"
+    assert int(row["attempts"]) == 2
+
+    events = store.events(item.id)
+    retry_events = [
+        e for e in events
+        if e["type"] == "resume_reconciled_retry_authorized"
+    ]
+    assert len(retry_events) == 1
+    assert retry_events[0]["actor"] == "operator"
+    assert retry_events[0]["data"]["receiver_dedup_confirmed"] is True
+
+    claim_events = [
+        e for e in events
+        if e["type"] == "resume_delivery_claimed"
+    ]
+    assert len(claim_events) == 2
+    assert claim_events[-1]["data"]["attempt"] == 2
+
+
+def test_operator_can_reconcile_uncertain_resume_as_already_executed(tmp_path: Path):
+    store = Store(str(tmp_path / "reconcile-confirm.db"))
+    item = _make_uncertain_resume(store)
+
+    reconciled = store.reconcile_resume_outbox(
+        item.id,
+        actor="operator",
+        action="confirm_executed",
+        reason="receiver audit log shows canonical request_id executed",
+    )
+    assert reconciled["status"] == "done"
+
+    events = store.events(item.id)
+    assert len([
+        e for e in events if e["type"] == "resume_reconciled_executed"
+    ]) == 1
+    assert not [
+        e for e in events if e["type"] == "resume_confirmed"
+    ]
+
+
+def test_operator_can_abandon_uncertain_resume_without_replay(tmp_path: Path):
+    store = Store(str(tmp_path / "reconcile-abandon.db"))
+    item = _make_uncertain_resume(store)
+
+    reconciled = store.reconcile_resume_outbox(
+        item.id,
+        actor="operator",
+        action="abandon",
+        reason="operation is no longer safe to retry",
+    )
+    assert reconciled["status"] == "abandoned"
+
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+
+    events = store.events(item.id)
+    abandoned = [
+        e for e in events if e["type"] == "resume_reconciled_abandoned"
+    ]
+    assert len(abandoned) == 1
+    assert abandoned[0]["actor"] == "operator"
+
+
+def test_resume_reconcile_api_rejects_unsafe_retry_before_state_change(tmp_path: Path):
+    from app import main
+    from app.models import ResumeTarget
+
+    main.store = Store(str(tmp_path / "reconcile-api.db"))
+    client = TestClient(main.app)
+    item = main.store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="http://127.0.0.1:9999/resume",
+            )
+        )
+    )
+    _, finalized = main.store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+    assert main.store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=0,
+    ) == [item.id]
+    assert main.store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+
+    response = client.post(
+        f"/v1/requests/{item.id}/resume-reconcile",
+        json={
+            "actor": "operator",
+            "action": "retry",
+            "reason": "please retry",
+            "receiver_dedup_confirmed": False,
+        },
+    )
+    assert response.status_code == 422
+
+    row = main.store.resume_outbox(item.id)
+    assert row is not None
+    assert row["status"] == "uncertain"
+    assert int(row["attempts"]) == 1
