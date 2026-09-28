@@ -1821,3 +1821,136 @@ def test_terminal_compare_and_set_survives_repeated_human_timeout_races(tmp_path
             if e["type"] in {"resolved", "machine_expired"}
         ]
         assert len(terminal) == 1, (index, canonical, terminal)
+
+
+def test_human_resolution_and_supersession_race_has_one_terminal_meaning(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "resolve-vs-supersede.db")
+    seed = Store(db)
+    resolver = Store(db)
+    creator = Store(db)
+
+    original = seed.create(
+        req(
+            source="agent",
+            source_ref="original",
+            supersession_key="deployment-choice",
+            title="Deploy original target?",
+        )
+    )
+    start = threading.Barrier(2)
+
+    def resolve_old():
+        start.wait(timeout=5)
+        resolved, finalized = resolver.resolve(
+            original.id,
+            "alice",
+            {"action": "approve", "values": {"target": "original"}},
+            actor_kind="human",
+        )
+        return {
+            "finalized": finalized,
+            "status": resolved.status.value if resolved else None,
+        }
+
+    def create_replacement():
+        start.wait(timeout=5)
+        item = creator.create(
+            req(
+                source="agent",
+                source_ref="replacement",
+                supersession_key="deployment-choice",
+                title="Deploy replacement target?",
+            )
+        )
+        return item.id
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        resolve_future = pool.submit(resolve_old)
+        replace_future = pool.submit(create_replacement)
+        resolve_result = resolve_future.result(timeout=10)
+        replacement_id = replace_future.result(timeout=10)
+
+    old = seed.get(original.id)
+    replacement = seed.get(replacement_id)
+    assert old is not None
+    assert replacement is not None
+    assert replacement.status.value == "pending"
+
+    events = seed.events(original.id)
+    terminal = [
+        event for event in events
+        if event["type"] in {"resolved", "superseded"}
+    ]
+    assert len(terminal) == 1, (resolve_result, events)
+
+    if old.status.value == "resolved":
+        assert terminal[0]["type"] == "resolved"
+        assert old.superseded_by is None
+        assert old.resolution is not None
+        assert old.resolution["action"] == "approve"
+        assert resolve_result["finalized"] is True
+    else:
+        assert old.status.value == "superseded"
+        assert terminal[0]["type"] == "superseded"
+        assert old.superseded_by == replacement_id
+        assert old.resolution is None
+        assert resolve_result["finalized"] is False
+
+
+def test_two_concurrent_replacements_leave_one_active_tip(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "concurrent-supersession-chain.db")
+    seed = Store(db)
+    left = Store(db)
+    right = Store(db)
+    original = seed.create(
+        req(
+            source="agent",
+            source_ref="v0",
+            supersession_key="same-intent",
+            title="Version 0",
+        )
+    )
+    start = threading.Barrier(2)
+
+    def replace(store: Store, ref: str):
+        start.wait(timeout=5)
+        return store.create(
+            req(
+                source="agent",
+                source_ref=ref,
+                supersession_key="same-intent",
+                title=ref,
+            )
+        ).id
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(replace, left, "v1")
+        b = pool.submit(replace, right, "v2")
+        replacement_ids = {a.result(timeout=10), b.result(timeout=10)}
+
+    rows = [seed.get(original.id)] + [seed.get(rid) for rid in replacement_ids]
+    assert all(row is not None for row in rows)
+
+    active = [row for row in rows if row.status.value == "pending"]
+    superseded = [row for row in rows if row.status.value == "superseded"]
+
+    # Serializing replacement creation creates a deterministic chain: exactly
+    # one newest request remains active, every older version is superseded.
+    assert len(active) == 1, rows
+    assert len(superseded) == 2, rows
+
+    superseded_ids = {row.id for row in superseded}
+    assert original.id in superseded_ids
+    assert active[0].id in replacement_ids
+
+    terminal_events = {
+        row.id: [e for e in seed.events(row.id) if e["type"] == "superseded"]
+        for row in superseded
+    }
+    assert all(len(events) == 1 for events in terminal_events.values())
