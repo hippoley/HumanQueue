@@ -37,6 +37,12 @@ Machine lifecycle outcomes use a separate `/outcome` path and may only produce t
 
 This is a protocol integrity property, not an independent identity provider. A caller holding the Gateway administrative token could still lie about provenance, so authenticated channel/application code remains responsible for asserting the correct actor kind.
 
+### Durable channel outbox
+
+Configured human-facing channel publication uses a durable SQLite outbox so a Gateway crash cannot silently erase a committed attention obligation before notification begins.
+
+This does **not** provide cross-system exactly-once delivery. If a remote channel accepted a message but the Gateway crashed before recording completion, the expired lease can be replayed after restart. Integrations should deduplicate using the canonical human:// request ID rather than treating every transport delivery as a distinct human obligation.
+
 ### Resume callbacks
 
 A signed resume callback binds:

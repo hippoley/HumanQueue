@@ -2,6 +2,11 @@
 
 ## Unreleased — native host verification
 
+- Added a durable SQLite channel outbox committed atomically with request creation, closing the crash window between canonical request commit and human-facing notification.
+- Added leased outbox workers with abandoned-lease recovery on Gateway restart.
+- Added packaged crash-recovery E2E proving a request committed before Gateway startup is automatically delivered after startup and the outbox reaches `done`.
+- Documented channel semantics as durable **at-least-once** delivery keyed by canonical request ID, not cross-system exactly-once delivery.
+
 - Added `humanq verify codex` with Codex-native `app-server hooks/list` inspection so discovery, trust status and current hash come from Codex itself rather than local-file inference.
 - Added packaged Codex PermissionRequest hook E2E for both allow and deny using real stdin/stdout subprocesses, Gateway auth, canonical request identity and blocking human resolution.
 - Verified with official Codex CLI 0.157.1 that the binary discovers the installed human:// PermissionRequest hook and transitions its exact current hash from `untrusted` to `trusted`; the model-turn consumption proof remains pending.

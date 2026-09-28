@@ -46,6 +46,91 @@ app = FastAPI(
 )
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+_outbox_task: asyncio.Task | None = None
+
+
+async def _process_channel_outbox_request(rid: str) -> bool:
+    item = store.get(rid)
+    if item is None:
+        store.complete_channel_outbox(rid)
+        return False
+
+    if item.status.value in {"resolved", "cancelled", "expired", "superseded"}:
+        store.record_event(
+            rid,
+            "channel_publish_skipped_terminal",
+            actor="outbox",
+            data={"status": item.status.value},
+        )
+        store.complete_channel_outbox(rid)
+        return False
+
+    try:
+        results = await asyncio.to_thread(publish_request, item)
+    except Exception as exc:
+        store.retry_channel_outbox(
+            rid,
+            f"{type(exc).__name__}: {exc}",
+            delay_seconds=1,
+        )
+        return False
+
+    for result in results:
+        delivered = bool(result.get("delivered"))
+        event_type = "channel_delivered" if delivered else "channel_undeliverable"
+        channel = str(result.get("channel") or "unknown")
+        store.record_event(
+            rid,
+            event_type,
+            actor=f"channel:{channel}",
+            data=result,
+        )
+
+    store.complete_channel_outbox(rid)
+    return True
+
+
+async def _drain_channel_outbox_request(rid: str) -> None:
+    claimed = store.claim_channel_outbox(request_id=rid, limit=1, lease_seconds=30)
+    if not claimed:
+        return
+    await _process_channel_outbox_request(claimed[0])
+
+
+async def _channel_outbox_loop() -> None:
+    while True:
+        try:
+            claimed = store.claim_channel_outbox(limit=16, lease_seconds=30)
+            if not claimed:
+                await asyncio.sleep(0.25)
+                continue
+            for rid in claimed:
+                await _process_channel_outbox_request(rid)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Outbox reconciliation must not crash the Gateway.
+            await asyncio.sleep(0.5)
+
+
+@app.on_event("startup")
+async def _start_channel_outbox_worker():
+    global _outbox_task
+    if _outbox_task is None or _outbox_task.done():
+        _outbox_task = asyncio.create_task(_channel_outbox_loop())
+
+
+@app.on_event("shutdown")
+async def _stop_channel_outbox_worker():
+    global _outbox_task
+    if _outbox_task is not None:
+        _outbox_task.cancel()
+        try:
+            await _outbox_task
+        except asyncio.CancelledError:
+            pass
+        _outbox_task = None
+
 
 @app.middleware("http")
 async def gateway_auth(request: Request, call_next):
@@ -143,7 +228,7 @@ async def _resume_and_record(item, resolution):
 
 
 def _publish_and_record(item):
-    """Project a request into configured channels and persist delivery evidence."""
+    """Legacy direct publisher for tests/tools; API paths use the durable outbox."""
     results = publish_request(item)
     for result in results:
         delivered = bool(result.get("delivered"))
@@ -166,7 +251,7 @@ def human_interrupt(ask: HumanAsk, background_tasks: BackgroundTasks):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if created:
-        background_tasks.add_task(_publish_and_record, item)
+        background_tasks.add_task(_drain_channel_outbox_request, item.id)
     return {
         "human_uri": uri_for_kind(item.kind),
         "request": item,
