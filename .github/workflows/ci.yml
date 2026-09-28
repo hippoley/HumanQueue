@@ -106,6 +106,7 @@ jobs:
 
 
   packaged-first-run-matrix:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     name: packaged first-run (${{ matrix.os }} / py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -152,6 +153,7 @@ jobs:
 
 
   installer-entrypoint-matrix:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     name: installer entrypoint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -197,6 +199,7 @@ jobs:
 
 
   codex-native-discovery:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     name: latest Codex native hook discovery
     runs-on: ubuntu-latest
     steps:
