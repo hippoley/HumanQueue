@@ -826,3 +826,202 @@ def test_concurrent_conflicting_quorum_votes_never_finalize(tmp_path: Path):
             (item.id,),
         ).fetchall()
     assert resolved_events == []
+
+
+def test_human_resolution_racing_machine_expiry_has_one_terminal_outcome(tmp_path: Path):
+    """Human approval and system expiry racing across workers must not both commit."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "human-vs-expiry.db")
+    creator = Store(db)
+    item = creator.create(req())
+
+    human_store = Store(db)
+    machine_store = Store(db)
+    start = threading.Barrier(2)
+
+    def human():
+        start.wait(timeout=5)
+        resolved, finalized = human_store.resolve(
+            item.id,
+            "alice",
+            {"action": "approve", "values": {}},
+            actor_kind="human",
+        )
+        return {
+            "kind": "human",
+            "status": resolved.status.value if resolved else None,
+            "finalized": finalized,
+        }
+
+    def machine():
+        start.wait(timeout=5)
+        resolved = machine_store.apply_machine_outcome(
+            item.id,
+            actor="expiry-worker",
+            actor_kind="system",
+            outcome="expired",
+            reason="deadline elapsed",
+        )
+        return {
+            "kind": "machine",
+            "status": resolved.status.value if resolved else None,
+        }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [
+            pool.submit(human),
+            pool.submit(machine),
+        ]
+        results = [future.result(timeout=10) for future in results]
+
+    final = creator.get(item.id)
+    assert final is not None
+    assert final.status.value in {"resolved", "expired"}
+
+    with creator._conn() as c:
+        terminal_events = c.execute(
+            """
+            SELECT type,actor,data
+            FROM events
+            WHERE request_id=?
+              AND type IN ('resolved','machine_expired')
+            ORDER BY seq
+            """,
+            (item.id,),
+        ).fetchall()
+
+    assert len(terminal_events) == 1, [
+        {"type": row["type"], "actor": row["actor"], "data": row["data"]}
+        for row in terminal_events
+    ]
+
+    if final.status.value == "resolved":
+        assert terminal_events[0]["type"] == "resolved"
+    else:
+        assert terminal_events[0]["type"] == "machine_expired"
+
+
+def test_human_resolution_racing_machine_cancel_has_one_terminal_outcome(tmp_path: Path):
+    """Cancellation has the same exactly-one terminal invariant as expiry."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "human-vs-cancel.db")
+    creator = Store(db)
+    item = creator.create(req())
+
+    human_store = Store(db)
+    machine_store = Store(db)
+    start = threading.Barrier(2)
+
+    def human():
+        start.wait(timeout=5)
+        return human_store.resolve(
+            item.id,
+            "alice",
+            {"action": "approve", "values": {}},
+            actor_kind="human",
+        )
+
+    def machine():
+        start.wait(timeout=5)
+        return machine_store.apply_machine_outcome(
+            item.id,
+            actor="scheduler",
+            actor_kind="service",
+            outcome="cancelled",
+            reason="workflow aborted",
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(human)
+        b = pool.submit(machine)
+        a.result(timeout=10)
+        b.result(timeout=10)
+
+    final = creator.get(item.id)
+    assert final is not None
+    assert final.status.value in {"resolved", "cancelled"}
+
+    with creator._conn() as c:
+        terminal_events = c.execute(
+            """
+            SELECT type
+            FROM events
+            WHERE request_id=?
+              AND type IN ('resolved','machine_cancelled')
+            ORDER BY seq
+            """,
+            (item.id,),
+        ).fetchall()
+
+    assert len(terminal_events) == 1, [row["type"] for row in terminal_events]
+
+
+def test_http_human_resolution_racing_machine_expiry_has_one_winner(tmp_path: Path, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from app import main
+
+    main.store = Store(str(tmp_path / "http-human-vs-expiry.db"))
+    item = main.store.create(req())
+
+    resume_calls = []
+    resume_lock = threading.Lock()
+
+    async def fake_resume(resolved, resolution):
+        with resume_lock:
+            resume_calls.append(resolved.id)
+        return {"delivered": True, "semantic_confirmed": True}
+
+    monkeypatch.setattr(main, "_resume_and_record", fake_resume)
+
+    start = threading.Barrier(2)
+
+    def human():
+        client = TestClient(main.app)
+        start.wait(timeout=5)
+        response = client.post(
+            f"/v1/requests/{item.id}/resolve",
+            json={"actor": "alice", "action": "approve"},
+        )
+        return response.status_code, response.json()
+
+    def machine():
+        client = TestClient(main.app)
+        start.wait(timeout=5)
+        response = client.post(
+            f"/v1/requests/{item.id}/outcome",
+            json={
+                "actor": "expiry-worker",
+                "actor_kind": "system",
+                "outcome": "expired",
+                "reason": "deadline elapsed",
+            },
+        )
+        return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(human)
+        b = pool.submit(machine)
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert sorted(status for status, _ in results) == [200, 409], results
+
+    detail = TestClient(main.app).get(f"/v1/requests/{item.id}").json()
+    terminal_events = [
+        event for event in detail["events"]
+        if event["type"] in {"resolved", "machine_expired"}
+    ]
+    assert len(terminal_events) == 1, terminal_events
+
+    final_status = detail["request"]["status"]
+    if final_status == "resolved":
+        assert resume_calls == [item.id]
+        assert terminal_events[0]["type"] == "resolved"
+    else:
+        assert final_status == "expired"
+        assert resume_calls == []
+        assert terminal_events[0]["type"] == "machine_expired"
