@@ -465,12 +465,13 @@ class Store:
         *,
         retry_delay_seconds: float | None = None,
     ) -> None:
-        """Persist the transport result and either complete or requeue the obligation."""
+        """Persist one resume attempt and its audit evidence atomically."""
 
         now_dt = self._now()
         now = now_dt.isoformat()
         encoded = json.dumps(result, default=str)
         with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
             row = c.execute(
                 "SELECT attempts FROM resume_outbox WHERE request_id=?",
                 (rid,),
@@ -479,6 +480,8 @@ class Store:
                 return
 
             if result.get("confirmed") is True:
+                next_state = "done"
+                event_type = "resume_confirmed"
                 c.execute(
                     """
                     UPDATE resume_outbox
@@ -487,28 +490,50 @@ class Store:
                     """,
                     (encoded, now, rid),
                 )
-                return
+            else:
+                next_state = "pending"
+                event_type = (
+                    "resume_delivered_unconfirmed"
+                    if result.get("delivered")
+                    else "resume_undeliverable"
+                )
+                attempts = int(row["attempts"] or 0)
+                delay = (
+                    float(retry_delay_seconds)
+                    if retry_delay_seconds is not None
+                    else min(30.0, max(1.0, 2.0 ** min(attempts - 1, 5)))
+                )
+                next_attempt = (
+                    now_dt + timedelta(seconds=max(0.0, delay))
+                ).isoformat()
+                c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET state='pending',
+                        next_attempt_at=?,
+                        lease_until=NULL,
+                        last_result=?,
+                        updated_at=?
+                    WHERE request_id=?
+                    """,
+                    (next_attempt, encoded, now, rid),
+                )
 
-            attempts = int(row["attempts"] or 0)
-            delay = (
-                float(retry_delay_seconds)
-                if retry_delay_seconds is not None
-                else min(30.0, max(1.0, 2.0 ** min(attempts - 1, 5)))
-            )
-            next_attempt = (
-                now_dt + timedelta(seconds=max(0.0, delay))
-            ).isoformat()
             c.execute(
-                """
-                UPDATE resume_outbox
-                SET state='pending',
-                    next_attempt_at=?,
-                    lease_until=NULL,
-                    last_result=?,
-                    updated_at=?
-                WHERE request_id=?
-                """,
-                (next_attempt, encoded, now, rid),
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (
+                    rid,
+                    event_type,
+                    "resume",
+                    json.dumps(
+                        {
+                            **result,
+                            "outbox_state": next_state,
+                        },
+                        default=str,
+                    ),
+                    now,
+                ),
             )
 
     def resume_outbox(self, rid: str) -> dict[str, Any] | None:
