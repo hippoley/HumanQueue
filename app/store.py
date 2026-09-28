@@ -226,7 +226,13 @@ class Store:
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             return self._row_to_model(row, c)
 
-    def resolve(self, rid: str, actor: str, resolution: dict[str, Any]) -> tuple[AttentionRequest | None, bool]:
+    def resolve(
+        self,
+        rid: str,
+        actor: str,
+        resolution: dict[str, Any],
+        actor_kind: str = "human",
+    ) -> tuple[AttentionRequest | None, bool]:
         now = self._now().isoformat()
         with self.lock, self._conn() as c:
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
@@ -238,7 +244,16 @@ class Store:
             req = AttentionRequestCreate.model_validate(json.loads(row["payload"]))
             if req.route.actors and actor not in req.route.actors:
                 raise PermissionError("actor is not eligible for this request")
+            if req.route.required_actor_kind == "human" and actor_kind != "human":
+                raise PermissionError(
+                    "this boundary requires a human decision; machine/system provenance cannot resolve it"
+                )
 
+            resolution = dict(resolution)
+            resolution["provenance"] = {
+                "actor": actor,
+                "actor_kind": actor_kind,
+            }
             fingerprint = self._fingerprint(resolution)
             encoded = json.dumps(resolution)
             c.execute("INSERT INTO votes(request_id,actor,fingerprint,resolution,created_at) VALUES (?,?,?,?,?) ON CONFLICT(request_id,actor) DO UPDATE SET fingerprint=excluded.fingerprint,resolution=excluded.resolution,created_at=excluded.created_at", (rid, actor, fingerprint, encoded, now))
@@ -268,7 +283,14 @@ class Store:
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             return self._row_to_model(row, c), finalized
 
-    def resolve_batch(self, batch_key: str, actor: str, action: str, comment: str | None = None) -> list[AttentionRequest]:
+    def resolve_batch(
+        self,
+        batch_key: str,
+        actor: str,
+        action: str,
+        comment: str | None = None,
+        actor_kind: str = "human",
+    ) -> list[AttentionRequest]:
         items = [b for batch in self.batches() if batch["batch_key"] == batch_key for b in batch["items"]]
 
         # Authorization is a batch precondition, not a per-item side effect.
@@ -283,13 +305,73 @@ class Store:
             raise PermissionError(
                 "actor is not eligible for every request in this batch"
             )
+        human_only = [
+            item.id
+            for item in items
+            if item.route.required_actor_kind == "human" and actor_kind != "human"
+        ]
+        if human_only:
+            raise PermissionError(
+                "one or more requests in this batch require a human decision"
+            )
 
         out = []
         for item in items:
-            req, _ = self.resolve(item.id, actor, {"action": action, "values": {}, "comment": comment})
+            req, _ = self.resolve(
+                item.id,
+                actor,
+                {"action": action, "values": {}, "comment": comment},
+                actor_kind=actor_kind,
+            )
             if req:
                 out.append(req)
         return out
+
+    def apply_machine_outcome(
+        self,
+        rid: str,
+        actor: str,
+        actor_kind: str,
+        outcome: str,
+        reason: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AttentionRequest | None:
+        """Close a boundary as expired/cancelled without inventing a human resolution."""
+
+        if actor_kind not in {"system", "policy", "service"}:
+            raise PermissionError("machine outcomes require non-human provenance")
+        if outcome not in {RequestStatus.expired.value, RequestStatus.cancelled.value}:
+            raise ValueError("machine outcome must be expired or cancelled")
+
+        now = self._now().isoformat()
+        with self.lock, self._conn() as c:
+            row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
+            if not row:
+                return None
+            if row["status"] in (
+                RequestStatus.resolved.value,
+                RequestStatus.cancelled.value,
+                RequestStatus.expired.value,
+                RequestStatus.superseded.value,
+            ):
+                return self._row_to_model(row, c)
+
+            data = {
+                "actor_kind": actor_kind,
+                "outcome": outcome,
+                "reason": reason,
+                "metadata": metadata or {},
+            }
+            c.execute(
+                "UPDATE requests SET status=?,updated_at=? WHERE id=?",
+                (outcome, now, rid),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, f"machine_{outcome}", actor, json.dumps(data, default=str), now),
+            )
+            row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
+            return self._row_to_model(row, c)
 
     def record_event(
         self,
