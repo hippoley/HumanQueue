@@ -146,8 +146,10 @@ def connect(args: argparse.Namespace) -> None:
         print(f" detected   {'yes' if result['codex_detected'] else 'not on PATH'}")
         print(" events     PermissionRequest + session/prompt/stop observers")
         print(" roundtrip  native allow/deny")
-        print("\nCodex requires review of new non-managed hooks.")
-        print("Open Codex and run /hooks once to trust the human:// hook definition.")
+        print("\nCodex requires explicit review of new or changed non-managed hooks.")
+        print("Run: humanq verify codex")
+        print("Then explicitly trust the exact current hash with: humanq trust codex")
+        print("You can also review/trust it from Codex /hooks.")
         return
     if args.provider == "cursor":
         from .connectors.cursor import install_cursor_hooks
@@ -178,6 +180,32 @@ def connect(args: argparse.Namespace) -> None:
         print("\nRestart OpenCode so the global plugin is loaded.")
         return
     raise SystemExit(f"unsupported connector: {args.provider}")
+
+
+def trust(args: argparse.Namespace) -> None:
+    if args.provider != "codex":
+        raise SystemExit(f"unsupported trust provider: {args.provider}")
+
+    from .connectors.codex import trust_codex_hook
+
+    try:
+        result = trust_codex_hook()
+    except Exception as exc:
+        raise SystemExit(f"cannot trust Codex hook: {exc}") from exc
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    print("human:// Codex hook trust")
+    print(f" hook key     {result['hook_key']}")
+    print(f" hook hash    {result['current_hash']}")
+    print(f" trust before {result['trust_before']}")
+    print(f" trust after  {result['trust_after']}")
+    print(" changed      " + ("yes" if result["changed"] else "no"))
+    print("\nNext:")
+    print("  humanq verify codex")
+    print("  humanq prove codex")
 
 
 def verify(args: argparse.Namespace) -> None:
@@ -772,6 +800,11 @@ def main() -> None:
     p_verify.add_argument("provider", choices=["codex"])
     p_verify.add_argument("--json", action="store_true")
     p_verify.set_defaults(func=verify)
+
+    p_trust = sub.add_parser("trust", help="explicitly trust one exact native connector hook hash")
+    p_trust.add_argument("provider", choices=["codex"])
+    p_trust.add_argument("--json", action="store_true")
+    p_trust.set_defaults(func=trust)
 
     p_prove = sub.add_parser("prove", help="capture evidence from a real native connector round-trip")
     p_prove.add_argument("provider", choices=["codex"])

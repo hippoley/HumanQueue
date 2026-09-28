@@ -17,6 +17,7 @@ jobs:
       - run: humanq connect --help
       - run: humanq verify --help
       - run: humanq verify codex --json
+      - run: humanq trust --help
       - run: humanq prove --help
       - run: humanq mcp --help
       - run: humanq channel --help
@@ -101,4 +102,189 @@ jobs:
           missing = sorted(required - names)
           assert not missing, f"wheel is missing runtime assets: {missing}"
           print(f"verified {wheels[0]} with {len(required)} required runtime assets")
+          PY
+
+
+  packaged-first-run-matrix:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    name: packaged first-run (${{ matrix.os }} / py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build clean wheel
+        run: python -m pip wheel . --no-deps -w dist
+      - name: Create clean smoke venv
+        run: python -m venv .smoke-venv
+      - name: Install built wheel (Unix)
+        if: runner.os != 'Windows'
+        run: .smoke-venv/bin/python -m pip install dist/human_queue-*.whl
+      - name: Install built wheel (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wheel = Get-ChildItem dist\human_queue-*.whl | Select-Object -First 1
+          .\.smoke-venv\Scripts\python.exe -m pip install $wheel.FullName
+      - name: Run real packaged first-run (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd ${{ runner.temp }}
+          "$GITHUB_WORKSPACE/.smoke-venv/bin/python" "$GITHUB_WORKSPACE/scripts/first_run_e2e.py"
+      - name: Run real packaged first-run (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-Location $env:RUNNER_TEMP
+          & "$env:GITHUB_WORKSPACE\.smoke-venv\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\first_run_e2e.py"
+
+
+  installer-entrypoint-matrix:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    name: installer entrypoint (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run install.sh exactly as shipped
+        if: runner.os != 'Windows'
+        env:
+          HUMAN_QUEUE_HOME: ${{ runner.temp }}/humanq-installer-state
+        run: |
+          bash scripts/install.sh
+          "$HOME/.local/bin/humanq" doctor
+          test -f "$HUMAN_QUEUE_HOME/config.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          cfg = json.loads((Path(os.environ["HUMAN_QUEUE_HOME"]) / "config.json").read_text())
+          assert str(cfg["token"]).startswith("hq_")
+          print("INSTALLER_ENTRYPOINT_OK")
+          PY
+      - name: Run install.ps1 exactly as shipped
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:HUMAN_QUEUE_HOME = Join-Path $env:RUNNER_TEMP "humanq-installer-state"
+          .\scripts\install.ps1
+          $humanq = Join-Path $env:HUMAN_QUEUE_HOME "runtime\Scripts\humanq.exe"
+          & $humanq doctor
+          if (-not (Test-Path (Join-Path $env:HUMAN_QUEUE_HOME "config.json"))) {
+            throw "installer did not create config.json"
+          }
+          $cfg = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "config.json") | ConvertFrom-Json
+          if (-not $cfg.token.StartsWith("hq_")) {
+            throw "installer did not create a valid gateway token"
+          }
+          Write-Host "INSTALLER_ENTRYPOINT_OK"
+
+
+  codex-native-discovery:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    name: latest Codex native hook discovery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install latest official Codex CLI
+        run: |
+          npm install -g @openai/codex@latest
+          codex --version
+      - name: Install human:// and connect Codex
+        run: |
+          python -m pip install .
+          humanq onboard --force
+          humanq connect codex
+      - name: Prove Codex-native discovery and explicit trust
+        run: |
+          humanq gateway run > humanq-gateway.log 2>&1 &
+          GATEWAY_PID=$!
+          trap 'kill "$GATEWAY_PID" >/dev/null 2>&1 || true' EXIT
+
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          deadline = time.monotonic() + 10
+          while time.monotonic() < deadline:
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:7482/health", timeout=1) as r:
+                      if json.load(r).get("ok") is True:
+                          break
+              except Exception:
+                  time.sleep(0.1)
+          else:
+              raise SystemExit("Gateway did not become healthy")
+          PY
+
+          humanq verify codex --json > codex-readiness-before.json
+          cat codex-readiness-before.json
+          humanq trust codex --json > codex-trust.json
+          cat codex-trust.json
+          humanq verify codex --json > codex-readiness-after.json
+          cat codex-readiness-after.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          before = json.loads(Path("codex-readiness-before.json").read_text())
+          trust = json.loads(Path("codex-trust.json").read_text())
+          after = json.loads(Path("codex-readiness-after.json").read_text())
+
+          assert before["codex_detected"] is True, before
+          assert before["codex_version"], before
+          assert before["hooks_file_present"] is True, before
+          assert before["permission_hook_present"] is True, before
+          assert before["hook_command_matches_current_runtime"] is True, before
+          assert sorted(before["observer_events_present"]) == sorted([
+              "PreToolUse", "PostToolUse", "SessionStart",
+              "UserPromptSubmit", "Stop", "SessionEnd",
+          ]), before
+          assert before["native_hook_discovered"] is True, before
+          assert before["native_current_hash"], before
+          assert before["native_timeout_sec"] == 600, before
+          assert before["native_status_message"] == "Waiting for human://", before
+          assert before["trust_status"] in {"untrusted", "modified", "trusted", "managed"}, before
+
+          assert trust["current_hash"] == before["native_current_hash"], (trust, before)
+          assert trust["trust_after"] in {"trusted", "managed"}, trust
+
+          assert after["native_hook_discovered"] is True, after
+          assert after["native_current_hash"] == before["native_current_hash"], (after, before)
+          assert after["trust_status"] in {"trusted", "managed"}, after
+          assert after["gateway_online"] is True, after
+          assert after["ready_for_real_host_probe"] is True, after
+          assert after["real_host_e2e_verified"] is False, after
+
+          print("CODEX_NATIVE_DISCOVERY_AND_TRUST_OK")
+          print("codex_version=" + str(after["codex_version"]))
+          print("trust_before=" + str(before["trust_status"]))
+          print("trust_after=" + str(after["trust_status"]))
+          print("hook_hash=" + str(after["native_current_hash"]))
           PY

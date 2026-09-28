@@ -193,16 +193,25 @@ print("SIDE_EFFECT_EXECUTED True", flush=True)
             if child is not None and child.poll() is None:
                 child.kill()
                 child.wait(timeout=5)
-            if gateway.poll() is None:
+
+            # Only a gateway that exited *before* our teardown is a failure.
+            # Intentional subprocess termination is reported differently by OS:
+            # Unix commonly uses -SIGTERM while Windows TerminateProcess may
+            # produce exit code 1. Those codes say nothing about the E2E result.
+            gateway_exited_before_teardown = gateway.poll() is not None
+            if not gateway_exited_before_teardown:
                 gateway.terminate()
                 try:
                     gateway.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     gateway.kill()
                     gateway.wait(timeout=5)
-            if gateway.returncode not in (0, -15, 143):
+
+            if gateway_exited_before_teardown and gateway.returncode != 0:
                 logs = gateway.stdout.read() if gateway.stdout else ""
-                raise RuntimeError(f"gateway exited unexpectedly ({gateway.returncode}):\n{logs}")
+                raise RuntimeError(
+                    f"gateway exited unexpectedly before teardown ({gateway.returncode}):\n{logs}"
+                )
 
 
 if __name__ == "__main__":
