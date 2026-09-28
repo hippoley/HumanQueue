@@ -353,6 +353,172 @@ def _codex_native_hook_inventory(codex_path: str, cwd: str | None = None) -> dic
                 proc.wait(timeout=2)
 
 
+def _codex_native_write_trust(
+    codex_path: str,
+    hook_key: str,
+    current_hash: str,
+) -> None:
+    """Ask Codex itself to trust one exact current hook hash."""
+
+    proc = subprocess.Popen(
+        [codex_path, "app-server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    messages: queue.Queue[dict[str, Any]] = queue.Queue()
+
+    def _read_stdout() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                messages.put(json.loads(line))
+            except Exception:
+                continue
+
+    thread = threading.Thread(target=_read_stdout, daemon=True)
+    thread.start()
+
+    def _send(payload: dict[str, Any]) -> None:
+        assert proc.stdin is not None
+        proc.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        proc.stdin.flush()
+
+    def _read_id(request_id: int, timeout: float = 4.0) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                message = messages.get(timeout=max(0.05, deadline - time.monotonic()))
+            except queue.Empty:
+                break
+            if message.get("id") == request_id:
+                return message
+        raise TimeoutError(
+            f"timed out waiting for Codex app-server response id={request_id}"
+        )
+
+    try:
+        _send({
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "clientInfo": {"name": "humanq-trust", "version": "0.7.0"},
+                "capabilities": {"experimentalApi": True},
+            },
+        })
+        initialized = _read_id(1)
+        if initialized.get("error"):
+            raise RuntimeError(f"Codex initialize failed: {initialized['error']}")
+
+        _send({"method": "initialized"})
+        _send({
+            "id": 2,
+            "method": "config/batchWrite",
+            "params": {
+                "edits": [{
+                    "keyPath": "hooks.state",
+                    "value": {
+                        str(hook_key): {
+                            "trusted_hash": str(current_hash),
+                        }
+                    },
+                    "mergeStrategy": "upsert",
+                }],
+                "filePath": None,
+                "expectedVersion": None,
+                "reloadUserConfig": True,
+            },
+        })
+        response = _read_id(2)
+        if response.get("error"):
+            raise RuntimeError(
+                f"Codex config/batchWrite trust update failed: {response['error']}"
+            )
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2)
+
+
+def trust_codex_hook() -> dict[str, Any]:
+    """Explicitly trust the exact human:// hook hash reported by Codex itself."""
+
+    status = codex_readiness()
+    codex_path = status.get("codex_path")
+    if not codex_path:
+        raise RuntimeError("Codex binary is not on PATH")
+    if not status.get("permission_hook_present"):
+        raise RuntimeError("human:// PermissionRequest hook is not installed")
+    if not status.get("hook_command_matches_current_runtime"):
+        raise RuntimeError(
+            "installed human:// hook points at a different Python runtime; reconnect Codex first"
+        )
+    if not status.get("native_hook_discovered"):
+        raise RuntimeError("Codex app-server did not discover the human:// hook")
+
+    hook_key = status.get("native_hook_key")
+    current_hash = status.get("native_current_hash")
+    trust_before = str(status.get("trust_status") or "unknown")
+    if not hook_key or not current_hash:
+        raise RuntimeError("Codex did not report a stable hook key/current hash")
+
+    if trust_before in {"trusted", "managed"}:
+        return {
+            "provider": "codex",
+            "changed": False,
+            "hook_key": hook_key,
+            "current_hash": current_hash,
+            "trust_before": trust_before,
+            "trust_after": trust_before,
+        }
+    if trust_before not in {"untrusted", "modified"}:
+        raise RuntimeError(
+            f"refusing to trust hook with unexpected Codex trust status: {trust_before}"
+        )
+
+    _codex_native_write_trust(
+        str(codex_path),
+        str(hook_key),
+        str(current_hash),
+    )
+    verified = _codex_native_hook_inventory(str(codex_path))
+    permission = verified.get("permission_hook") or {}
+    trust_after = str(permission.get("trustStatus") or "unknown")
+    verified_hash = permission.get("currentHash")
+    verified_key = permission.get("key")
+
+    if verified_key != hook_key:
+        raise RuntimeError(
+            "Codex hook identity changed while applying trust; refusing to report success"
+        )
+    if verified_hash != current_hash:
+        raise RuntimeError(
+            "Codex hook hash changed while applying trust; refusing to report success"
+        )
+    if trust_after not in {"trusted", "managed"}:
+        raise RuntimeError(
+            f"Codex did not accept the current human:// hook hash: {trust_after}"
+        )
+
+    return {
+        "provider": "codex",
+        "changed": True,
+        "hook_key": hook_key,
+        "current_hash": current_hash,
+        "trust_before": trust_before,
+        "trust_after": trust_after,
+    }
+
+
 def codex_readiness() -> dict[str, Any]:
     """Report what is proven locally before claiming a real Codex host round-trip."""
 
