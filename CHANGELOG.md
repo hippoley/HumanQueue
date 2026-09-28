@@ -18,6 +18,7 @@
 - Fixed a real human-vs-timeout race where concurrent workers could each emit a different terminal event for the same boundary.
 - Terminal resolution/expiry now uses database compare-and-set semantics; a losing concurrent contender rolls back its vote/event side effects and reads the canonical winner.
 - Added concurrent opposing-resolver, duplicate same-actor, human-vs-timeout, and repeated 20-race stress coverage across independent Store instances.
+- Concurrent HTTP losers now observe the already-terminal boundary as a conflict and cannot trigger a second machine resume.
 
 
 ## 0.7.0 — human-boundary integrity
