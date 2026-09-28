@@ -1536,3 +1536,144 @@ def test_canonical_and_import_create_paths_never_call_legacy_direct_publisher(tm
         },
     )
     assert imported.status_code == 201
+
+
+def test_sdk_create_retry_reuses_generated_idempotency_key(monkeypatch):
+    import httpx
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue
+
+    payloads = []
+    responses = [
+        httpx.ReadTimeout("lost create acknowledgement"),
+        httpx.Response(
+            201,
+            json={
+                "request": {
+                    "id": "attn_recovered",
+                    "status": "pending",
+                }
+            },
+        ),
+    ]
+
+    def fake_post(*args, **kwargs):
+        payloads.append(dict(kwargs["json"]))
+        outcome = responses.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(client_module.httpx, "post", fake_post)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _: None)
+
+    item = HumanQueue("http://127.0.0.1:9999", timeout=0.1).ask(
+        "human://approve",
+        source="sdk",
+        ref="run-1",
+        title="Recover create ack?",
+        wait=False,
+    )
+
+    assert item["id"] == "attn_recovered"
+    assert len(payloads) == 2
+    first_key = payloads[0]["idempotency_key"]
+    assert first_key.startswith("humanq-client:")
+    assert payloads[1]["idempotency_key"] == first_key
+
+
+def test_sdk_create_retry_preserves_explicit_idempotency_key(monkeypatch):
+    import httpx
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue
+
+    payloads = []
+
+    def fake_post(*args, **kwargs):
+        payloads.append(dict(kwargs["json"]))
+        if len(payloads) == 1:
+            raise httpx.ConnectError("connection reset after commit")
+        return httpx.Response(
+            201,
+            json={
+                "request": {
+                    "id": "attn_explicit",
+                    "status": "pending",
+                }
+            },
+        )
+
+    monkeypatch.setattr(client_module.httpx, "post", fake_post)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _: None)
+
+    HumanQueue("http://127.0.0.1:9999").ask(
+        "human://approve",
+        source="sdk",
+        ref="run-2",
+        title="Explicit idempotency",
+        idempotency_key="operator-supplied-key",
+    )
+
+    assert [p["idempotency_key"] for p in payloads] == [
+        "operator-supplied-key",
+        "operator-supplied-key",
+    ]
+
+
+def test_sdk_create_retry_does_not_retry_client_errors(monkeypatch):
+    import humanqueue.client as client_module
+    import pytest
+    from humanqueue.client import HumanQueue, HumanQueueError
+
+    calls = []
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return httpx.Response(422, json={"detail": "bad boundary"})
+
+    monkeypatch.setattr(client_module.httpx, "post", fake_post)
+
+    with pytest.raises(HumanQueueError, match="HTTP 422"):
+        HumanQueue("http://127.0.0.1:9999").ask(
+            "human://approve",
+            source="sdk",
+            ref="run-3",
+            title="Bad request",
+        )
+
+    assert len(calls) == 1
+
+
+def test_sdk_create_retry_retries_ambiguous_server_error(monkeypatch):
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue
+
+    payloads = []
+
+    def fake_post(*args, **kwargs):
+        payloads.append(dict(kwargs["json"]))
+        if len(payloads) == 1:
+            return httpx.Response(500, json={"detail": "late failure"})
+        return httpx.Response(
+            201,
+            json={
+                "request": {
+                    "id": "attn_after_500",
+                    "status": "pending",
+                }
+            },
+        )
+
+    monkeypatch.setattr(client_module.httpx, "post", fake_post)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _: None)
+
+    item = HumanQueue("http://127.0.0.1:9999").ask(
+        "human://approve",
+        source="sdk",
+        ref="run-4",
+        title="Recover late server failure",
+    )
+
+    assert item["id"] == "attn_after_500"
+    assert len(payloads) == 2
+    assert payloads[0]["idempotency_key"] == payloads[1]["idempotency_key"]
