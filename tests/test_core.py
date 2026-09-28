@@ -1238,3 +1238,14 @@ def test_wait_does_not_hide_http_protocol_errors(monkeypatch):
         )
 
     assert len(calls) == 1
+
+
+def test_store_connection_context_releases_sqlite_handle(tmp_path: Path):
+    import sqlite3
+
+    store = Store(str(tmp_path / "close-handle.db"))
+    with store._conn() as conn:
+        conn.execute("SELECT 1").fetchone()
+
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        conn.execute("SELECT 1")
