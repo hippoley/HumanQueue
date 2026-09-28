@@ -117,6 +117,10 @@ jobs:
         run: |
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/resume_outbox_recovery_e2e.py"
+      - name: Packaged ambiguous resume crash no-replay E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/resume_outbox_uncertain_e2e.py"
       - name: Verify packaged runtime assets
         run: |
           python - <<'PY'
