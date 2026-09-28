@@ -437,3 +437,8 @@ jobs:
           assert not any(x in lower for x in bad), combined
           print("OPENCODE_ACTIVE_PLUGIN_DISCOVERY_OK")
           PY
+      - name: Prove real OpenCode permission round-trip without a model
+        env:
+          OPENCODE_DISABLE_MODELS_FETCH: "1"
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "1"
+        run: python scripts/opencode_native_e2e.py
