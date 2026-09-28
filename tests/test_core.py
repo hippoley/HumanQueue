@@ -1344,3 +1344,35 @@ def test_concurrent_independent_store_instances_create_one_idempotent_request(tm
 
     assert len(rows) == 1
     assert [row["type"] for row in events].count("created") == 1
+
+
+def test_pending_request_without_publish_evidence_is_not_recovered_today(tmp_path: Path):
+    """Characterize the crash window before adding a durable channel outbox."""
+    from app import main
+
+    db = str(tmp_path / "pre-outbox-crash-window.db")
+    main.store = Store(db)
+
+    item, created = main.store.create_with_status(
+        req(
+            source="agent",
+            source_ref="crash-window",
+            idempotency_key="crash-window:1",
+        )
+    )
+    assert created is True
+
+    events = main.store.events(item.id)
+    assert [event["type"] for event in events] == ["created"]
+
+    # There is currently no durable publish intent tied to the request commit.
+    # If the process dies here, a restarted Gateway has no canonical work item
+    # telling it to deliver this boundary to configured human-facing channels.
+    assert not any(
+        event["type"] in {
+            "channel_publish_enqueued",
+            "channel_delivery_attempted",
+            "channel_delivered",
+        }
+        for event in events
+    )
