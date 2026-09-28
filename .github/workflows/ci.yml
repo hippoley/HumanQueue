@@ -288,3 +288,157 @@ jobs:
           print("trust_after=" + str(after["trust_status"]))
           print("hook_hash=" + str(after["native_current_hash"]))
           PY
+
+
+  claude-native-config:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    name: latest Claude Code native config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install latest official Claude Code
+        run: |
+          npm install -g @anthropic-ai/claude-code@latest
+          claude --version
+      - name: Install human:// and connect Claude Code
+        run: |
+          python -m pip install .
+          humanq onboard --force
+          humanq connect claude
+          cat "$HOME/.claude/settings.json"
+      - name: Make the real Claude binary parse the installed settings
+        env:
+          DISABLE_AUTOUPDATER: "1"
+        run: |
+          set +e
+          timeout 20s claude --debug hooks -p "Reply with OK only." --output-format json >claude-out.txt 2>claude-err.txt
+          code=$?
+          set -e
+          cat claude-out.txt || true
+          cat claude-err.txt || true
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          settings = json.loads((Path.home() / ".claude" / "settings.json").read_text())
+          hooks = settings["hooks"]
+          assert "PermissionRequest" in hooks
+          assert "SessionStart" in hooks
+          assert "UserPromptSubmit" in hooks
+          assert "Stop" in hooks
+          assert "SessionEnd" in hooks
+
+          err = Path("claude-err.txt").read_text(errors="replace")
+          bad = [
+              "invalid settings",
+              "failed to parse settings",
+              "settings validation",
+              "invalid hook",
+              "unknown hook event",
+          ]
+          assert not any(x in err.lower() for x in bad), err
+          print("CLAUDE_NATIVE_SETTINGS_PARSE_OK")
+          PY
+
+  opencode-native-plugin:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    name: latest OpenCode native plugin load
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install latest official OpenCode CLI
+        run: |
+          npm install -g @opencode/cli@latest
+          opencode --version
+      - name: Install human:// and connect OpenCode
+        run: |
+          python -m pip install .
+          humanq onboard --force
+          humanq connect opencode
+          test -f "$HOME/.config/opencode/plugins/human-queue.ts"
+          sed -n '1,220p' "$HOME/.config/opencode/plugins/human-queue.ts"
+      - name: Ask the real OpenCode runtime to load configuration and plugins
+        env:
+          OPENCODE_DISABLE_MODELS_FETCH: "1"
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "1"
+        run: |
+          set +e
+          opencode debug config >opencode-config.txt 2>opencode-config.err
+          config_code=$?
+          timeout 20s opencode service start >opencode-service.txt 2>opencode-service.err
+          service_code=$?
+          opencode api get /api/info >opencode-api.txt 2>opencode-api.err
+          api_code=$?
+          opencode plugin list >opencode-plugins.txt 2>opencode-plugins.err
+          plugins_code=$?
+          set -e
+
+          cat opencode-config.txt || true
+          cat opencode-config.err || true
+          cat opencode-service.txt || true
+          cat opencode-service.err || true
+          cat opencode-api.txt || true
+          cat opencode-api.err || true
+          cat opencode-plugins.txt || true
+          cat opencode-plugins.err || true
+
+          echo "config_code=$config_code"
+          echo "service_code=$service_code"
+          echo "api_code=$api_code"
+          echo "plugins_code=$plugins_code"
+
+          test "$config_code" -eq 0
+          test "$api_code" -eq 0
+          test "$plugins_code" -eq 0
+
+          python - <<'PY'
+          from pathlib import Path
+
+          combined = "\n".join(
+              Path(name).read_text(errors="replace")
+              for name in [
+                  "opencode-config.txt",
+                  "opencode-config.err",
+                  "opencode-service.txt",
+                  "opencode-service.err",
+                  "opencode-api.txt",
+                  "opencode-api.err",
+                  "opencode-plugins.txt",
+                  "opencode-plugins.err",
+              ]
+              if Path(name).exists()
+          )
+          lower = combined.lower()
+          plugins = Path("opencode-plugins.txt").read_text(errors="replace").lower()
+          assert "human-queue" in plugins, (
+              "OpenCode service is healthy, but human:// is absent from the active plugin list:\n"
+              + plugins
+          )
+          bad = [
+              "cannot find package '@opencode/plugin'",
+              "cannot find module '@opencode/plugin'",
+              "plugin.define is not a function",
+              "permission.hook is not a function",
+              "failed to load plugin",
+              "error loading plugin",
+          ]
+          assert not any(x in lower for x in bad), combined
+          print("OPENCODE_ACTIVE_PLUGIN_DISCOVERY_OK")
+          PY
+      - name: Prove real OpenCode permission round-trip without a model
+        env:
+          OPENCODE_DISABLE_MODELS_FETCH: "1"
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "1"
+        run: python scripts/opencode_native_e2e.py
