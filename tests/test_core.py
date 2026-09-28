@@ -740,3 +740,89 @@ def test_concurrent_api_resolve_resumes_machine_once(tmp_path: Path, monkeypatch
         if event["type"] == "resolved"
     ]
     assert len(resolved_events) == 1, resolved_events
+
+
+def test_concurrent_quorum_votes_finalize_once(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "concurrent-quorum.db")
+    creator = Store(db)
+    item = creator.create(
+        req(route=RoutePolicy(mode="quorum", actors=["alice", "bob"], quorum=2))
+    )
+    stores = [Store(db), Store(db)]
+    start = threading.Barrier(2)
+
+    def vote(store: Store, actor: str):
+        start.wait(timeout=5)
+        resolved, finalized = store.resolve(
+            item.id,
+            actor,
+            {"action": "approve", "values": {}},
+        )
+        return finalized, resolved.status.value
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [
+            pool.submit(vote, stores[0], "alice"),
+            pool.submit(vote, stores[1], "bob"),
+        ]
+        results = [future.result(timeout=10) for future in results]
+
+    assert sorted(finalized for finalized, _ in results) == [False, True], results
+
+    with creator._conn() as c:
+        votes = c.execute(
+            "SELECT actor FROM votes WHERE request_id=? ORDER BY actor",
+            (item.id,),
+        ).fetchall()
+        resolved_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='resolved'",
+            (item.id,),
+        ).fetchall()
+
+    assert [row["actor"] for row in votes] == ["alice", "bob"]
+    assert len(resolved_events) == 1
+    assert creator.get(item.id).status.value == "resolved"
+
+
+def test_concurrent_conflicting_quorum_votes_never_finalize(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "concurrent-conflict.db")
+    creator = Store(db)
+    item = creator.create(
+        req(route=RoutePolicy(mode="quorum", actors=["alice", "bob"], quorum=2))
+    )
+    stores = [Store(db), Store(db)]
+    start = threading.Barrier(2)
+
+    def vote(store: Store, actor: str, action: str):
+        start.wait(timeout=5)
+        resolved, finalized = store.resolve(
+            item.id,
+            actor,
+            {"action": action, "values": {}},
+        )
+        return finalized, resolved.status.value
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(vote, stores[0], "alice", "approve")
+        b = pool.submit(vote, stores[1], "bob", "reject")
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert all(finalized is False for finalized, _ in results), results
+
+    final = creator.get(item.id)
+    assert final.status.value == "claimed"
+    assert final.quorum_progress["votes"] == 2
+    assert final.quorum_progress["conflicted"] is True
+
+    with creator._conn() as c:
+        resolved_events = c.execute(
+            "SELECT actor FROM events WHERE request_id=? AND type='resolved'",
+            (item.id,),
+        ).fetchall()
+    assert resolved_events == []
