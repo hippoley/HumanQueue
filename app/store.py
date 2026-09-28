@@ -193,10 +193,6 @@ class Store:
                 "INSERT OR IGNORE INTO channel_outbox(request_id,status,attempts,available_at,lease_until,last_error,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
                 (rid, "pending", 0, now.isoformat(), None, None, now.isoformat(), now.isoformat()),
             )
-            c.execute(
-                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
-                (rid, "channel_publish_enqueued", "outbox", "{}", now.isoformat()),
-            )
 
             if req.supersession_key:
                 rows = c.execute("SELECT * FROM requests WHERE id<>? AND source=? AND status IN (?,?)", (rid, req.source, RequestStatus.pending.value, RequestStatus.claimed.value)).fetchall()
@@ -446,7 +442,7 @@ class Store:
             c.execute("BEGIN IMMEDIATE")
             params: list[Any] = [now, now]
             where = (
-                "status='pending' AND available_at<=? "
+                "status!='done' AND available_at<=? "
                 "AND (lease_until IS NULL OR lease_until<=?)"
             )
             if request_id is not None:
