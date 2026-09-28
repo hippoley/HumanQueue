@@ -155,6 +155,37 @@ Current retry semantics are deliberately narrow:
 
 This keeps a failing or misconfigured human surface from becoming an unbounded retry loop while still closing the commit-before-publish crash window.
 
+## Idempotent create acknowledgement recovery
+
+Creating a human boundary is a write with an ambiguous network failure mode: the Gateway may commit the canonical request even when the caller never receives the HTTP response.
+
+SDK calls therefore use one stable `idempotency_key` for the lifetime of one `ask()` invocation. Transport errors and 5xx create responses may be retried only with that same key.
+
+If create acknowledgements remain ambiguous after the bounded POST retries, the SDK uses the authenticated recovery lookup:
+
+```http
+GET /v1/idempotency/lookup?source=<source>&idempotency_key=<key>
+```
+
+The lookup returns the already-committed canonical request, if any. It does not create a request.
+
+The intended state machine is:
+
+```text
+create attempt
+  ├─ acknowledged → use returned request
+  └─ ambiguous
+       → same-key retry
+       → same-key retry
+       → read-only idempotency lookup
+            ├─ found → recover exact request
+            └─ unavailable/not found → explicit HumanQueueCreateError
+```
+
+A recovery failure must never be reported as success. `HumanQueueCreateError` carries the stable `source` and `idempotency_key` so a caller can retry/reconcile later without minting a new canonical obligation.
+
+Callers that bypass the SDK need to supply their own stable idempotency key to obtain the same guarantee.
+
 ## Decision provenance and responder identity
 
 A human boundary must distinguish **who/what produced an outcome** from the outcome itself.
