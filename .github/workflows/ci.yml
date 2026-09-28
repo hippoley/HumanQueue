@@ -148,3 +148,48 @@ jobs:
         run: |
           Set-Location $env:RUNNER_TEMP
           & "$env:GITHUB_WORKSPACE\.smoke-venv\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\first_run_e2e.py"
+
+
+  installer-entrypoint-matrix:
+    name: installer entrypoint (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run install.sh exactly as shipped
+        if: runner.os != 'Windows'
+        env:
+          HUMAN_QUEUE_HOME: ${{ runner.temp }}/humanq-installer-state
+        run: |
+          bash scripts/install.sh
+          "$HOME/.local/bin/humanq" doctor
+          test -f "$HUMAN_QUEUE_HOME/config.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          cfg = json.loads((Path(os.environ["HUMAN_QUEUE_HOME"]) / "config.json").read_text())
+          assert str(cfg["token"]).startswith("hq_")
+          print("INSTALLER_ENTRYPOINT_OK")
+          PY
+      - name: Run install.ps1 exactly as shipped
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:HUMAN_QUEUE_HOME = Join-Path $env:RUNNER_TEMP "humanq-installer-state"
+          .\scripts\install.ps1
+          $humanq = Join-Path $env:HUMAN_QUEUE_HOME "runtime\Scripts\humanq.exe"
+          & $humanq doctor
+          if (-not (Test-Path (Join-Path $env:HUMAN_QUEUE_HOME "config.json"))) {
+            throw "installer did not create config.json"
+          }
+          $cfg = Get-Content (Join-Path $env:HUMAN_QUEUE_HOME "config.json") | ConvertFrom-Json
+          if (-not $cfg.token.StartsWith("hq_")) {
+            throw "installer did not create a valid gateway token"
+          }
+          Write-Host "INSTALLER_ENTRYPOINT_OK"
