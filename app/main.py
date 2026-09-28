@@ -356,6 +356,10 @@ def claim_request(rid: str, claim: ClaimRequest):
         raise HTTPException(403, str(exc)) from exc
     if not req:
         raise HTTPException(404, "request not found")
+    if req.status.value != "claimed":
+        raise HTTPException(409, f"request is already {req.status.value}")
+    if req.claimed_by != claim.actor:
+        raise HTTPException(409, f"request is already claimed by {req.claimed_by}")
     return req
 
 
