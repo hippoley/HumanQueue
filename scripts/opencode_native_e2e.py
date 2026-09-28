@@ -28,6 +28,20 @@ def request_json(method: str, url: str, token: str | None = None, payload: dict 
         return json.loads(response.read().decode("utf-8"))
 
 
+def wait_for_opencode_server(url: str, timeout: float = 15.0) -> dict:
+    deadline = time.monotonic() + timeout
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            body = request_json("GET", url + "/api/info")
+            if body.get("version"):
+                return body
+        except Exception as exc:
+            last_error = exc
+        time.sleep(0.1)
+    raise RuntimeError(f"OpenCode server did not become healthy: {last_error}")
+
+
 def wait_for_health(url: str, timeout: float = 15.0) -> None:
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
@@ -303,6 +317,7 @@ def main() -> None:
         marker = workspace / "native-approved.txt"
         request_log = root / "stub-requests.jsonl"
         model_port = free_port()
+        opencode_port = free_port()
 
         (workspace / "opencode.jsonc").write_text(
             json.dumps(
@@ -356,6 +371,7 @@ def main() -> None:
             stderr=subprocess.STDOUT,
         )
         stub = start_stub_model(model_port, marker, request_log)
+        server: subprocess.Popen[str] | None = None
         child: subprocess.Popen[str] | None = None
 
         try:
@@ -415,11 +431,31 @@ def main() -> None:
                     + model_catalog.stderr
                 )
 
+            server = subprocess.Popen(
+                [
+                    "opencode",
+                    "serve",
+                    "--hostname",
+                    "127.0.0.1",
+                    "--port",
+                    str(opencode_port),
+                ],
+                cwd=workspace,
+                env=child_env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            server_url = f"http://127.0.0.1:{opencode_port}"
+            server_info = wait_for_opencode_server(server_url)
+            print("attached_server_info=" + json.dumps(server_info, sort_keys=True), flush=True)
+
             child = subprocess.Popen(
                 [
                     "opencode",
                     "run",
-                    "--standalone",
+                    "--attach",
+                    server_url,
                     "--model",
                     "local/coder",
                     (
@@ -521,6 +557,13 @@ def main() -> None:
             if child is not None and child.poll() is None:
                 child.kill()
                 child.wait(timeout=5)
+            if server is not None and server.poll() is None:
+                server.terminate()
+                try:
+                    server.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait(timeout=5)
             stub.shutdown()
             stub.server_close()
             if gateway.poll() is None:
