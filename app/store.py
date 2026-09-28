@@ -75,6 +75,18 @@ class Store:
                   policy TEXT NOT NULL,
                   updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS channel_outbox (
+                  request_id TEXT PRIMARY KEY,
+                  status TEXT NOT NULL,
+                  attempts INTEGER NOT NULL DEFAULT 0,
+                  available_at TEXT NOT NULL,
+                  lease_until TEXT,
+                  last_error TEXT,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_channel_outbox_ready
+                  ON channel_outbox(status, available_at, lease_until);
                 """
             )
             # Forward-migrate older MVP databases.
@@ -177,6 +189,14 @@ class Store:
                 (rid, req.source, req.source_ref, req.idempotency_key, json.dumps(payload), RequestStatus.pending.value, priority, now.isoformat(), now.isoformat(), None, None, None, surface.value, None),
             )
             c.execute("INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)", (rid, "created", None, json.dumps({"priority": priority, "surface_mode": surface.value}), now.isoformat()))
+            c.execute(
+                "INSERT OR IGNORE INTO channel_outbox(request_id,status,attempts,available_at,lease_until,last_error,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                (rid, "pending", 0, now.isoformat(), None, None, now.isoformat(), now.isoformat()),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, "channel_publish_enqueued", "outbox", "{}", now.isoformat()),
+            )
 
             if req.supersession_key:
                 rows = c.execute("SELECT * FROM requests WHERE id<>? AND source=? AND status IN (?,?)", (rid, req.source, RequestStatus.pending.value, RequestStatus.claimed.value)).fetchall()
@@ -412,6 +432,108 @@ class Store:
             row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
             return self._row_to_model(row, c)
 
+    def claim_channel_outbox(
+        self,
+        *,
+        request_id: str | None = None,
+        limit: int = 10,
+        lease_seconds: int = 30,
+    ) -> list[str]:
+        now_dt = self._now()
+        now = now_dt.isoformat()
+        lease_until = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
+        with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            params: list[Any] = [now, now]
+            where = (
+                "status='pending' AND available_at<=? "
+                "AND (lease_until IS NULL OR lease_until<=?)"
+            )
+            if request_id is not None:
+                where += " AND request_id=?"
+                params.append(request_id)
+            params.append(limit)
+            rows = c.execute(
+                f"SELECT request_id FROM channel_outbox WHERE {where} ORDER BY created_at LIMIT ?",
+                tuple(params),
+            ).fetchall()
+            ids = [str(row["request_id"]) for row in rows]
+            for rid in ids:
+                c.execute(
+                    """
+                    UPDATE channel_outbox
+                    SET status='processing',
+                        attempts=attempts+1,
+                        lease_until=?,
+                        updated_at=?
+                    WHERE request_id=?
+                    """,
+                    (lease_until, now, rid),
+                )
+                c.execute(
+                    "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                    (
+                        rid,
+                        "channel_publish_claimed",
+                        "outbox",
+                        json.dumps({"lease_until": lease_until}),
+                        now,
+                    ),
+                )
+            return ids
+
+    def complete_channel_outbox(self, rid: str) -> None:
+        now = self._now().isoformat()
+        with self.lock, self._conn() as c:
+            c.execute(
+                """
+                UPDATE channel_outbox
+                SET status='done', lease_until=NULL, last_error=NULL, updated_at=?
+                WHERE request_id=?
+                """,
+                (now, rid),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (rid, "channel_publish_completed", "outbox", "{}", now),
+            )
+
+    def retry_channel_outbox(self, rid: str, error: str, *, delay_seconds: int = 1) -> None:
+        now_dt = self._now()
+        now = now_dt.isoformat()
+        available_at = (now_dt + timedelta(seconds=delay_seconds)).isoformat()
+        with self.lock, self._conn() as c:
+            c.execute(
+                """
+                UPDATE channel_outbox
+                SET status='pending',
+                    lease_until=NULL,
+                    available_at=?,
+                    last_error=?,
+                    updated_at=?
+                WHERE request_id=?
+                """,
+                (available_at, error[:2000], now, rid),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (
+                    rid,
+                    "channel_publish_retry_scheduled",
+                    "outbox",
+                    json.dumps({"available_at": available_at, "error": error[:500]}),
+                    now,
+                ),
+            )
+
+    def channel_outbox(self, rid: str) -> dict[str, Any] | None:
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT * FROM channel_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+        return dict(row) if row else None
+
     def record_event(
         self,
         rid: str,
@@ -441,6 +563,7 @@ class Store:
         with self.lock, self._conn() as c:
             c.execute("DELETE FROM votes")
             c.execute("DELETE FROM events")
+            c.execute("DELETE FROM channel_outbox")
             c.execute("DELETE FROM requests")
 
     def policy_sandbox(self, policy_key: str, proposed_action: str | None = None) -> dict[str, Any]:
