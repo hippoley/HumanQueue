@@ -40,18 +40,25 @@ def wait_for_health(url: str, timeout: float = 15.0) -> None:
     raise RuntimeError(f"gateway did not become healthy: {last_error}")
 
 
-def wait_for_pending(url: str, token: str, child: subprocess.Popen[str], timeout: float = 10.0) -> dict:
+def wait_for_pending(
+    url: str,
+    token: str,
+    child: subprocess.Popen[str],
+    *,
+    source: str,
+    timeout: float = 10.0,
+) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         body = request_json("GET", url + "/v1/queue?status=pending", token)
         for item in body.get("items", []):
-            if item.get("source") == "gateway-restart-e2e":
+            if item.get("source") == source:
                 if child.poll() is not None:
                     output = child.stdout.read() if child.stdout else ""
                     raise RuntimeError(f"client exited before gateway fault injection:\n{output}")
                 return item
         time.sleep(0.05)
-    raise RuntimeError("timed out waiting for pending restart-recovery request")
+    raise RuntimeError(f"timed out waiting for pending request from {source}")
 
 
 def start_gateway(root: Path, env: dict[str, str]) -> subprocess.Popen[str]:
@@ -110,6 +117,7 @@ def main() -> None:
 
         gateway = start_gateway(root, env)
         child: subprocess.Popen[str] | None = None
+        timeout_child: subprocess.Popen[str] | None = None
         try:
             wait_for_health(base_url)
 
@@ -145,7 +153,12 @@ print("RESTART_SIDE_EFFECT_EXECUTED True", flush=True)
                 stderr=subprocess.STDOUT,
             )
 
-            item = wait_for_pending(base_url, token, child)
+            item = wait_for_pending(
+                base_url,
+                token,
+                child,
+                source="gateway-restart-e2e",
+            )
             request_id = str(item["id"])
             print(f"RESTART_PENDING request_id={request_id}")
 
@@ -219,7 +232,12 @@ else:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
             )
-            timeout_item = wait_for_pending(base_url, token, timeout_child)
+            timeout_item = wait_for_pending(
+                base_url,
+                token,
+                timeout_child,
+                source="gateway-timeout-e2e",
+            )
             timeout_request_id = str(timeout_item["id"])
 
             stop_gateway(gateway)
@@ -275,6 +293,9 @@ else:
             print("PACKAGED_WAIT_TIMEOUT_PRESERVES_BOUNDARY_OK")
             print(f"timeout_request_id={timeout_request_id}")
         finally:
+            if timeout_child is not None and timeout_child.poll() is None:
+                timeout_child.kill()
+                timeout_child.wait(timeout=5)
             if child is not None and child.poll() is None:
                 child.kill()
                 child.wait(timeout=5)
