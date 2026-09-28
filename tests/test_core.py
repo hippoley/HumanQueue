@@ -1171,3 +1171,82 @@ def test_same_actor_http_reclaim_is_idempotent(tmp_path: Path):
             (item.id,),
         ).fetchall()
     assert len(claim_events) == 1
+
+
+def test_wait_retries_transport_error_after_request_exists(monkeypatch):
+    import httpx
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue
+
+    calls = []
+
+    def fake_get(*args, **kwargs):
+        calls.append(args[0])
+        if len(calls) == 1:
+            raise httpx.ConnectError("gateway restarting")
+        return httpx.Response(
+            200,
+            json={
+                "request": {
+                    "status": "resolved",
+                    "resolution": {
+                        "action": "approve",
+                        "values": {"recovered": True},
+                    },
+                }
+            },
+        )
+
+    monkeypatch.setattr(client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _: None)
+
+    decision = HumanQueue("http://127.0.0.1:9999").wait(
+        "attn_restart",
+        timeout=5,
+        poll_interval=0.01,
+    )
+
+    assert len(calls) == 2
+    assert decision == {
+        "action": "approve",
+        "values": {"recovered": True},
+    }
+
+
+def test_wait_does_not_hide_http_protocol_errors(monkeypatch):
+    import httpx
+    import pytest
+    import humanqueue.client as client_module
+    from humanqueue.client import HumanQueue, HumanQueueError
+
+    calls = []
+
+    def fake_get(*args, **kwargs):
+        calls.append(args[0])
+        return httpx.Response(
+            401,
+            json={"detail": "bad token"},
+        )
+
+    monkeypatch.setattr(client_module.httpx, "get", fake_get)
+
+    with pytest.raises(HumanQueueError, match="HTTP 401"):
+        HumanQueue("http://127.0.0.1:9999").wait(
+            "attn_auth",
+            timeout=5,
+            poll_interval=0.01,
+        )
+
+    assert len(calls) == 1
+
+
+def test_store_connection_context_releases_sqlite_handle(tmp_path: Path):
+    import sqlite3
+    import pytest
+
+    store = Store(str(tmp_path / "close-handle.db"))
+    with store._conn() as conn:
+        conn.execute("SELECT 1").fetchone()
+
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        conn.execute("SELECT 1")

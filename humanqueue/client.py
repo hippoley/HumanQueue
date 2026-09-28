@@ -92,8 +92,38 @@ class HumanQueue:
 
     def wait(self, request_id: str, *, timeout: float | None = None, poll_interval: float = 1.0) -> dict[str, Any]:
         started = time.monotonic()
+        last_transport_error: httpx.TransportError | None = None
         while True:
-            response = httpx.get(f"{self.base_url}/v1/requests/{request_id}", headers=self._headers(), timeout=self.timeout)
+            if timeout is not None and time.monotonic() - started >= timeout:
+                detail = (
+                    f"; last transport error: {type(last_transport_error).__name__}: {last_transport_error}"
+                    if last_transport_error is not None
+                    else ""
+                )
+                raise TimeoutError(f"timed out waiting for {request_id}{detail}")
+
+            try:
+                response = httpx.get(
+                    f"{self.base_url}/v1/requests/{request_id}",
+                    headers=self._headers(),
+                    timeout=self.timeout,
+                )
+            except httpx.TransportError as exc:
+                # The canonical request already exists. A temporary Gateway
+                # restart/network interruption must not turn an unresolved
+                # human obligation into a failed caller. Retry only transport
+                # failures; HTTP responses still go through _raise below.
+                last_transport_error = exc
+                if timeout is not None:
+                    remaining = timeout - (time.monotonic() - started)
+                    if remaining <= 0:
+                        continue
+                    time.sleep(min(poll_interval, remaining))
+                else:
+                    time.sleep(poll_interval)
+                continue
+
+            last_transport_error = None
             self._raise(response)
             item = response.json()["request"]
             status = item["status"]
@@ -101,9 +131,13 @@ class HumanQueue:
                 return item["resolution"] or {}
             if status in {"cancelled", "expired", "superseded"}:
                 raise HumanQueueError(f"human request ended with status={status}")
-            if timeout is not None and time.monotonic() - started >= timeout:
-                raise TimeoutError(f"timed out waiting for {request_id}")
-            time.sleep(poll_interval)
+            if timeout is not None:
+                remaining = timeout - (time.monotonic() - started)
+                if remaining <= 0:
+                    continue
+                time.sleep(min(poll_interval, remaining))
+            else:
+                time.sleep(poll_interval)
 
     @staticmethod
     def _headers() -> dict[str, str]:

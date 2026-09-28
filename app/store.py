@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+
+from .sqlite_utils import connect as sqlite_connect
 import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -24,9 +26,7 @@ class Store:
         self._init()
 
     def _conn(self):
-        conn = sqlite3.connect(self.path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return sqlite_connect(self.path, check_same_thread=False)
 
     def _init(self):
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
