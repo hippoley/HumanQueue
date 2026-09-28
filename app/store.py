@@ -160,6 +160,11 @@ class Store:
         priority = priority_score(req)
         payload = req.model_dump(mode="json")
         with self.lock, self._conn() as c:
+            # Idempotent creation must be atomic across independent Gateway
+            # workers sharing the same SQLite database. Without a database-level
+            # write lock, two workers can both observe "missing" and race into
+            # the unique (source, idempotency_key) index.
+            c.execute("BEGIN IMMEDIATE")
             if req.idempotency_key:
                 existing = c.execute("SELECT * FROM requests WHERE source=? AND idempotency_key=?", (req.source, req.idempotency_key)).fetchone()
                 if existing:
