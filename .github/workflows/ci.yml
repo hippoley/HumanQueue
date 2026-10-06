@@ -126,6 +126,10 @@ jobs:
         run: |
           cd /tmp
           /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/resume_outbox_uncertain_e2e.py"
+      - name: Packaged uncertain resume reconciliation E2E
+        run: |
+          cd /tmp
+          /tmp/humanq-e2e-venv/bin/python "$GITHUB_WORKSPACE/scripts/resume_reconciliation_e2e.py"
       - name: Packaged multi-worker resume outbox E2E
         run: |
           cd /tmp
