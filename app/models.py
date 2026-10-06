@@ -180,3 +180,22 @@ class MachineOutcomeRequest(BaseModel):
     outcome: Literal["expired", "cancelled"]
     reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+
+class ResumeReconciliationRequest(BaseModel):
+    """Operator evidence for an ambiguous resume attempt; never triggers replay."""
+
+    actor: str = Field(min_length=1, max_length=200)
+    actor_kind: Literal["human", "service"] = "human"
+    outcome: Literal["executed", "not_executed", "unknown"]
+    reason: str = Field(min_length=1, max_length=2000)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def require_evidence_for_terminal_reconciliation(self):
+        if self.outcome in {"executed", "not_executed"} and not self.evidence:
+            raise ValueError(
+                "executed/not_executed reconciliation requires external evidence"
+            )
+        return self
