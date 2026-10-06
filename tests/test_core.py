@@ -2315,3 +2315,286 @@ def test_doctor_does_not_require_database_before_first_gateway_start(tmp_path: P
 
     assert not db.exists()
     assert "human:// doctor: OK" in capsys.readouterr().out
+
+
+
+def _make_uncertain_resume_for_reconciliation(
+    store: Store,
+    url: str = "http://127.0.0.1:9999/resume",
+):
+    from app.models import ResumeTarget
+
+    item = store.create(
+        req(
+            source="reconcile-test",
+            source_ref="machine-op",
+            resume=ResumeTarget(mode="webhook", url=url),
+        )
+    )
+    _, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=0,
+    ) == [item.id]
+    # The next worker observes an expired in-flight lease and must mark it
+    # uncertain without replaying.
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    row = store.resume_outbox(item.id)
+    assert row is not None
+    assert row["status"] == "uncertain"
+    assert int(row["attempts"]) == 1
+    return item
+
+
+def test_uncertain_resume_can_be_reconciled_as_executed_without_replay(tmp_path: Path):
+    import json
+
+    store = Store(str(tmp_path / "reconcile-executed.db"))
+    item = _make_uncertain_resume_for_reconciliation(store)
+    claims_before = len([
+        event for event in store.events(item.id)
+        if event["type"] == "resume_delivery_claimed"
+    ])
+
+    outbox = store.reconcile_uncertain_resume(
+        item.id,
+        actor="operator",
+        actor_kind="human",
+        outcome="executed",
+        reason="receiver audit shows canonical request id completed",
+        evidence={"receiver_log_id": "log-42"},
+    )
+
+    assert outbox["status"] == "done"
+    assert int(outbox["attempts"]) == 1
+    result = json.loads(outbox["result"])
+    assert result["execution"] == "executed"
+    assert result["automatic_retry"] is False
+    assert result["evidence"]["receiver_log_id"] == "log-42"
+
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    events = store.events(item.id)
+    assert len([
+        event for event in events
+        if event["type"] == "resume_delivery_claimed"
+    ]) == claims_before
+    assert len([
+        event for event in events
+        if event["type"] == "resume_reconciled_executed"
+    ]) == 1
+    # External reconciliation is deliberately not the same thing as the
+    # receiver returning an in-band semantic resume receipt.
+    assert not [
+        event for event in events
+        if event["type"] == "resume_confirmed"
+    ]
+
+
+def test_uncertain_resume_can_be_reconciled_as_not_executed_without_retry(tmp_path: Path):
+    import json
+
+    store = Store(str(tmp_path / "reconcile-not-executed.db"))
+    item = _make_uncertain_resume_for_reconciliation(store)
+
+    outbox = store.reconcile_uncertain_resume(
+        item.id,
+        actor="receiver-audit",
+        actor_kind="service",
+        outcome="not_executed",
+        reason="receiver has no matching canonical request id",
+        evidence={"query_id": "audit-17", "matches": 0},
+    )
+
+    assert outbox["status"] == "failed"
+    assert int(outbox["attempts"]) == 1
+    assert "automatic retry remains disabled" in str(outbox["last_error"])
+    result = json.loads(outbox["result"])
+    assert result["execution"] == "not_executed"
+    assert result["actor_kind"] == "service"
+
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    events = store.events(item.id)
+    assert len([
+        event for event in events
+        if event["type"] == "resume_reconciled_not_executed"
+    ]) == 1
+
+
+def test_unknown_resume_reconciliation_preserves_uncertainty(tmp_path: Path):
+    store = Store(str(tmp_path / "reconcile-unknown.db"))
+    item = _make_uncertain_resume_for_reconciliation(store)
+
+    outbox = store.reconcile_uncertain_resume(
+        item.id,
+        actor="operator",
+        actor_kind="human",
+        outcome="unknown",
+        reason="receiver logs have already rotated",
+        evidence={"ticket": "INC-7"},
+    )
+
+    assert outbox["status"] == "uncertain"
+    assert int(outbox["attempts"]) == 1
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+
+    events = store.events(item.id)
+    unknown = [
+        event for event in events
+        if event["type"] == "resume_reconciled_unknown"
+    ]
+    assert len(unknown) == 1
+    assert unknown[0]["data"]["automatic_retry"] is False
+
+    # Later stronger evidence may close the same uncertainty.
+    final = store.reconcile_uncertain_resume(
+        item.id,
+        actor="receiver-audit",
+        actor_kind="service",
+        outcome="executed",
+        reason="archived audit confirms execution",
+        evidence={"archive_record": "receiver/2026/42"},
+    )
+    assert final["status"] == "done"
+
+
+def test_terminal_resume_reconciliation_requires_evidence(tmp_path: Path):
+    import pytest
+
+    store = Store(str(tmp_path / "reconcile-evidence-required.db"))
+    item = _make_uncertain_resume_for_reconciliation(store)
+
+    with pytest.raises(ValueError, match="requires external evidence"):
+        store.reconcile_uncertain_resume(
+            item.id,
+            actor="operator",
+            actor_kind="human",
+            outcome="executed",
+            reason="I think it happened",
+            evidence={},
+        )
+
+    row = store.resume_outbox(item.id)
+    assert row is not None
+    assert row["status"] == "uncertain"
+    assert int(row["attempts"]) == 1
+
+
+def test_concurrent_resume_reconciliation_has_one_terminal_winner(tmp_path: Path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = str(tmp_path / "reconcile-race.db")
+    seed = Store(db)
+    item = _make_uncertain_resume_for_reconciliation(seed)
+    left = Store(db)
+    right = Store(db)
+    start = threading.Barrier(2)
+
+    def reconcile(store: Store, outcome: str, actor: str):
+        start.wait(timeout=5)
+        try:
+            row = store.reconcile_uncertain_resume(
+                item.id,
+                actor=actor,
+                actor_kind="human",
+                outcome=outcome,
+                reason="independent operator evidence",
+                evidence={"actor": actor, "source": "external-audit"},
+            )
+            return ("won", outcome, row["status"])
+        except ValueError as exc:
+            return ("lost", outcome, str(exc))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(reconcile, left, "executed", "operator-a")
+        b = pool.submit(reconcile, right, "not_executed", "operator-b")
+        results = [a.result(timeout=10), b.result(timeout=10)]
+
+    assert len([row for row in results if row[0] == "won"]) == 1, results
+    assert len([row for row in results if row[0] == "lost"]) == 1, results
+
+    final = seed.resume_outbox(item.id)
+    assert final is not None
+    assert final["status"] in {"done", "failed"}
+    assert int(final["attempts"]) == 1
+
+    events = seed.events(item.id)
+    terminal = [
+        event for event in events
+        if event["type"] in {
+            "resume_reconciled_executed",
+            "resume_reconciled_not_executed",
+        }
+    ]
+    assert len(terminal) == 1
+    assert len([
+        event for event in events
+        if event["type"] == "resume_delivery_claimed"
+    ]) == 1
+
+
+def test_resume_reconcile_api_is_evidence_only_and_never_schedules_transport(tmp_path: Path):
+    from app import main
+
+    main.store = Store(str(tmp_path / "reconcile-api-v2.db"))
+    client = TestClient(main.app)
+    item = _make_uncertain_resume_for_reconciliation(main.store)
+
+    missing_evidence = client.post(
+        f"/v1/requests/{item.id}/resume-reconcile",
+        json={
+            "actor": "operator",
+            "outcome": "executed",
+            "reason": "no proof supplied",
+            "evidence": {},
+        },
+    )
+    assert missing_evidence.status_code == 422
+
+    response = client.post(
+        f"/v1/requests/{item.id}/resume-reconcile",
+        json={
+            "actor": "operator",
+            "actor_kind": "human",
+            "outcome": "executed",
+            "reason": "receiver audit confirms execution",
+            "evidence": {"receiver_log_id": "log-api-1"},
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["transport_attempted"] is False
+    assert body["resume_outbox"]["status"] == "done"
+
+    repeated = client.post(
+        f"/v1/requests/{item.id}/resume-reconcile",
+        json={
+            "actor": "operator-2",
+            "outcome": "not_executed",
+            "reason": "late conflicting report",
+            "evidence": {"receiver_log_id": "log-api-2"},
+        },
+    )
+    assert repeated.status_code == 409
