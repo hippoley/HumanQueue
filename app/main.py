@@ -163,9 +163,16 @@ async def _process_resume_outbox_request(rid: str) -> dict:
             result=result,
             event_type="resume_delivered_unconfirmed",
         )
+    elif reason == "resume_transport_error":
+        # A timeout/reset after sending is ambiguous: the receiver may already
+        # have executed the side effect and only the acknowledgement was lost.
+        # Never label this as a safe failure or replay it automatically.
+        store.mark_resume_outbox_uncertain(
+            rid,
+            result=result,
+            reason="resume transport failed after delivery became unknowable",
+        )
     else:
-        # A failed or acknowledgement-lost attempt is intentionally not retried.
-        # The receiver may already have executed the side effect.
         store.fail_resume_outbox(
             rid,
             result=result,
