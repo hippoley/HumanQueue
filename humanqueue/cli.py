@@ -96,6 +96,17 @@ def doctor(_: argparse.Namespace) -> None:
             issues.append(f"state directory is not writable: {exc}")
         if not str(cfg.get("token", "")).startswith("hq_"):
             issues.append("gateway token is missing or malformed")
+        if p.exists():
+            from app.sqlite_utils import check_database
+
+            db_health = check_database(p)
+            if not db_health["ok"]:
+                detail = "; ".join(db_health.get("messages") or ["unknown SQLite integrity failure"])
+                issues.append(
+                    "database integrity check failed: "
+                    + detail
+                    + " (run: humanq db check --full)"
+                )
     if issues:
         print("human:// doctor found problems:")
         for x in issues:
