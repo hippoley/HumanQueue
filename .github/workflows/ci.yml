@@ -22,6 +22,7 @@ jobs:
       - run: humanq mcp --help
       - run: humanq channel --help
       - run: humanq db --help
+      - run: humanq resume --help
       - name: Verify README visual assets
         run: |
           python - <<'PY'
