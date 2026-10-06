@@ -2315,3 +2315,101 @@ def test_doctor_does_not_require_database_before_first_gateway_start(tmp_path: P
 
     assert not db.exists()
     assert "human:// doctor: OK" in capsys.readouterr().out
+
+
+def test_resume_transport_timeout_becomes_uncertain_and_never_replays(tmp_path: Path, monkeypatch):
+    from app import main
+    from app.models import ResumeTarget
+
+    db = str(tmp_path / "resume-timeout-uncertain.db")
+    main.store = Store(db)
+    item = main.store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            )
+        )
+    )
+    resolved, finalized = main.store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {"dangerous": True}},
+    )
+    assert finalized is True
+
+    calls = []
+
+    async def ambiguous_resume(request, resolution):
+        calls.append(request.id)
+        return {
+            "delivered": False,
+            "confirmed": False,
+            "reason": "resume_transport_error",
+            "error": "ReadTimeout after request body may have been sent",
+        }
+
+    monkeypatch.setattr(main, "resume", ambiguous_resume)
+
+    result = asyncio.run(main._drain_resume_outbox_request(item.id))
+    assert result["reason"] == "resume_transport_error"
+    assert calls == [item.id]
+
+    outbox = main.store.resume_outbox(item.id)
+    assert outbox is not None
+    assert outbox["status"] == "uncertain"
+    assert int(outbox["attempts"]) == 1
+    assert "unknowable" in str(outbox["last_error"])
+
+    # Reconciliation is fail-closed. An ambiguous callback must never be
+    # replayed automatically because the remote side effect may have happened.
+    replay = main.store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    )
+    assert replay == []
+    assert calls == [item.id]
+
+    events = main.store.events(item.id)
+    uncertain = [e for e in events if e["type"] == "resume_delivery_uncertain"]
+    assert len(uncertain) == 1
+    assert uncertain[0]["data"]["automatic_retry"] is False
+
+
+def test_explicit_non_transport_resume_failure_remains_failed(tmp_path: Path, monkeypatch):
+    from app import main
+    from app.models import ResumeTarget
+
+    db = str(tmp_path / "resume-explicit-failure.db")
+    main.store = Store(db)
+    item = main.store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            )
+        )
+    )
+    _, finalized = main.store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+
+    async def explicit_failure(request, resolution):
+        return {
+            "delivered": False,
+            "confirmed": False,
+            "reason": "receiver_rejected",
+            "error": "receiver refused request before execution",
+        }
+
+    monkeypatch.setattr(main, "resume", explicit_failure)
+    asyncio.run(main._drain_resume_outbox_request(item.id))
+
+    outbox = main.store.resume_outbox(item.id)
+    assert outbox is not None
+    assert outbox["status"] == "failed"
+    assert int(outbox["attempts"]) == 1
