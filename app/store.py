@@ -734,6 +734,106 @@ class Store:
                 (rid, event_type, "resume", encoded, now),
             )
 
+    def reconcile_resume_outbox(
+        self,
+        rid: str,
+        *,
+        actor: str,
+        disposition: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        """Resolve operator-visible resume ambiguity without guessing."""
+
+        if disposition not in {"executed", "not_executed"}:
+            raise ValueError("disposition must be executed or not_executed")
+        if not actor.strip():
+            raise ValueError("actor is required")
+        if not reason.strip():
+            raise ValueError("reason is required")
+
+        now = self._now().isoformat()
+        with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            if not row:
+                raise KeyError("resume outbox row not found")
+            if row["status"] != "uncertain":
+                raise RuntimeError(
+                    f"resume outbox is {row['status']}; only uncertain rows can be reconciled"
+                )
+
+            if disposition == "executed":
+                new_status = "done"
+                event_type = "resume_reconciled_executed"
+                result = {
+                    "operator_reconciled": True,
+                    "executed": True,
+                    "actor": actor,
+                    "reason": reason,
+                    "automatic_retry": False,
+                }
+                encoded = json.dumps(result, default=str)
+                updated = c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status='done',
+                        lease_until=NULL,
+                        last_error=NULL,
+                        result=?,
+                        updated_at=?
+                    WHERE request_id=? AND status='uncertain'
+                    """,
+                    (encoded, now, rid),
+                )
+            else:
+                new_status = "pending"
+                event_type = "resume_retry_authorized"
+                result = {
+                    "operator_reconciled": True,
+                    "executed": False,
+                    "actor": actor,
+                    "reason": reason,
+                    "automatic_retry": False,
+                    "manual_retry_authorized": True,
+                }
+                encoded = json.dumps(result, default=str)
+                updated = c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status='pending',
+                        lease_until=NULL,
+                        available_at=?,
+                        last_error=NULL,
+                        result=?,
+                        updated_at=?
+                    WHERE request_id=? AND status='uncertain'
+                    """,
+                    (now, encoded, now, rid),
+                )
+
+            if updated.rowcount != 1:
+                raise RuntimeError("resume reconciliation lost a concurrent state transition")
+
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (
+                    rid,
+                    event_type,
+                    actor,
+                    json.dumps(result, default=str),
+                    now,
+                ),
+            )
+            current = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            return dict(current)
+
+
     def resume_outbox(self, rid: str) -> dict[str, Any] | None:
         with self._conn() as c:
             row = c.execute(

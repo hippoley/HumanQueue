@@ -548,3 +548,24 @@ A well-reproduced counterexample that **deletes something from the roadmap** is 
 Apache-2.0
 
 </div>
+
+
+### Recover an uncertain webhook resume
+
+If a webhook may have executed but its acknowledgement was lost, human:// leaves the resume outbox in `uncertain` and will not replay it automatically.
+
+After checking the receiver, reconcile explicitly:
+
+```bash
+# Receiver proves it already executed.
+humanq resume reconcile attn_... --executed \
+  --actor operator:alice \
+  --reason "receiver ledger shows request_id executed once"
+
+# Receiver proves it did not execute.
+humanq resume reconcile attn_... --not-executed \
+  --actor operator:alice \
+  --reason "receiver ledger confirms request_id absent"
+```
+
+The second form authorizes one new audited outbox attempt for the same canonical request; it is not an automatic retry.

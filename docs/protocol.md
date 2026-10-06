@@ -177,13 +177,31 @@ crash before attempt
 → recover automatically
 
 crash / ACK loss after attempt may have reached receiver
-→ failed or uncertain
+→ uncertain
 → no automatic replay
 ```
 
 This is **not distributed exactly-once execution**.
 
-A dropped acknowledgement after receiver-side execution is audited as `resume_undeliverable`; an abandoned processing lease becomes `resume_delivery_uncertain`. human:// does not infer that the side effect did not happen and does not automatically resend either case.
+A dropped acknowledgement after receiver-side execution and an abandoned processing lease are both audited as `resume_delivery_uncertain`. human:// does not infer that the side effect did not happen and does not automatically resend either case.
+
+An operator may leave the row uncertain indefinitely, or reconcile it only after checking the receiver:
+
+```bash
+# Receiver audit proves the canonical request already executed.
+humanq resume reconcile attn_... \
+  --executed \
+  --actor operator:alice \
+  --reason "receiver ledger shows request_id executed once"
+
+# Receiver audit proves the canonical request definitely did not execute.
+humanq resume reconcile attn_... \
+  --not-executed \
+  --actor operator:alice \
+  --reason "receiver ledger confirms request_id absent"
+```
+
+`--executed` closes the outbox as done without sending again. `--not-executed` is the only supported way to move an uncertain row back to pending, and that operator action is recorded before a later worker can make a second attempt.
 
 ## Durable human-facing channel delivery
 
