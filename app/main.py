@@ -23,6 +23,7 @@ from .models import (
     ImportEnvelope,
     MachineOutcomeRequest,
     ResolveRequest,
+    ResumeReconciliationRequest,
 )
 from .protocol import uri_for_kind
 from .presence_registry import PresenceRegistry, PresenceUpdate
@@ -591,6 +592,37 @@ async def resolve_request(rid: str, decision: ResolveRequest):
     if finalized:
         delivery = await _resume_and_record(req, req.resolution or resolution)
     return {"request": req, "finalized": finalized, "resume": delivery}
+
+
+@app.post("/v1/requests/{rid}/resume-reconcile")
+def reconcile_uncertain_resume(
+    rid: str,
+    reconciliation: ResumeReconciliationRequest,
+):
+    if not store.get(rid):
+        raise HTTPException(404, "request not found")
+    try:
+        outbox = store.reconcile_uncertain_resume(
+            rid,
+            actor=reconciliation.actor,
+            actor_kind=reconciliation.actor_kind,
+            outcome=reconciliation.outcome,
+            reason=reconciliation.reason,
+            evidence=reconciliation.evidence,
+        )
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    return {
+        "request": store.get(rid),
+        "resume_outbox": outbox,
+        "reconciliation": reconciliation,
+        "transport_attempted": False,
+    }
 
 
 @app.post("/v1/requests/{rid}/outcome")
