@@ -85,7 +85,22 @@ async function waitForDecision(requestID: string) {
 
 // Current OpenCode local-plugin API: export one or more async plugin functions.
 // OpenCode loads each function export and expects it to return a Hooks object.
-export const HumanQueuePlugin = async ({ directory }: { directory: string }) => ({
+export const HumanQueuePlugin = async ({ directory }: { directory: string }) => {
+  const probeFile = process.env.HUMAN_QUEUE_OPENCODE_PROBE_FILE
+  if (probeFile) {
+    try {
+      await Bun.write(probeFile, JSON.stringify({
+        loaded: true,
+        directory,
+        runtime: "opencode-plugin-current",
+        pid: process.pid,
+      }) + "\n")
+    } catch {
+      // Diagnostic-only probe must never break OpenCode startup.
+    }
+  }
+
+  return {
   "chat.message": async (input: any, output: any) => {
     await recordSession({
       event_name: "UserPromptSubmit",
@@ -198,4 +213,5 @@ export const HumanQueuePlugin = async ({ directory }: { directory: string }) => 
       await recordSession({ event_name: "SessionEnd", session_id: String(sessionID) })
     }
   },
-})
+  }
+}
