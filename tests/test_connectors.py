@@ -501,9 +501,14 @@ def test_opencode_installer_writes_global_plugin(tmp_path: Path):
     target = Path(result["plugin_path"])
     assert target.exists()
     content = target.read_text(encoding="utf-8")
-    assert 'Plugin.define' in content
-    assert 'ctx.permission.hook("evaluate"' in content
-    assert 'event.effect !== "ask"' in content
+    assert 'export const HumanQueuePlugin = async' in content
+    assert '"permission.ask": async' in content
+    assert 'output.status !== "ask"' in content
+    assert 'output.status = "allow"' in content
+    assert 'output.status = "deny"' in content
+    assert '"tool.execute.after": async' in content
+    assert 'Plugin.define' not in content
+    assert 'ctx.permission.hook' not in content
 
     removed = uninstall_opencode_plugin(tmp_path)
     assert removed["removed"] is True
