@@ -32,6 +32,8 @@
 - Added packaged crash-recovery E2E proving a resolver can commit the decision and exit before any Gateway worker exists; restart delivers exactly once and reaches `resume_confirmed` / outbox `done`.
 - Added packaged ambiguous-crash E2E where the receiver executes and confirms once, the sender exits before local completion, restart marks `uncertain`, and receiver count remains 1.
 - Added packaged two-Gateway resume contention E2E: both real Uvicorn processes share one SQLite `resume_outbox` while a slow exact-receipt webhook widens the race; CI requires exactly one callback, one claim, one attempt, and one confirmation.
+- Added a real-package database upgrade E2E from the 0.7.0 release commit into current main, preserving legacy pending/claimed/resolved requests, votes, events and budget state while creating today's outbox schema.
+- Fixed quorum finalization so canonical resolution provenance belongs to the actor that commits the terminal transition rather than being inherited from an arbitrary first winning vote. This prevents legacy pre-provenance votes from stripping typed provenance after upgrade; per-vote provenance remains preserved in the vote audit trail.
 - Added request-detail and metrics visibility for resume outbox state, including `resume_delivery_uncertain` as an integrity signal.
 - Added packaged ACK-loss fault injection: a receiver executes once and drops the HTTP response; human:// records `resume_undeliverable` and does not automatically retry or duplicate the receiver-side effect.
 - Documented webhook resume as one automatic attempt per finalized boundary; exactly-once external execution still requires receiver-side deduplication by canonical request_id.

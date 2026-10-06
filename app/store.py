@@ -335,9 +335,30 @@ class Store:
             finalized = winning_count >= required
 
             if finalized:
-                winning = next(json.loads(v["resolution"]) for v in votes if v["fingerprint"] == winning_fp)
-                voters = [v["actor"] for v in votes if v["fingerprint"] == winning_fp]
-                winning["quorum"] = {"required": required, "actors": voters, "votes": winning_count}
+                winning = next(
+                    json.loads(v["resolution"])
+                    for v in votes
+                    if v["fingerprint"] == winning_fp
+                )
+                voters = [
+                    v["actor"]
+                    for v in votes
+                    if v["fingerprint"] == winning_fp
+                ]
+                # The canonical resolution provenance describes the actor that
+                # committed the terminal transition. Individual vote provenance
+                # remains preserved in the votes table. This prevents quorum
+                # finalization from inheriting an arbitrary first vote's
+                # provenance, including legacy pre-provenance votes.
+                winning["provenance"] = {
+                    "actor": actor,
+                    "actor_kind": actor_kind,
+                }
+                winning["quorum"] = {
+                    "required": required,
+                    "actors": voters,
+                    "votes": winning_count,
+                }
                 final_encoded = json.dumps(winning)
                 terminal_values = (
                     RequestStatus.resolved.value,

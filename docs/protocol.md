@@ -242,6 +242,8 @@ That transition leaves `resolution = null`. Timeout, cancellation, scheduler act
 
 A boundary may explicitly set `required_actor_kind = "any"` when a deployment intentionally permits policy/service resolution. That is opt-in.
 
+For quorum/all-of routes, the canonical terminal resolution records the **terminal finalizer** as its top-level provenance. The full set of agreeing actors remains in `resolution.quorum.actors`, while each individual vote keeps its own resolution/provenance in the vote audit table. This prevents canonical provenance from depending on whichever matching vote happened to be inserted first, and keeps upgrades from legacy pre-provenance votes semantically safe.
+
 human:// also enforces responder policy with `route.actors`, but those actor strings and actor-kind assertions are only as trustworthy as the surface that supplies them.
 
 Current trust model:
