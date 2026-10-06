@@ -106,12 +106,21 @@ def main() -> None:
         assert writer_done.wait(timeout=20)
         thread.join(timeout=2)
 
-        with sqlite3.connect(source) as conn:
-            source_count = int(conn.execute("SELECT COUNT(*) FROM requests").fetchone()[0])
-        with sqlite3.connect(backup) as conn:
-            backup_count = int(conn.execute("SELECT COUNT(*) FROM requests").fetchone()[0])
+        source_conn = sqlite3.connect(source)
+        try:
+            source_count = int(
+                source_conn.execute("SELECT COUNT(*) FROM requests").fetchone()[0]
+            )
+        finally:
+            source_conn.close()
+
+        backup_conn = sqlite3.connect(backup)
+        try:
+            backup_count = int(
+                backup_conn.execute("SELECT COUNT(*) FROM requests").fetchone()[0]
+            )
             dangling_events = int(
-                conn.execute(
+                backup_conn.execute(
                     """
                     SELECT COUNT(*)
                     FROM events e
@@ -121,7 +130,7 @@ def main() -> None:
                 ).fetchone()[0]
             )
             dangling_votes = int(
-                conn.execute(
+                backup_conn.execute(
                     """
                     SELECT COUNT(*)
                     FROM votes v
@@ -131,7 +140,7 @@ def main() -> None:
                 ).fetchone()[0]
             )
             dangling_channel = int(
-                conn.execute(
+                backup_conn.execute(
                     """
                     SELECT COUNT(*)
                     FROM channel_outbox o
@@ -141,7 +150,7 @@ def main() -> None:
                 ).fetchone()[0]
             )
             dangling_resume = int(
-                conn.execute(
+                backup_conn.execute(
                     """
                     SELECT COUNT(*)
                     FROM resume_outbox o
@@ -150,6 +159,8 @@ def main() -> None:
                     """
                 ).fetchone()[0]
             )
+        finally:
+            backup_conn.close()
 
         assert 26 <= backup_count <= source_count, (backup_count, source_count)
         assert source_count == 121
