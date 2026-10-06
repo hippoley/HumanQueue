@@ -170,7 +170,7 @@ jobs:
 
 
   packaged-first-run-matrix:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/web-uncertain-resume-reconcile'
     name: packaged first-run (${{ matrix.os }} / py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -221,7 +221,7 @@ jobs:
 
 
   installer-entrypoint-matrix:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/web-uncertain-resume-reconcile'
     name: installer entrypoint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -302,7 +302,7 @@ jobs:
 
 
   codex-native-discovery:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/web-uncertain-resume-reconcile'
     name: latest Codex native hook discovery
     runs-on: ubuntu-latest
     steps:
@@ -438,7 +438,7 @@ jobs:
 
 
   legacy-db-upgrade:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/web-uncertain-resume-reconcile'
     name: legacy 0.7.0 database → current
     runs-on: ubuntu-latest
     timeout-minutes: 12
