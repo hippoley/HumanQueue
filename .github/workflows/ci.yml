@@ -413,3 +413,44 @@ jobs:
           assert after["ready_for_real_host_probe"] is True, after
           print("CODEX_RUNTIME_MOVE_RETRUST_OK")
           PY
+
+
+  legacy-db-upgrade:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    name: legacy 0.7.0 database → current
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Seed state with the real 0.7.0 package, then open it with current main
+        run: |
+          set -euo pipefail
+
+          OLD_SHA=9472419c8de5fca9a8015ba9eb40f427dae19ea5
+          OLD_TREE="$RUNNER_TEMP/humanq-0.7.0"
+          OLD_VENV="$RUNNER_TEMP/humanq-0.7.0-venv"
+          NEW_VENV="$RUNNER_TEMP/humanq-current-venv"
+          export HUMAN_QUEUE_LEGACY_DB="$RUNNER_TEMP/humanq-upgrade/state.db"
+          export HUMAN_QUEUE_LEGACY_MANIFEST="$RUNNER_TEMP/humanq-upgrade/manifest.json"
+
+          mkdir -p "$(dirname "$HUMAN_QUEUE_LEGACY_DB")"
+
+          git worktree add "$OLD_TREE" "$OLD_SHA"
+
+          python -m venv "$OLD_VENV"
+          "$OLD_VENV/bin/python" -m pip install --upgrade pip
+          "$OLD_VENV/bin/python" -m pip install "$OLD_TREE"
+
+          cd "$RUNNER_TEMP"
+          "$OLD_VENV/bin/python" "$GITHUB_WORKSPACE/scripts/legacy_upgrade_seed_070.py"
+
+          python -m venv "$NEW_VENV"
+          "$NEW_VENV/bin/python" -m pip install --upgrade pip
+          "$NEW_VENV/bin/python" -m pip install "$GITHUB_WORKSPACE"
+
+          "$NEW_VENV/bin/python" "$GITHUB_WORKSPACE/scripts/legacy_upgrade_verify.py"
