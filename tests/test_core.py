@@ -2413,3 +2413,144 @@ def test_explicit_non_transport_resume_failure_remains_failed(tmp_path: Path, mo
     assert outbox is not None
     assert outbox["status"] == "failed"
     assert int(outbox["attempts"]) == 1
+
+
+def test_operator_can_close_uncertain_resume_as_already_executed(tmp_path: Path):
+    from app.models import ResumeTarget
+
+    store = Store(str(tmp_path / "reconcile-executed.db"))
+    item = store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            )
+        )
+    )
+    _, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=0,
+    ) == [item.id]
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    assert store.resume_outbox(item.id)["status"] == "uncertain"
+
+    row = store.reconcile_resume_outbox(
+        item.id,
+        actor="operator:alice",
+        disposition="executed",
+        reason="receiver audit shows request_id executed once",
+    )
+
+    assert row["status"] == "done"
+    assert int(row["attempts"]) == 1
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+
+    events = store.events(item.id)
+    reconciled = [e for e in events if e["type"] == "resume_reconciled_executed"]
+    assert len(reconciled) == 1
+    assert reconciled[0]["actor"] == "operator:alice"
+    assert reconciled[0]["data"]["executed"] is True
+
+
+def test_operator_can_retry_uncertain_resume_only_after_confirming_not_executed(tmp_path: Path):
+    from app.models import ResumeTarget
+
+    store = Store(str(tmp_path / "reconcile-not-executed.db"))
+    item = store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            )
+        )
+    )
+    _, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=0,
+    ) == [item.id]
+    assert store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    assert store.resume_outbox(item.id)["status"] == "uncertain"
+
+    row = store.reconcile_resume_outbox(
+        item.id,
+        actor="operator:bob",
+        disposition="not_executed",
+        reason="receiver dedupe ledger confirms request_id absent",
+    )
+
+    assert row["status"] == "pending"
+    assert int(row["attempts"]) == 1
+
+    claimed = store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    )
+    assert claimed == [item.id]
+    after = store.resume_outbox(item.id)
+    assert after["status"] == "processing"
+    assert int(after["attempts"]) == 2
+
+    events = store.events(item.id)
+    retry = [e for e in events if e["type"] == "resume_retry_authorized"]
+    assert len(retry) == 1
+    assert retry[0]["actor"] == "operator:bob"
+    assert retry[0]["data"]["manual_retry_authorized"] is True
+
+
+def test_resume_reconciliation_refuses_non_uncertain_rows(tmp_path: Path):
+    from app.models import ResumeTarget
+    import pytest
+
+    store = Store(str(tmp_path / "reconcile-guard.db"))
+    item = store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            )
+        )
+    )
+    _, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+    assert store.resume_outbox(item.id)["status"] == "pending"
+
+    with pytest.raises(RuntimeError, match="only uncertain rows"):
+        store.reconcile_resume_outbox(
+            item.id,
+            actor="operator:alice",
+            disposition="executed",
+            reason="should not be accepted",
+        )
