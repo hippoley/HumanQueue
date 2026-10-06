@@ -20,6 +20,7 @@ def make_request(
     route: RoutePolicy | None = None,
     resume: ResumeTarget | None = None,
 ) -> AttentionRequestCreate:
+    version = os.environ["HUMAN_QUEUE_LEGACY_VERSION"]
     return AttentionRequestCreate(
         source=f"legacy-{version}",
         source_ref=source_ref,
