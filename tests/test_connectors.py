@@ -911,9 +911,9 @@ def test_codex_trust_refuses_stale_python_runtime(monkeypatch):
 
 
 def test_opencode_asset_tracks_current_upstream_plugin_contract():
-    from humanqueue.connectors.opencode import _asset_path
+    from humanqueue.connectors.opencode import plugin_source
 
-    content = _asset_path().read_text(encoding="utf-8")
+    content = plugin_source().read_text(encoding="utf-8")
 
     # Current OpenCode server-plugin API: exported async plugin function
     # returning Hooks, with permission.ask receiving input + mutable status.
