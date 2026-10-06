@@ -694,6 +694,134 @@ class Store:
                 (rid, event_type, "resume", encoded, now),
             )
 
+    def reconcile_uncertain_resume(
+        self,
+        rid: str,
+        *,
+        actor: str,
+        actor_kind: str,
+        outcome: str,
+        reason: str,
+        evidence: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Record operator/receiver evidence without replaying the callback.
+
+        Only an uncertain resume may be reconciled. Unknown appends evidence
+        while preserving uncertainty. Terminal evidence moves the outbox to
+        done (executed) or failed (not_executed). No branch schedules transport.
+        """
+
+        if actor_kind not in {"human", "service"}:
+            raise PermissionError("resume reconciliation requires human/service provenance")
+        if outcome not in {"executed", "not_executed", "unknown"}:
+            raise ValueError("unsupported resume reconciliation outcome")
+        evidence = dict(evidence or {})
+        if outcome in {"executed", "not_executed"} and not evidence:
+            raise ValueError(
+                "terminal resume reconciliation requires external evidence"
+            )
+
+        now = self._now().isoformat()
+        with self.lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            if not row:
+                raise KeyError("resume outbox not found")
+            if str(row["status"]) != "uncertain":
+                raise ValueError(
+                    "resume reconciliation requires uncertain state, got "
+                    + str(row["status"])
+                )
+
+            previous_result: Any = None
+            if row["result"]:
+                try:
+                    previous_result = json.loads(row["result"])
+                except Exception:
+                    previous_result = row["result"]
+
+            audit = {
+                "outcome": outcome,
+                "reason": reason,
+                "actor_kind": actor_kind,
+                "evidence": evidence,
+                "previous_status": "uncertain",
+                "previous_result": previous_result,
+                "previous_error": row["last_error"],
+                "attempts": int(row["attempts"]),
+                "automatic_retry": False,
+            }
+
+            if outcome == "unknown":
+                c.execute(
+                    "UPDATE resume_outbox SET updated_at=? "
+                    "WHERE request_id=? AND status='uncertain'",
+                    (now, rid),
+                )
+                event_type = "resume_reconciled_unknown"
+            else:
+                status = "done" if outcome == "executed" else "failed"
+                result = {
+                    "operator_reconciled": True,
+                    "execution": outcome,
+                    "actor": actor,
+                    "actor_kind": actor_kind,
+                    "reason": reason,
+                    "evidence": evidence,
+                    "previous_result": previous_result,
+                    "automatic_retry": False,
+                }
+                last_error = (
+                    None
+                    if outcome == "executed"
+                    else "operator verified remote action did not execute; automatic retry remains disabled"
+                )
+                updated = c.execute(
+                    """
+                    UPDATE resume_outbox
+                    SET status=?,
+                        lease_until=NULL,
+                        last_error=?,
+                        result=?,
+                        updated_at=?
+                    WHERE request_id=? AND status='uncertain'
+                    """,
+                    (
+                        status,
+                        last_error,
+                        json.dumps(result, default=str),
+                        now,
+                        rid,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise ValueError("resume uncertainty was already reconciled")
+                event_type = (
+                    "resume_reconciled_executed"
+                    if outcome == "executed"
+                    else "resume_reconciled_not_executed"
+                )
+
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) "
+                "VALUES (?,?,?,?,?)",
+                (
+                    rid,
+                    event_type,
+                    actor,
+                    json.dumps(audit, default=str),
+                    now,
+                ),
+            )
+            updated_row = c.execute(
+                "SELECT * FROM resume_outbox WHERE request_id=?",
+                (rid,),
+            ).fetchone()
+            return dict(updated_row)
+
     def resume_outbox(self, rid: str) -> dict[str, Any] | None:
         with self._conn() as c:
             row = c.execute(
@@ -900,7 +1028,10 @@ class Store:
                     'resume_confirmed',
                     'resume_delivered_unconfirmed',
                     'resume_undeliverable',
-                    'resume_not_applicable'
+                    'resume_not_applicable',
+                    'resume_reconciled_executed',
+                    'resume_reconciled_not_executed',
+                    'resume_reconciled_unknown'
                   )
                 GROUP BY type
                 """,
