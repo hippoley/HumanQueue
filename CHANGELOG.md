@@ -34,6 +34,10 @@
 - Added packaged two-Gateway resume contention E2E: both real Uvicorn processes share one SQLite `resume_outbox` while a slow exact-receipt webhook widens the race; CI requires exactly one callback, one claim, one attempt, and one confirmation.
 - Added a real-package database upgrade E2E from the 0.7.0 release commit into current main, preserving legacy pending/claimed/resolved requests, votes, events and budget state while creating today's outbox schema.
 - Fixed quorum finalization so canonical resolution provenance belongs to the actor that commits the terminal transition rather than being inherited from an arbitrary first winning vote. This prevents legacy pre-provenance votes from stripping typed provenance after upgrade; per-vote provenance remains preserved in the vote audit trail.
+- Added `humanq db check` (`PRAGMA quick_check`, optional full `integrity_check`) with non-zero exit on corrupted/unreadable SQLite state.
+- Added `humanq db backup` using SQLite online backup into a unique temporary file, verification before publication, atomic destination replacement, SHA-256 reporting, and best-effort private file permissions.
+- Added concurrent-write packaged backup E2E: a live writer keeps adding boundaries while the snapshot is taken; the snapshot must pass SQLite integrity checks, open independently, preserve lifecycle/outbox relations, and contain no dangling request references.
+- Backup intentionally covers the SQLite database only. `config.json` and connector/channel credentials remain separate sensitive state, and automatic restore is deferred until offline/rollback semantics are independently proven.
 - Added request-detail and metrics visibility for resume outbox state, including `resume_delivery_uncertain` as an integrity signal.
 - Added packaged ACK-loss fault injection: a receiver executes once and drops the HTTP response; human:// records `resume_undeliverable` and does not automatically retry or duplicate the receiver-side effect.
 - Documented webhook resume as one automatic attempt per finalized boundary; exactly-once external execution still requires receiver-side deduplication by canonical request_id.
