@@ -212,10 +212,10 @@ def main() -> None:
                 for event in detail.get("events", [])
                 if event["type"].startswith("resume_")
             ]
-            undeliverable = [
+            uncertain = [
                 event
                 for event in resume_events
-                if event["type"] == "resume_undeliverable"
+                if event["type"] == "resume_delivery_uncertain"
             ]
             confirmed = [
                 event
@@ -223,19 +223,55 @@ def main() -> None:
                 if event["type"] == "resume_confirmed"
             ]
 
-            if len(undeliverable) != 1:
+            if len(uncertain) != 1:
                 raise RuntimeError(
-                    f"expected one resume_undeliverable event: {resume_events}"
+                    f"expected one resume_delivery_uncertain event: {resume_events}"
+                )
+            if uncertain[0]["data"].get("automatic_retry") is not False:
+                raise RuntimeError(
+                    f"ambiguous delivery must explicitly disable automatic retry: {uncertain}"
                 )
             if confirmed:
                 raise RuntimeError(
                     f"ACK loss manufactured resume confirmation: {confirmed}"
                 )
 
-            print("RESUME_ACK_LOSS_NO_RETRY_OK")
+            # Re-open the durable state directly: the target may already have
+            # executed, so the outbox must stay fail-closed after ACK loss.
+            from app.store import Store
+            durable = Store(str(home / "human-queue.db"))
+            outbox = durable.resume_outbox(request_id)
+            if not outbox or outbox["status"] != "uncertain":
+                raise RuntimeError(
+                    f"ACK loss did not persist uncertain outbox state: {outbox}"
+                )
+            if int(outbox["attempts"]) != 1:
+                raise RuntimeError(
+                    f"ACK loss unexpectedly changed attempt count: {outbox}"
+                )
+            if durable.claim_resume_outbox(
+                request_id=request_id,
+                limit=1,
+                lease_seconds=30,
+            ):
+                raise RuntimeError(
+                    "ACK-loss resume was automatically replayable"
+                )
+
+            # Give any accidental retry another window to become visible.
+            time.sleep(0.5)
+            with lock:
+                final_count = int(state["count"])
+            if final_count != 1:
+                raise RuntimeError(
+                    f"ACK-loss state replayed the webhook {final_count} times"
+                )
+
+            print("RESUME_ACK_LOSS_UNCERTAIN_NO_RETRY_OK")
             print(f"request_id={request_id}")
             print("receiver_side_effect_count=1")
-            print("audit=resume_undeliverable")
+            print("outbox=uncertain")
+            print("audit=resume_delivery_uncertain")
         finally:
             receiver.shutdown()
             receiver.server_close()

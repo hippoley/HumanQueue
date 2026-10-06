@@ -664,6 +664,46 @@ class Store:
                 (rid, event_type, "resume", encoded, now),
             )
 
+    def mark_resume_outbox_uncertain(
+        self,
+        rid: str,
+        *,
+        result: dict[str, Any],
+        reason: str,
+    ) -> None:
+        """Record ambiguous delivery without permitting automatic replay."""
+
+        now = self._now().isoformat()
+        encoded = json.dumps(result, default=str)
+        with self.lock, self._conn() as c:
+            c.execute(
+                """
+                UPDATE resume_outbox
+                SET status='uncertain',
+                    lease_until=NULL,
+                    last_error=?,
+                    result=?,
+                    updated_at=?
+                WHERE request_id=? AND status='processing'
+                """,
+                (reason[:2000], encoded, now, rid),
+            )
+            c.execute(
+                "INSERT INTO events(request_id,type,actor,data,created_at) VALUES (?,?,?,?,?)",
+                (
+                    rid,
+                    "resume_delivery_uncertain",
+                    "resume",
+                    json.dumps({
+                        **result,
+                        "reason": reason,
+                        "automatic_retry": False,
+                    }, default=str),
+                    now,
+                ),
+            )
+
+
     def fail_resume_outbox(
         self,
         rid: str,
