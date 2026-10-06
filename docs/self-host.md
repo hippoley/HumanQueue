@@ -31,7 +31,9 @@ The dashboard is local by default at `http://127.0.0.1:7482`.
 
 ## State integrity and backup
 
-Check the active SQLite state with SQLite's own integrity checker:
+`humanq doctor` also runs a quick SQLite integrity check whenever the database already exists; a corrupt database makes doctor fail rather than report the installation healthy.
+
+For an explicit or full check:
 
 ```bash
 humanq db check
