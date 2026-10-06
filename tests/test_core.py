@@ -2185,3 +2185,57 @@ def test_abandoned_resume_attempt_becomes_uncertain_and_is_not_replayed(tmp_path
     metrics = second.metrics()
     assert metrics["resume_outbox"]["uncertain"] == 1
     assert metrics["integrity_last_24h"]["resume_delivery_uncertain"] == 1
+
+
+def test_quorum_canonical_provenance_is_terminal_finalizer(tmp_path: Path):
+    store = Store(str(tmp_path / "quorum-finalizer-provenance.db"))
+    item = store.create(
+        req(
+            route=RoutePolicy(
+                mode="quorum",
+                actors=["alice", "bob"],
+                quorum=2,
+            )
+        )
+    )
+
+    after_alice, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {"target": "prod"}},
+        actor_kind="human",
+    )
+    assert finalized is False
+    assert after_alice is not None
+    assert after_alice.status.value == "claimed"
+
+    after_bob, finalized = store.resolve(
+        item.id,
+        "bob",
+        {"action": "approve", "values": {"target": "prod"}},
+        actor_kind="human",
+    )
+    assert finalized is True
+    assert after_bob is not None
+    assert after_bob.status.value == "resolved"
+    assert after_bob.resolved_by == "bob"
+    assert after_bob.resolution["provenance"] == {
+        "actor": "bob",
+        "actor_kind": "human",
+    }
+    assert after_bob.resolution["quorum"] == {
+        "required": 2,
+        "actors": ["alice", "bob"],
+        "votes": 2,
+    }
+
+    # Vote-level evidence remains independently auditable; changing canonical
+    # provenance must not rewrite either participant's vote.
+    with store._conn() as conn:
+        rows = conn.execute(
+            "SELECT actor,resolution FROM votes WHERE request_id=? ORDER BY created_at",
+            (item.id,),
+        ).fetchall()
+    assert [row["actor"] for row in rows] == ["alice", "bob"]
+    assert json.loads(rows[0]["resolution"])["provenance"]["actor"] == "alice"
+    assert json.loads(rows[1]["resolution"])["provenance"]["actor"] == "bob"
