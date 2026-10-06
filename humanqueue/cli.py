@@ -171,6 +171,50 @@ def db_backup(args: argparse.Namespace) -> None:
     print("\nTreat this file as sensitive: request payloads may contain bounded context and resume secrets.")
 
 
+def resume_reconcile(args: argparse.Namespace) -> None:
+    from app.store import Store
+
+    if bool(args.executed) == bool(args.not_executed):
+        raise SystemExit("choose exactly one of --executed or --not-executed")
+    disposition = "executed" if args.executed else "not_executed"
+
+    store = Store(db_path())
+    try:
+        row = store.reconcile_resume_outbox(
+            args.request_id,
+            actor=args.actor,
+            disposition=disposition,
+            reason=args.reason,
+        )
+    except Exception as exc:
+        raise SystemExit(f"resume reconciliation failed: {exc}") from exc
+
+    result = {
+        "request_id": args.request_id,
+        "disposition": disposition,
+        "status": row["status"],
+        "attempts": int(row["attempts"]),
+        "actor": args.actor,
+        "reason": args.reason,
+    }
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    print("human:// resume reconciliation")
+    print(f" request      {args.request_id}")
+    print(f" disposition  {disposition}")
+    print(f" status       {row['status']}")
+    print(f" attempts     {row['attempts']}")
+    print(f" actor        {args.actor}")
+    print(f" reason       {args.reason}")
+    if disposition == "not_executed":
+        print("\nThe same canonical request is eligible for one new outbox attempt.")
+        print("Start/keep the Gateway running to deliver it.")
+    else:
+        print("\nNo further webhook delivery will be attempted for this request.")
+
+
 def rotate_token(_: argparse.Namespace) -> None:
     cfg = load_config() or ensure_config()
     cfg["token"] = generate_token()
@@ -954,6 +998,29 @@ def main() -> None:
     p_db_backup.add_argument("--force", action="store_true", help="replace an existing destination only after a verified temp backup succeeds")
     p_db_backup.add_argument("--json", action="store_true")
     p_db_backup.set_defaults(func=db_backup)
+
+    p_resume = sub.add_parser("resume", help="inspect or reconcile webhook resume delivery")
+    rs = p_resume.add_subparsers(dest="resume_command")
+    p_resume_reconcile = rs.add_parser(
+        "reconcile",
+        help="resolve an uncertain webhook delivery after external verification",
+    )
+    p_resume_reconcile.add_argument("request_id")
+    outcome = p_resume_reconcile.add_mutually_exclusive_group(required=True)
+    outcome.add_argument(
+        "--executed",
+        action="store_true",
+        help="remote side effect is confirmed to have executed; never resend",
+    )
+    outcome.add_argument(
+        "--not-executed",
+        action="store_true",
+        help="remote side effect is confirmed not to have executed; authorize one new send",
+    )
+    p_resume_reconcile.add_argument("--actor", required=True)
+    p_resume_reconcile.add_argument("--reason", required=True)
+    p_resume_reconcile.add_argument("--json", action="store_true")
+    p_resume_reconcile.set_defaults(func=resume_reconcile)
 
     p_token = sub.add_parser("token", help="manage the gateway token")
     ts = p_token.add_subparsers(dest="token_command")
