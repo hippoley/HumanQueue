@@ -126,7 +126,7 @@ function renderNow(){
 }
 function pick(id){selected=items.find(x=>x.id===id)||selected;renderNow()}
 async function resolveCurrent(action){
-  if(!selected)return; const values={}; $('[data-field]').forEach(el=>values[el.dataset.field]=el.value);
+  if(!selected)return; const values={}; document.querySelectorAll('[data-field]').forEach(el=>values[el.dataset.field]=el.value);
   const id=selected.id, title=selected.title;
   const result=await j(`/v1/requests/${id}/resolve`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({actor:'demo-human',action,values})});
   const resume=result.resume||{};
