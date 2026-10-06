@@ -180,3 +180,9 @@ class MachineOutcomeRequest(BaseModel):
     outcome: Literal["expired", "cancelled"]
     reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeReconcileRequest(BaseModel):
+    actor: str = Field(min_length=1)
+    disposition: Literal["executed", "not_executed"]
+    reason: str = Field(min_length=1)
