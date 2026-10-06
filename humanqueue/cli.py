@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 import uvicorn
 
-from .config import CONFIG_PATH, channel_configs, db_path, ensure_config, gateway_token, gateway_url, generate_channel_secret, load_config, remove_channel, save_channel, save_config, generate_token
+from .config import CONFIG_PATH, STATE_DIR, channel_configs, db_path, ensure_config, gateway_token, gateway_url, generate_channel_secret, load_config, remove_channel, save_channel, save_config, generate_token
 
 
 def _open_later(url: str) -> None:
@@ -105,6 +105,59 @@ def doctor(_: argparse.Namespace) -> None:
     print(f" config  {CONFIG_PATH}")
     print(f" db      {cfg['db']}")
     print(f" bind    {cfg['host']}:{cfg['port']}")
+
+
+def db_check(args: argparse.Namespace) -> None:
+    from app.sqlite_utils import check_database
+
+    target = Path(args.path).expanduser() if args.path else Path(db_path()).expanduser()
+    result = check_database(target, full=args.full)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        state = "OK" if result["ok"] else "FAILED"
+        print(f"human:// database check: {state}")
+        print(f" path    {result['path']}")
+        print(f" check   {result['check']}")
+        print(f" bytes   {result['bytes']}")
+        if result.get("tables"):
+            print(" tables  " + ", ".join(result["tables"]))
+        for message in result.get("messages") or []:
+            print(" result  " + message)
+    if not result["ok"]:
+        raise SystemExit(1)
+
+
+def db_backup(args: argparse.Namespace) -> None:
+    from app.sqlite_utils import backup_database
+
+    source = Path(db_path()).expanduser()
+    if args.path:
+        destination = Path(args.path).expanduser()
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        destination = STATE_DIR / "backups" / f"human-queue-{stamp}.db"
+
+    try:
+        result = backup_database(
+            source,
+            destination,
+            overwrite=args.force,
+        )
+    except Exception as exc:
+        raise SystemExit(f"database backup failed: {exc}") from exc
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    print("human:// database backup: OK")
+    print(f" source  {result['source']}")
+    print(f" backup  {result['path']}")
+    print(f" bytes   {result['bytes']}")
+    print(f" sha256  {result['sha256']}")
+    print(" check   " + ", ".join(result.get("messages") or []))
+    print("\nTreat this file as sensitive: request payloads may contain bounded context and resume secrets.")
 
 
 def rotate_token(_: argparse.Namespace) -> None:
@@ -877,6 +930,19 @@ def main() -> None:
 
     p_doctor = sub.add_parser("doctor", help="validate local configuration")
     p_doctor.set_defaults(func=doctor)
+
+    p_db = sub.add_parser("db", help="check or back up the local SQLite state")
+    dbs = p_db.add_subparsers(dest="db_command")
+    p_db_check = dbs.add_parser("check", help="run SQLite integrity checks")
+    p_db_check.add_argument("path", nargs="?", help="database path; defaults to active human:// DB")
+    p_db_check.add_argument("--full", action="store_true", help="run PRAGMA integrity_check instead of quick_check")
+    p_db_check.add_argument("--json", action="store_true")
+    p_db_check.set_defaults(func=db_check)
+    p_db_backup = dbs.add_parser("backup", help="create a verified online-consistent SQLite backup")
+    p_db_backup.add_argument("path", nargs="?", help="destination .db path")
+    p_db_backup.add_argument("--force", action="store_true", help="replace an existing destination only after a verified temp backup succeeds")
+    p_db_backup.add_argument("--json", action="store_true")
+    p_db_backup.set_defaults(func=db_backup)
 
     p_token = sub.add_parser("token", help="manage the gateway token")
     ts = p_token.add_subparsers(dest="token_command")

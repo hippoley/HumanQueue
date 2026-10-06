@@ -29,6 +29,41 @@ The first `humanq onboard` creates:
 
 The dashboard is local by default at `http://127.0.0.1:7482`.
 
+## State integrity and backup
+
+Check the active SQLite state with SQLite's own integrity checker:
+
+```bash
+humanq db check
+humanq db check --full
+```
+
+Create an online-consistent snapshot while the Gateway is still running:
+
+```bash
+humanq db backup
+# or choose an explicit destination
+humanq db backup /secure/backups/human-queue.db
+```
+
+The backup path is fail-closed:
+
+```text
+active SQLite
+→ SQLite online backup API
+→ unique temporary database
+→ PRAGMA quick_check
+→ atomic publish to the destination
+```
+
+By default, an existing destination is not replaced. `--force` still builds and verifies a new temporary snapshot first, then atomically replaces the destination only after verification succeeds.
+
+The default backup directory is `~/.human-queue/backups/`. Treat backup files as sensitive: the database can contain bounded decision context, audit history and resume secrets.
+
+A database backup is **not a complete configuration backup**. It does not include `~/.human-queue/config.json`, the Gateway token, or third-party channel credentials. Back those up separately with strict permissions if you need full disaster recovery.
+
+There is intentionally no automatic `db restore` command yet. Restore can overwrite the active control-plane history, so offline validation, pre-restore snapshotting and rollback semantics need their own Reality Probe before that becomes a supported write operation.
+
 ## Docker
 
 From a checkout:

@@ -123,7 +123,14 @@ First-run state stays under:
 └── human-queue.db
 ```
 
-See [Self-hosting](docs/self-host.md) for Docker, remote/VPS deployment, gateway tokens, and private-network guidance.
+Check or snapshot local state without stopping the Gateway:
+
+```bash
+humanq db check
+humanq db backup
+```
+
+See [Self-hosting](docs/self-host.md) for backup boundaries, Docker, remote/VPS deployment, gateway tokens, and private-network guidance.
 
 </details>
 
