@@ -1,0 +1,27 @@
+name: restore windows reality probe
+
+on:
+  push:
+    branches:
+      - restore-windows-probe
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build and install current wheel
+        shell: pwsh
+        run: |
+          python -m pip wheel . --no-deps -w dist
+          python -m venv .probe-venv
+          $wheel = Get-ChildItem dist\human_queue-*.whl | Select-Object -First 1
+          .\.probe-venv\Scripts\python.exe -m pip install $wheel.FullName
+      - name: Run offline restore and rollback probe
+        shell: pwsh
+        run: |
+          & ".\.probe-venv\Scripts\python.exe" ".\scripts\sqlite_restore_probe_e2e.py"
