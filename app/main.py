@@ -23,6 +23,7 @@ from .models import (
     ImportEnvelope,
     MachineOutcomeRequest,
     ResolveRequest,
+    ResumeReconcileRequest,
 )
 from .protocol import uri_for_kind
 from .presence_registry import PresenceRegistry, PresenceUpdate
@@ -547,6 +548,40 @@ def get_request(rid: str):
         "human_uri": uri_for_kind(req.kind),
         "events": store.events(rid),
         "resume_outbox": store.resume_outbox(rid),
+    }
+
+
+@app.get("/v1/resume/uncertain")
+def uncertain_resumes(limit: int = 50):
+    return {
+        "items": store.list_resume_outbox(
+            status="uncertain",
+            limit=max(1, min(limit, 200)),
+        )
+    }
+
+
+@app.post("/v1/requests/{rid}/resume/reconcile")
+def reconcile_resume(rid: str, payload: ResumeReconcileRequest):
+    try:
+        row = store.reconcile_resume_outbox(
+            rid,
+            actor=payload.actor.strip(),
+            disposition=payload.disposition,
+            reason=payload.reason.strip(),
+        )
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    return {
+        "request_id": rid,
+        "disposition": payload.disposition,
+        "status": row["status"],
+        "attempts": int(row["attempts"]),
+        "actor": payload.actor.strip(),
+        "reason": payload.reason.strip(),
     }
 
 
