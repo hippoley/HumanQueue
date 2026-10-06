@@ -13,6 +13,7 @@ def main() -> None:
     manifest = json.loads(
         Path(os.environ["HUMAN_QUEUE_LEGACY_MANIFEST"]).read_text(encoding="utf-8")
     )
+    version = str(manifest["version"])
 
     store = Store(str(db))
 
@@ -96,7 +97,7 @@ def main() -> None:
     assert len([e for e in events if e["type"] == "resolved"]) == 1
     assert len([e for e in events if e["type"] == "vote"]) == 2
 
-    print("LEGACY_070_TO_CURRENT_UPGRADE_OK")
+    print(f"LEGACY_{version.replace('.', '_')}_TO_CURRENT_UPGRADE_OK")
     print("pending_resume_outbox=" + str(resume["status"]))
     print("quorum_provenance=" + json.dumps(provenance, sort_keys=True))
 
