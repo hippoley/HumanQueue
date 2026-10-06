@@ -7,7 +7,8 @@
 **Autonomous work can run anywhere. Human judgment still needs an address — and a return path.**
 
 [**See it live ↗**](https://hippoley.github.io/PAJ-Eval/human/) ·
-[**60-second proof ↓**](#try-it-in-60-seconds) ·
+[**Watch 60-second video ↗**](https://d2ol7oe51mr4n9.cloudfront.net/user_3IEUVmsuSEkofonJJYxA1Avgklm/470c0131-07fe-407a-8633-ffd05cdfbc86.mp4) ·
+[**Run it locally ↓**](#try-it-in-60-seconds) ·
 [**Why it exists ↓**](#why-this-exists-if-native-approval-already-works) ·
 [**Connect a runtime ↓**](#connect-a-real-runtime)
 
@@ -68,6 +69,22 @@ A human should be able to answer four questions without reconstructing a termina
 > **The screen is not the proof. The return path is.**
 
 [Open the live seeded demo ↗](https://hippoley.github.io/PAJ-Eval/human/)
+
+<br />
+
+---
+
+<br />
+
+## Devpost proof links
+
+| What reviewers need | Link |
+| --- | --- |
+| Public repository | [github.com/hippoley/HumanQueue](https://github.com/hippoley/HumanQueue) |
+| Interactive demo | [hippoley.github.io/PAJ-Eval/human/](https://hippoley.github.io/PAJ-Eval/human/) |
+| 60-second video proof | [MP4 demo recording](https://d2ol7oe51mr4n9.cloudfront.net/user_3IEUVmsuSEkofonJJYxA1Avgklm/470c0131-07fe-407a-8633-ffd05cdfbc86.mp4) |
+
+The video shows the actual product loop: a waiting machine boundary, a human decision, visible return-path proof, and the boundary-integrity view.
 
 <br />
 
