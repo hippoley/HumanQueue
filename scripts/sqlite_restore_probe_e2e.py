@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import os
 import shutil
-import sqlite3
 import tempfile
 import uuid
 from pathlib import Path
 
 from app.models import AttentionRequestCreate, RequestKind
-from app.sqlite_utils import backup_database, check_database
+from app.sqlite_utils import backup_database, check_database, connect as sqlite_connect
 from app.store import Store
 
 
@@ -126,7 +125,10 @@ def main() -> None:
         assert len(restored.events(resolved_a.id)) == events_a[resolved_a.id]
 
         # Structural references in the restored DB must remain internally closed.
-        with sqlite3.connect(active) as conn:
+        # sqlite3.Connection.__exit__ does not close the file handle. Use the
+        # project's ClosingConnection wrapper so Windows can atomically replace
+        # this DB again during the rollback phase.
+        with sqlite_connect(active, check_same_thread=False) as conn:
             dangling_events = conn.execute(
                 """
                 SELECT COUNT(*)
