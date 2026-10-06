@@ -1,7 +1,10 @@
 import asyncio
+import shutil
+import subprocess
 
 import httpx
 from pathlib import Path
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -133,6 +136,23 @@ def test_home_is_product_surface(tmp_path: Path):
     assert response.status_code == 200
     assert "YOU ARE BLOCKING" in response.text
     assert "human://" in response.text
+
+
+def test_product_surface_javascript_is_syntax_valid():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+
+    index = Path("app/web/index.html").read_text(encoding="utf-8")
+    script = index.split("<script>", 1)[1].split("</script>", 1)[0]
+    result = subprocess.run(
+        [node, "--check"],
+        input=script,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_gateway_token_protects_v1_routes(tmp_path: Path, monkeypatch):
