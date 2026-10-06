@@ -63,6 +63,16 @@ jobs:
           assert 'native_resume=simulated' in demo
           assert 'native_resume=true' not in demo
           assert demo.count('class="journeyStep"') == 4
+          app_ui = Path("app/web/index.html").read_text(encoding="utf-8")
+          for marker in (
+              "resume uncertain",
+              "operator action required",
+              "/v1/resume/uncertain?limit=50",
+              "/resume/reconcile",
+              "Confirmed executed · close",
+              "Confirmed not executed · resend",
+          ):
+              assert marker in app_ui, marker
           assert demo.count('class="viewIntro"') >= 5
           assert 'scroll-snap-type:x proximity' in demo
           assert '.stats{display:none}' in demo
