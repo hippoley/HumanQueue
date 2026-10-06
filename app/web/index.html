@@ -73,7 +73,7 @@ if(location.hash.startsWith("#token=")){
   history.replaceState(null,"",location.pathname+location.search);
 }
 
-let items=[], selected=null, connectorSessions=[], fleetSessions=[];
+let items=[], selected=null, connectorSessions=[], fleetSessions=[], uncertainResumes=[];
 const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const uriOf=k=>({approval:'human://approve',review:'human://review',input:'human://clarify',authenticate:'human://auth',choice:'human://choose',edit:'human://edit',claim:'human://claim'}[k]||'human://review');
 const fmtTime=s=>s>=60?`${Math.round(s/60)}m`:`${s}s`;
@@ -91,13 +91,13 @@ async function j(url,opts={}){
 
 async function load(){
   try{
-    const [q,m,b,f,sessions,fleet]=await Promise.all([j('/v1/queue?limit=100'),j('/v1/metrics'),j('/v1/batches'),j('/v1/delegation-frontier?min_samples=5&min_agreement=.9'),j('/v1/connectors/sessions?limit=50'),j('/v1/presence/sessions?limit=200')]);
+    const [q,m,b,f,sessions,fleet,uncertain]=await Promise.all([j('/v1/queue?limit=100'),j('/v1/metrics'),j('/v1/batches'),j('/v1/delegation-frontier?min_samples=5&min_agreement=.9'),j('/v1/connectors/sessions?limit=50'),j('/v1/presence/sessions?limit=200'),j('/v1/resume/uncertain?limit=50')]);
     items=q.items||[];
     if(!selected || !items.find(x=>x.id===selected.id)) selected=items[0]||null;
     $('#blocking').textContent=items.length;
     $('#queueCount').textContent=`${items.length} waiting`;
     const d=m.last_24h||{}; $('#avoided').textContent=d.interruptions_avoided||0; $('#humanTime').textContent=fmtTime(d.estimated_human_attention_seconds||0);
-    connectorSessions=sessions.sessions||[]; fleetSessions=fleet.sessions||[]; renderNow(); renderBatches(b.batches||[]); await renderPolicies(f.suggestions||[]); renderSessions(); renderFleet(); renderIntegrity(m.integrity_last_24h||{});
+    connectorSessions=sessions.sessions||[]; fleetSessions=fleet.sessions||[]; uncertainResumes=uncertain.items||[]; renderNow(); renderBatches(b.batches||[]); await renderPolicies(f.suggestions||[]); renderSessions(); renderFleet(); renderIntegrity(m.integrity_last_24h||{},uncertainResumes);
   }catch(e){$('#liveText').textContent='reconnecting…'}
 }
 function renderNow(){
@@ -159,21 +159,57 @@ function renderSessions(){
     <div class="actions"><button class="btn" onclick="openSession('${encodeURIComponent(s.provider)}','${encodeURIComponent(s.session_id)}')">Open context</button></div>
   </article>`).join('');
 }
-function renderIntegrity(m){
+function renderIntegrity(m,uncertain=[]){
   const cards=[
     ["channel delivered",m.channel_delivered||0,"human surface accepted the projection"],
     ["channel undeliverable",m.channel_undeliverable||0,"no reachable human surface"],
     ["resume confirmed",m.resume_confirmed||0,"target acknowledged the same request id"],
     ["resume unconfirmed",m.resume_delivered_unconfirmed||0,"transport accepted; semantic resume not proven"],
-    ["resume undeliverable",m.resume_undeliverable||0,"decision recorded but callback transport failed"],
+    ["resume uncertain",m.resume_delivery_uncertain||0,"delivery may have happened; automatic replay is disabled"],
+    ["resume failed",m.resume_undeliverable||0,"explicit callback failure; not an ambiguous ACK loss"],
     ["native wait",m.resume_not_applicable||0,"blocking connector returned through its native path"]
   ];
-  $('#integrityGrid').innerHTML=cards.map(([title,value,detail])=>`<article class="batch-card">
+  const summary=cards.map(([title,value,detail])=>`<article class="batch-card">
     <div class="eyebrow">last 24 hours</div>
     <div class="big">${value}</div>
     <h3>${esc(title)}</h3>
     <div class="small">${esc(detail)}</div>
   </article>`).join('');
+  const recovery=uncertain.length?`<article class="batch-card" style="grid-column:1/-1">
+    <div class="eyebrow">operator action required</div>
+    <h3>${uncertain.length} uncertain resume${uncertain.length===1?'':'s'}</h3>
+    <div class="small">Do not retry from guesswork. Check the receiver by canonical request ID, then record what actually happened.</div>
+  </article>`+uncertain.map(r=>`<article class="batch-card">
+    <div class="eyebrow">uncertain · attempt ${esc(r.attempts)}</div>
+    <h3>${esc(r.title||r.request_id)}</h3>
+    <div class="small">${esc(r.source)} / ${esc(r.source_ref)}</div>
+    <div class="codehint">${esc(r.request_id)}\n${esc(r.last_error||'delivery acknowledgement missing')}</div>
+    <div class="fields">
+      <label>Operator<input id="resume-actor-${esc(r.request_id)}" placeholder="operator:alice" /></label>
+      <label>Evidence / reason<input id="resume-reason-${esc(r.request_id)}" placeholder="What did the receiver audit prove?" /></label>
+    </div>
+    <div class="actions">
+      <button class="btn safe" onclick="reconcileResume('${esc(r.request_id)}','executed')">Confirmed executed · close</button>
+      <button class="btn danger" onclick="reconcileResume('${esc(r.request_id)}','not_executed')">Confirmed not executed · resend</button>
+    </div>
+  </article>`).join(''):`<article class="batch-card" style="grid-column:1/-1"><div class="eyebrow">operator recovery</div><h3>No uncertain resumes</h3><div class="small">No ambiguous webhook delivery currently requires manual reconciliation.</div></article>`;
+  $('#integrityGrid').innerHTML=summary+recovery;
+}
+async function reconcileResume(id,disposition){
+  const actor=$('#resume-actor-'+CSS.escape(id))?.value.trim()||'';
+  const reason=$('#resume-reason-'+CSS.escape(id))?.value.trim()||'';
+  if(!actor||!reason){
+    alert('Operator and evidence/reason are required before reconciliation.');
+    return;
+  }
+  const verb=disposition==='executed'?'close this resume without sending again':'authorize one new send because the receiver was verified not to have executed';
+  if(!confirm(`Confirm: ${verb}?\n\nRequest: ${id}\nActor: ${actor}\nReason: ${reason}`)) return;
+  await j(`/v1/requests/${id}/resume/reconcile`,{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({actor,disposition,reason})
+  });
+  await load();
 }
 
 function renderFleet(){
