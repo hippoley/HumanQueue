@@ -834,6 +834,50 @@ class Store:
             return dict(current)
 
 
+    def list_resume_outbox(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        with self._conn() as c:
+            params: list[Any] = []
+            where = ""
+            if status is not None:
+                where = "WHERE status=?"
+                params.append(status)
+            params.append(limit)
+            rows = c.execute(
+                f"""
+                SELECT ro.*, r.source, r.source_ref, r.payload, r.resolution
+                FROM resume_outbox ro
+                JOIN requests r ON r.id=ro.request_id
+                {where}
+                ORDER BY ro.updated_at DESC
+                LIMIT ?
+                """,
+                tuple(params),
+            ).fetchall()
+
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            payload = json.loads(row["payload"])
+            items.append({
+                "request_id": row["request_id"],
+                "status": row["status"],
+                "attempts": int(row["attempts"]),
+                "last_error": row["last_error"],
+                "result": json.loads(row["result"]) if row["result"] else None,
+                "updated_at": row["updated_at"],
+                "source": row["source"],
+                "source_ref": row["source_ref"],
+                "title": payload.get("title"),
+                "resume_url": (payload.get("resume") or {}).get("url"),
+                "resolution": json.loads(row["resolution"]) if row["resolution"] else None,
+            })
+        return items
+
+
     def resume_outbox(self, rid: str) -> dict[str, Any] | None:
         with self._conn() as c:
             row = c.execute(
