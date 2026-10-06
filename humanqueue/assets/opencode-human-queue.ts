@@ -1,5 +1,3 @@
-import { Plugin } from "@opencode/plugin"
-
 const gatewayURL = () => (process.env.HUMAN_QUEUE_URL || "http://127.0.0.1:7482").replace(/\/$/, "")
 
 async function gatewayToken(): Promise<string> {
@@ -33,6 +31,12 @@ function textOf(value: unknown): string {
   }
 }
 
+function patternsOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String)
+  if (value === undefined || value === null || value === "") return []
+  return [String(value)]
+}
+
 async function recordSession(input: {
   event_name: string
   session_id: string
@@ -41,6 +45,7 @@ async function recordSession(input: {
   action?: string
   resources?: readonly string[]
   message_id?: string
+  tool_response?: unknown
 }) {
   try {
     await hq("/v1/connectors/events", {
@@ -55,7 +60,8 @@ async function recordSession(input: {
         tool_name: input.action || null,
         tool_use_id: input.message_id || null,
         tool_input: input.resources ? { resources: input.resources } : null,
-        metadata: { runtime: "opencode-v2-plugin" },
+        tool_response: input.tool_response ?? null,
+        metadata: { runtime: "opencode-plugin-current" },
       }),
     })
   } catch {
@@ -77,96 +83,119 @@ async function waitForDecision(requestID: string) {
   }
 }
 
-export default Plugin.define({
-  id: "human-queue",
+// Current OpenCode local-plugin API: export one or more async plugin functions.
+// OpenCode loads each function export and expects it to return a Hooks object.
+export const HumanQueuePlugin = async ({ directory }: { directory: string }) => ({
+  "chat.message": async (input: any, output: any) => {
+    await recordSession({
+      event_name: "UserPromptSubmit",
+      session_id: String(input.sessionID || ""),
+      user: textOf(output?.parts || output?.message || ""),
+      message_id: input.messageID ? String(input.messageID) : undefined,
+    })
+  },
 
-  async setup(ctx) {
-    await ctx.session.hook("prompt", async (event) => {
-      await recordSession({
-        event_name: "UserPromptSubmit",
-        session_id: event.sessionID,
-        user: event.prompt.text,
-        message_id: event.messageID,
-      })
+  "permission.ask": async (input: any, output: { status: "ask" | "deny" | "allow" }) => {
+    // Preserve upstream policy. Only intercept decisions OpenCode itself left at "ask".
+    if (output.status !== "ask") return
+
+    const resources = patternsOf(input.pattern)
+    const permissionID = String(input.id || input.callID || "permission")
+    const messageID = String(input.messageID || "message")
+    const callID = input.callID ? String(input.callID) : permissionID
+    const permissionType = String(input.type || "permission")
+    const sessionID = String(input.sessionID || "")
+
+    await recordSession({
+      event_name: "PermissionRequest",
+      session_id: sessionID,
+      action: permissionType,
+      resources,
+      message_id: callID,
     })
 
-    await ctx.permission.hook("evaluate", async (event) => {
-      // Explicit deny never reaches this hook. Preserve configured auto-allows;
-      // route only decisions that OpenCode would otherwise ask a person.
-      if (event.effect !== "ask") return
+    const ref = [sessionID, permissionType, messageID, callID].join(":")
 
-      let context: unknown[] = []
-      try {
-        context = Array.from(await ctx.session.context({ sessionID: event.sessionID })).slice(-6)
-      } catch {
-        context = []
-      }
-
-      await recordSession({
-        event_name: "PermissionRequest",
-        session_id: event.sessionID,
-        action: event.action,
-        resources: event.resources,
-        message_id: event.source?.id,
-      })
-
-      const ref = [
-        event.sessionID,
-        event.action,
-        event.source?.messageID || "message",
-        event.source?.id || "permission",
-      ].join(":")
-
-      try {
-        const response = await hq("/v1/human", {
-          method: "POST",
-          body: JSON.stringify({
-            uri: "human://approve",
-            source: "opencode",
-            ref,
-            title: "Allow OpenCode " + event.action + "?",
-            summary: event.resources.length
-              ? "OpenCode is waiting on: " + event.resources.map(String).join(", ").slice(0, 900)
-              : "OpenCode is waiting for a permission decision.",
-            why_now: "OpenCode evaluated this action as ask and cannot continue without a human decision.",
-            risk: 0.8,
-            unblock: 0.95,
-            seconds: 8,
-            downstream: 1,
-            idempotency_key: "opencode:" + ref,
-            context: {
-              native_handle: {
-                provider: "opencode",
-                session_id: event.sessionID,
-                turn_id: event.source?.messageID || null,
-                tool_use_id: event.source?.id || null,
-                resume_kind: "opencode_permission_hook",
-              },
-              permission: {
-                action: event.action,
-                resources: event.resources,
-                agent: event.agent,
-              },
-              recent_context: context.map(textOf),
+    try {
+      const response = await hq("/v1/human", {
+        method: "POST",
+        body: JSON.stringify({
+          uri: "human://approve",
+          source: "opencode",
+          ref,
+          title: String(input.title || ("Allow OpenCode " + permissionType + "?")),
+          summary: resources.length
+            ? "OpenCode is waiting on: " + resources.join(", ").slice(0, 900)
+            : "OpenCode is waiting for a permission decision.",
+          why_now: "OpenCode evaluated this action as ask and cannot continue without a human decision.",
+          risk: 0.8,
+          unblock: 0.95,
+          seconds: 8,
+          downstream: 1,
+          idempotency_key: "opencode:" + ref,
+          context: {
+            native_handle: {
+              provider: "opencode",
+              session_id: sessionID,
+              turn_id: messageID,
+              tool_use_id: callID,
+              resume_kind: "opencode_permission_hook",
             },
-          }),
-        })
-        if (!response.ok) return
-        const created = await response.json()
-        const decision = await waitForDecision(created.request.id)
-        const action = String(decision.action || "").toLowerCase()
+            permission: {
+              id: permissionID,
+              type: permissionType,
+              pattern: input.pattern ?? null,
+              title: input.title ?? null,
+              metadata: input.metadata ?? null,
+            },
+            runtime: {
+              plugin_api: "permission.ask",
+              directory,
+            },
+          },
+        }),
+      })
+      if (!response.ok) return
+      const created = await response.json()
+      const decision = await waitForDecision(created.request.id)
+      const action = String(decision.action || "").toLowerCase()
 
-        if (["approve", "allow", "accept", "continue"].includes(action)) {
-          event.effect = "allow"
-          event.message = "Approved in human://"
-        } else if (["reject", "deny", "decline", "cancel"].includes(action)) {
-          event.effect = "deny"
-          event.message = String(decision.comment || "Denied in human://")
-        }
-      } catch {
-        // Preserve OpenCode's original "ask" effect, which falls back to the
-        // native client permission prompt. Never fail open.
+      if (["approve", "allow", "accept", "continue"].includes(action)) {
+        output.status = "allow"
+      } else if (["reject", "deny", "decline", "cancel"].includes(action)) {
+        output.status = "deny"
       }
+    } catch {
+      // Keep OpenCode's original ask state so the native prompt remains authoritative.
+    }
+  },
+
+  "tool.execute.after": async (input: any, output: any) => {
+    await recordSession({
+      event_name: "PostToolUse",
+      session_id: String(input.sessionID || ""),
+      action: String(input.tool || ""),
+      resources: [textOf(input.args || {})],
+      message_id: input.callID ? String(input.callID) : undefined,
+      tool_response: {
+        title: output?.title ?? null,
+        output: textOf(output?.output ?? ""),
+        metadata: output?.metadata ?? null,
+      },
     })
+  },
+
+  event: async ({ event }: any) => {
+    const properties = event?.properties || {}
+    const sessionID = properties.sessionID || properties.info?.id || properties.id
+    if (!sessionID) return
+
+    if (event.type === "session.created") {
+      await recordSession({ event_name: "SessionStart", session_id: String(sessionID) })
+    } else if (event.type === "session.idle") {
+      await recordSession({ event_name: "Stop", session_id: String(sessionID) })
+    } else if (event.type === "session.deleted") {
+      await recordSession({ event_name: "SessionEnd", session_id: String(sessionID) })
+    }
   },
 })
