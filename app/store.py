@@ -844,7 +844,7 @@ class Store:
             params: list[Any] = []
             where = ""
             if status is not None:
-                where = "WHERE status=?"
+                where = "WHERE ro.status=?"
                 params.append(status)
             params.append(limit)
             rows = c.execute(
