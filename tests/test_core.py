@@ -2647,3 +2647,32 @@ def test_gateway_resume_reconcile_rejects_non_uncertain_request(tmp_path: Path):
     )
     assert response.status_code == 409
     assert main.store.resume_outbox(item.id)["status"] == "pending"
+
+
+def test_resume_outbox_listing_without_status_filter_survives_joined_status_columns(tmp_path: Path):
+    from app.models import ResumeTarget
+
+    store = Store(str(tmp_path / "resume-list-all.db"))
+    item = store.create(
+        req(
+            source="resume-list",
+            source_ref="all-1",
+            title="List joined outbox",
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            ),
+        )
+    )
+    _, finalized = store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+
+    rows = store.list_resume_outbox(limit=20)
+    assert len(rows) == 1
+    assert rows[0]["request_id"] == item.id
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["source"] == "resume-list"
