@@ -908,3 +908,24 @@ def test_codex_trust_refuses_stale_python_runtime(monkeypatch):
 
     with pytest.raises(RuntimeError, match="different Python runtime"):
         codex_module.trust_codex_hook()
+
+
+def test_opencode_asset_tracks_current_upstream_plugin_contract():
+    from humanqueue.connectors.opencode import _asset_path
+
+    content = _asset_path().read_text(encoding="utf-8")
+
+    # Current OpenCode server-plugin API: exported async plugin function
+    # returning Hooks, with permission.ask receiving input + mutable status.
+    assert 'export const HumanQueuePlugin = async' in content
+    assert '"permission.ask": async' in content
+    assert 'output.status !== "ask"' in content
+    assert 'output.status = "allow"' in content
+    assert 'output.status = "deny"' in content
+    assert '"tool.execute.after": async' in content
+
+    # These belonged to the pre-current API and must not silently reappear.
+    assert "Plugin.define" not in content
+    assert "ctx.session.hook" not in content
+    assert "ctx.permission.hook" not in content
+    assert "event.effect" not in content
