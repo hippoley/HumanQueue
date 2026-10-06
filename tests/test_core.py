@@ -2554,3 +2554,96 @@ def test_resume_reconciliation_refuses_non_uncertain_rows(tmp_path: Path):
             disposition="executed",
             reason="should not be accepted",
         )
+
+
+def test_gateway_lists_and_reconciles_uncertain_resumes(tmp_path: Path):
+    from app import main
+    from app.models import ResumeTarget
+
+    main.store = Store(str(tmp_path / "api-resume-reconcile.db"))
+    item = main.store.create(
+        req(
+            source="api-reconcile",
+            source_ref="run-1",
+            title="Recover ambiguous callback",
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            ),
+        )
+    )
+    _, finalized = main.store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+    assert main.store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=0,
+    ) == [item.id]
+    assert main.store.claim_resume_outbox(
+        request_id=item.id,
+        limit=1,
+        lease_seconds=30,
+    ) == []
+    assert main.store.resume_outbox(item.id)["status"] == "uncertain"
+
+    client = TestClient(main.app)
+    listing = client.get("/v1/resume/uncertain?limit=20")
+    assert listing.status_code == 200
+    rows = listing.json()["items"]
+    assert len(rows) == 1
+    assert rows[0]["request_id"] == item.id
+    assert rows[0]["source"] == "api-reconcile"
+    assert rows[0]["title"] == "Recover ambiguous callback"
+    assert rows[0]["status"] == "uncertain"
+
+    reconciled = client.post(
+        f"/v1/requests/{item.id}/resume/reconcile",
+        json={
+            "actor": "operator:ui",
+            "disposition": "executed",
+            "reason": "receiver ledger confirms execution",
+        },
+    )
+    assert reconciled.status_code == 200
+    body = reconciled.json()
+    assert body["status"] == "done"
+    assert body["disposition"] == "executed"
+
+    assert client.get("/v1/resume/uncertain").json()["items"] == []
+
+
+def test_gateway_resume_reconcile_rejects_non_uncertain_request(tmp_path: Path):
+    from app import main
+    from app.models import ResumeTarget
+
+    main.store = Store(str(tmp_path / "api-resume-reconcile-guard.db"))
+    item = main.store.create(
+        req(
+            resume=ResumeTarget(
+                mode="webhook",
+                url="https://example.invalid/resume",
+            )
+        )
+    )
+    _, finalized = main.store.resolve(
+        item.id,
+        "alice",
+        {"action": "approve", "values": {}},
+    )
+    assert finalized is True
+    assert main.store.resume_outbox(item.id)["status"] == "pending"
+
+    response = TestClient(main.app).post(
+        f"/v1/requests/{item.id}/resume/reconcile",
+        json={
+            "actor": "operator:ui",
+            "disposition": "executed",
+            "reason": "invalid early reconciliation",
+        },
+    )
+    assert response.status_code == 409
+    assert main.store.resume_outbox(item.id)["status"] == "pending"
