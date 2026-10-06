@@ -65,7 +65,7 @@ button,input{font:inherit}.app{max-width:1440px;margin:0 auto;padding:22px 26px 
   <div class="footer"><span>Every repeated human interruption is a candidate for a better policy.</span><span class="kbd">human://approve · review · clarify · auth · choose · edit · claim</span></div>
 </div>
 <script>
-const $=s=>document.querySelector(s), $=s=>[...document.querySelectorAll(s)];
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 let gatewayToken=sessionStorage.getItem("humanq-token")||"";
 if(location.hash.startsWith("#token=")){
   gatewayToken=decodeURIComponent(location.hash.slice(7));
