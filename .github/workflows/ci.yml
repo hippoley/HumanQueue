@@ -429,9 +429,21 @@ jobs:
 
   legacy-db-upgrade:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-    name: legacy 0.7.0 database → current
+    name: legacy ${{ matrix.version }} database → current
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: "0.4.0"
+            sha: "77075a5bb5c40534fe73f2ee10a56f0b25817bb3"
+          - version: "0.5.0"
+            sha: "1b75dada32f885c48225c03187dad4f7c8406e31"
+          - version: "0.6.0"
+            sha: "ff00779314475e6c0c979e21f195f059616b43fd"
+          - version: "0.7.0"
+            sha: "9472419c8de5fca9a8015ba9eb40f427dae19ea5"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -439,27 +451,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Seed state with the real 0.7.0 package, then open it with current main
+      - name: Seed state with real ${{ matrix.version }}, then open it with current main
+        env:
+          LEGACY_VERSION: ${{ matrix.version }}
+          LEGACY_SHA: ${{ matrix.sha }}
         run: |
           set -euo pipefail
 
-          OLD_SHA=9472419c8de5fca9a8015ba9eb40f427dae19ea5
-          OLD_TREE="$RUNNER_TEMP/humanq-0.7.0"
-          OLD_VENV="$RUNNER_TEMP/humanq-0.7.0-venv"
+          OLD_TREE="$RUNNER_TEMP/humanq-$LEGACY_VERSION"
+          OLD_VENV="$RUNNER_TEMP/humanq-$LEGACY_VERSION-venv"
           NEW_VENV="$RUNNER_TEMP/humanq-current-venv"
-          export HUMAN_QUEUE_LEGACY_DB="$RUNNER_TEMP/humanq-upgrade/state.db"
-          export HUMAN_QUEUE_LEGACY_MANIFEST="$RUNNER_TEMP/humanq-upgrade/manifest.json"
+          export HUMAN_QUEUE_LEGACY_VERSION="$LEGACY_VERSION"
+          export HUMAN_QUEUE_LEGACY_DB="$RUNNER_TEMP/humanq-upgrade-$LEGACY_VERSION/state.db"
+          export HUMAN_QUEUE_LEGACY_MANIFEST="$RUNNER_TEMP/humanq-upgrade-$LEGACY_VERSION/manifest.json"
 
           mkdir -p "$(dirname "$HUMAN_QUEUE_LEGACY_DB")"
 
-          git worktree add "$OLD_TREE" "$OLD_SHA"
+          git worktree add "$OLD_TREE" "$LEGACY_SHA"
 
           python -m venv "$OLD_VENV"
           "$OLD_VENV/bin/python" -m pip install --upgrade pip
           "$OLD_VENV/bin/python" -m pip install "$OLD_TREE"
 
           cd "$RUNNER_TEMP"
-          "$OLD_VENV/bin/python" "$GITHUB_WORKSPACE/scripts/legacy_upgrade_seed_070.py"
+          "$OLD_VENV/bin/python" "$GITHUB_WORKSPACE/scripts/legacy_upgrade_seed.py"
 
           python -m venv "$NEW_VENV"
           "$NEW_VENV/bin/python" -m pip install --upgrade pip
