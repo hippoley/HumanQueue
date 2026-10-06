@@ -2241,3 +2241,77 @@ def test_quorum_canonical_provenance_is_terminal_finalizer(tmp_path: Path):
     assert [row["actor"] for row in rows] == ["alice", "bob"]
     assert json.loads(rows[0]["resolution"])["provenance"]["actor"] == "alice"
     assert json.loads(rows[1]["resolution"])["provenance"]["actor"] == "bob"
+
+
+def test_doctor_fails_closed_on_corrupt_existing_database(tmp_path: Path, monkeypatch, capsys):
+    import argparse
+    import pytest
+    import humanqueue.cli as cli_module
+
+    broken = tmp_path / "human-queue.db"
+    broken.write_bytes(b"not a sqlite database")
+    monkeypatch.setattr(
+        cli_module,
+        "load_config",
+        lambda: {
+            "db": str(broken),
+            "token": "hq_test",
+            "host": "127.0.0.1",
+            "port": 7482,
+        },
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli_module.doctor(argparse.Namespace())
+
+    assert exc.value.code == 1
+    output = capsys.readouterr().out
+    assert "database integrity check failed" in output
+    assert "humanq db check --full" in output
+    assert "human:// doctor: OK" not in output
+
+
+def test_doctor_accepts_existing_healthy_database(tmp_path: Path, monkeypatch, capsys):
+    import argparse
+    import humanqueue.cli as cli_module
+
+    db = tmp_path / "human-queue.db"
+    Store(str(db)).create(req(source_ref="doctor-db-health"))
+    monkeypatch.setattr(
+        cli_module,
+        "load_config",
+        lambda: {
+            "db": str(db),
+            "token": "hq_test",
+            "host": "127.0.0.1",
+            "port": 7482,
+        },
+    )
+
+    cli_module.doctor(argparse.Namespace())
+
+    output = capsys.readouterr().out
+    assert "human:// doctor: OK" in output
+    assert "database integrity check failed" not in output
+
+
+def test_doctor_does_not_require_database_before_first_gateway_start(tmp_path: Path, monkeypatch, capsys):
+    import argparse
+    import humanqueue.cli as cli_module
+
+    db = tmp_path / "not-created-yet.db"
+    monkeypatch.setattr(
+        cli_module,
+        "load_config",
+        lambda: {
+            "db": str(db),
+            "token": "hq_test",
+            "host": "127.0.0.1",
+            "port": 7482,
+        },
+    )
+
+    cli_module.doctor(argparse.Namespace())
+
+    assert not db.exists()
+    assert "human:// doctor: OK" in capsys.readouterr().out
