@@ -2188,6 +2188,8 @@ def test_abandoned_resume_attempt_becomes_uncertain_and_is_not_replayed(tmp_path
 
 
 def test_quorum_canonical_provenance_is_terminal_finalizer(tmp_path: Path):
+    import json
+
     store = Store(str(tmp_path / "quorum-finalizer-provenance.db"))
     item = store.create(
         req(
