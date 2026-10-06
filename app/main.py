@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
@@ -217,6 +218,8 @@ async def _resume_outbox_loop() -> None:
 
 @app.on_event("startup")
 async def _start_outbox_workers():
+    if os.environ.get("HUMAN_QUEUE_DISABLE_BACKGROUND_WORKERS") == "1":
+        return
     global _outbox_task, _resume_outbox_task
     if _outbox_task is None or _outbox_task.done():
         _outbox_task = asyncio.create_task(_channel_outbox_loop())
