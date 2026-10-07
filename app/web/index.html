@@ -116,7 +116,7 @@ body{background:var(--bg);font-family:Inter,"Helvetica Neue",Arial,sans-serif;fo
 .proofRibbon span{color:#cbd2c5;font-size:9px;letter-spacing:.10em}.proofRibbon span:last-child{color:var(--acid)}
 .proofRibbon i{width:42px;background:linear-gradient(90deg,var(--acid),#535b50)}
 .journey{display:none}
-.stats{position:relative;align-content:stretch;gap:0;padding:30px 0 0 30px;border-left:1px solid #30352e}
+.stats{position:relative;grid-template-columns:1fr;align-content:stretch;gap:0;padding:30px 0 0 30px;border-left:1px solid #30352e}
 .stats::before{content:"LIVE SYSTEM / LAST 24H";position:absolute;top:0;left:30px;color:#778073;font:700 9px/1 ui-monospace,monospace;letter-spacing:.13em}
 .stat,.stat.light{min-height:132px;padding:18px 0;border:0;border-bottom:1px solid #30352e;border-radius:0;background:transparent;color:#f6f8f1;box-shadow:none}
 .stat:last-child{border-bottom:0}.stat::after{display:none}.stat .k{color:#879181;opacity:1}.stat .v{color:var(--acid);font-size:52px;line-height:1;font-weight:720;letter-spacing:-.04em}.stat .s{max-width:260px;color:#aeb6a9;opacity:1}
@@ -128,7 +128,7 @@ body{background:var(--bg);font-family:Inter,"Helvetica Neue",Arial,sans-serif;fo
 .uri{border-radius:4px;background:#edf2e8;color:var(--ink)}.why{border-radius:6px;border-color:#d4dbce;background:#f0f4ec}
 .btn{border-radius:6px}.btn.safe{background:var(--ink);box-shadow:none}.btn.safe:hover{background:var(--acid);color:var(--ink)}
 .next-card{background:#f8faf5}.next-card.active{background:#fff;box-shadow:inset 4px 0 0 var(--acid)}
-.proof{background:var(--ink);color:#f6f8f1;border-radius:8px}.proof .node.hot{background:var(--acid);color:var(--ink)}
+.proof{border-color:#30352e;background:var(--ink);color:#f6f8f1;border-radius:8px}.proof strong,.proof code{color:inherit}
 @keyframes heroEnter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes signalPulse{0%,55%{box-shadow:0 0 0 5px rgba(217,255,87,.10)}80%{box-shadow:0 0 0 11px rgba(217,255,87,0)}100%{box-shadow:0 0 0 5px rgba(217,255,87,.10)}}
 @media(prefers-reduced-motion:reduce){.hero h1,.proofRibbon,.dot{animation:none}}
 @media(max-width:900px){.hero{grid-template-columns:1fr;gap:28px}.stats{grid-template-columns:1fr 1fr;padding:28px 0 0;border-left:0;border-top:1px solid #30352e}.stats::before{top:10px;left:0}.stat{min-height:108px;padding:20px 20px 0 0;border-bottom:0}.stat+.stat{padding-left:22px;border-left:1px solid #30352e}.hero h1{font-size:64px}}
