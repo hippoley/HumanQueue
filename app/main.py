@@ -51,6 +51,28 @@ _outbox_task: asyncio.Task | None = None
 _resume_outbox_task: asyncio.Task | None = None
 
 
+class GatewayAuthMiddleware:
+    def __init__(self, inner_app):
+        self.inner_app = inner_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").startswith("/v1/"):
+            try:
+                require_gateway_token(Request(scope, receive))
+            except HTTPException as exc:
+                response = JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
+                    headers=exc.headers or {},
+                )
+                await response(scope, receive, send)
+                return
+        await self.inner_app(scope, receive, send)
+
+
+app.add_middleware(GatewayAuthMiddleware)
+
+
 async def _process_channel_outbox_request(rid: str) -> bool:
     item = store.get(rid)
     if item is None:
@@ -164,16 +186,9 @@ async def _process_resume_outbox_request(rid: str) -> dict:
             result=result,
             event_type="resume_delivered_unconfirmed",
         )
-    elif reason == "resume_transport_error":
-        # A timeout/reset after sending is ambiguous: the receiver may already
-        # have executed the side effect and only the acknowledgement was lost.
-        # Never label this as a safe failure or replay it automatically.
-        store.mark_resume_outbox_uncertain(
-            rid,
-            result=result,
-            reason="resume transport failed after delivery became unknowable",
-        )
     else:
+        # A failed or acknowledgement-lost attempt is intentionally not retried.
+        # The receiver may already have executed the side effect.
         store.fail_resume_outbox(
             rid,
             result=result,
@@ -241,20 +256,6 @@ async def _stop_outbox_workers():
                 pass
     _outbox_task = None
     _resume_outbox_task = None
-
-
-@app.middleware("http")
-async def gateway_auth(request: Request, call_next):
-    if request.url.path.startswith("/v1/"):
-        try:
-            require_gateway_token(request)
-        except HTTPException as exc:
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={"detail": exc.detail},
-                headers=exc.headers or {},
-            )
-    return await call_next(request)
 
 
 @app.get("/")
