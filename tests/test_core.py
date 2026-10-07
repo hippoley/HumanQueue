@@ -130,7 +130,7 @@ def test_demo_seed_creates_cross_platform_queue_and_batches(tmp_path: Path):
 
 def test_home_is_product_surface(tmp_path: Path):
     index = Path("app/web/index.html").read_text(encoding="utf-8")
-    assert "MACHINES NEED YOU" in index
+    assert "machines need you" in index
     assert "human://" in index
 
 
