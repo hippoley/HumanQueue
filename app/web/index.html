@@ -31,6 +31,23 @@ body{font-size:15px}.app{max-width:1460px;padding:0 34px 44px}.topbar{min-height
 .next-card{padding:16px 17px 16px 20px}.next-card:hover,.next-card.active{background:#f0f3e8}.next-card.active{box-shadow:inset 2px 0 0 var(--signal)}.next-uri,.next-score{font-size:10px}.next-card h3{font-size:15px;line-height:1.28;margin:7px 0 5px}.meta{font-size:11px}.batch-grid,.policy-grid{padding-top:24px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}.batch-card,.policy-card{border-radius:8px;padding:22px}.batch-card h3,.policy-card h3{font-size:20px}.big{font-size:42px}.proof{margin:0 0 22px;padding:12px 14px;border-radius:6px;background:#edf6ef}.codehint{margin-top:24px;border:1px solid var(--line);border-radius:6px;padding:13px 15px;background:#f2f4ed;color:#53574d;font-size:11px}.footer{padding-top:32px}
 @media(max-width:900px){.app{padding:0 22px 42px}.hero{grid-template-columns:1fr;gap:26px}.hero h1{font-size:58px}.grid{grid-template-columns:1fr}.panel{border-radius:8px}}
 @media(max-width:640px){.app{padding:0 14px 32px;overflow-x:hidden}.topbar{min-height:58px}.live{display:none}.hero{padding:28px 0 24px}.hero>div{min-width:0}.hero h1{max-width:100%;font-size:42px;overflow-wrap:anywhere}.hero-copy{font-size:15px}.journey{display:flex;width:100%;max-width:100%;overflow-x:auto}.journey-step{flex:0 0 145px}.stats{display:none}.nav{width:100%;min-height:52px;gap:18px}.tab{padding:18px 0 15px;font-size:12px}.grid{padding-top:16px}.focus-body{padding:23px 20px}.focus h2{font-size:31px}}
+
+/* Aesthetic pass shared with the public demo. */
+:root{--bg:#f6f8f1;--ink:#11130f;--muted:#687064;--line:#dfe5d8;--card:#fffefa;--acid:#d9ff57;--signal:#11130f;--soft:#eef2e9;--deep:#151811}
+body{background:linear-gradient(180deg,#fafbf6 0,#f3f6ee 56%,#eef2e9 100%);color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}.app{max-width:1420px}
+.topbar{min-height:76px}.brand span{border-radius:8px;box-shadow:0 8px 22px rgba(17,19,15,.10)}
+.live,.panel-hd .label,.eyebrow,.source,.next-uri,.next-score,.rank{letter-spacing:.08em}.eyebrow,.uri,.next-uri{color:var(--ink)}
+.hero{align-items:center;padding:36px 0 34px}.hero h1{font-size:clamp(48px,5vw,72px);font-weight:760;line-height:1.02;max-width:980px}.hero h1 b{font-variant-numeric:tabular-nums}.hero-copy{font-size:17px;color:var(--muted)}
+.journey{border-top-color:#cfd8c7}.journey-step:not(:last-child)::after{background:#bcc8b3}.journey-step strong{font-size:14px}.journey-step small{color:var(--muted)}
+.stat{border:1px solid rgba(17,19,15,.10);box-shadow:0 14px 34px rgba(17,19,15,.06)}.stat.light{background:linear-gradient(135deg,#e5ff75,#d8ff52)}
+.nav{background:rgba(246,248,241,.88);min-height:64px}.tab{font-weight:620}.tab.active::after{height:3px;border-radius:99px;background:var(--acid);box-shadow:0 0 0 1px rgba(17,19,15,.72)}
+.panel,.batch-card,.policy-card{background:rgba(255,254,250,.92);border-color:rgba(17,19,15,.11);box-shadow:0 18px 48px rgba(17,19,15,.07)}
+.focus{border-top:1px solid rgba(17,19,15,.88)}.panel-hd{background:rgba(251,252,247,.72)}.rank{background:#eef3e6}
+.focus h2{font-weight:720}.summary{color:var(--muted)}.why{border-color:#d8dfd0}
+.btn{border-radius:8px}.btn.safe{background:var(--ink);color:white}.btn:hover{box-shadow:0 10px 24px rgba(17,19,15,.12)}
+.next-card.active{background:#f2f6ea;box-shadow:inset 3px 0 0 var(--acid)}.next-card:hover{background:#f7f9f2}
+.codehint{background:#f6f8f2;color:#4d554a;border-color:#dce4d4}.proof{background:#f2f6ea;border-color:#cfd8c7;color:var(--ink)}
+@media(max-width:640px){.topbar{min-height:62px}.hero h1{font-size:40px;line-height:1.05}.hero-copy{font-size:16px}}
 </style>
 </head>
 <body>
@@ -40,7 +57,7 @@ body{font-size:15px}.app{max-width:1460px;padding:0 34px 44px}.topbar{min-height
   <section class="hero">
     <div>
       <div class="eyebrow">machine → human → machine</div>
-      <h1><b id="blocking">0</b> MACHINES NEED YOU.</h1>
+      <h1><b id="blocking">0</b> machines need you.</h1>
       <div class="hero-copy"><strong>The approval is not the hard part. Getting the answer back to the exact paused agent is.</strong> human:// keeps the request, decision surface and resume identity tied together so a machine can continue from the boundary that actually stopped it.</div>
       <div class="journey" aria-label="Decision flow">
         <div class="journey-step"><span>01</span><strong>Choose</strong><small>Open the highest-value boundary.</small></div>
