@@ -315,6 +315,32 @@ body{background:var(--bg);font-family:Inter,"Helvetica Neue",Arial,sans-serif;fo
 @keyframes focusEnter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 @media(max-width:1000px){.hero h1{font-size:60px}.grid{grid-template-columns:1fr}.stats{padding-top:28px}.stat{min-height:96px}}
 @media(max-width:640px){.hero{padding-top:26px;padding-bottom:28px}.hero h1{font-size:46px}.stats{display:none}.body{padding:23px 18px 25px}.focus h2{font-size:34px}.actions .btn{flex:1;justify-content:center}.contextDrawer{margin-top:14px}}
+
+/* Institutional product pass: durable infrastructure, not hackathon theatre. */
+:root{--bg:#f1f4ed;--ink:#142119;--muted:#687169;--line:#d5dcd3;--card:#fbfcf8;--acid:#c9f35e;--deep:#102018;--soft:#e9eee6}
+html,body{background:var(--bg);color:var(--ink)}
+.top{min-height:68px;border-bottom:1px solid var(--line);background:#f9faf6;color:var(--ink)}
+.brand span{color:var(--ink)}.brand::after{content:"";display:inline-block;width:8px;height:8px;margin-left:10px;border-radius:50%;background:var(--acid);vertical-align:middle}
+.live{color:#6d776e}.dot{background:#79a51d;box-shadow:none;animation:none}
+.top .ghost{border-color:transparent;color:#536057;background:transparent}.top .ghost:hover{border-color:var(--line);color:var(--ink)}
+.primaryTop{border-color:var(--deep);background:var(--deep);color:#fff}.primaryTop:hover{background:#263a2e}
+.hero{gap:64px;padding-top:38px;padding-bottom:36px;border-bottom:1px solid var(--line);background:#f9faf6;color:var(--ink)}
+.hero::after{height:2px;background:linear-gradient(90deg,var(--deep) 0 12%,var(--acid) 12% 20%,transparent 20%)}
+.eyebrow{color:#647067}.eyebrow::before{background:var(--acid)}
+.hero h1{max-width:960px;color:var(--ink);font-size:68px;line-height:.96;letter-spacing:-.04em}.hero h1 b{color:var(--ink)}
+.hero p{max-width:790px;color:#5e685f;font-size:17px}.hero p strong{color:var(--ink)}
+.proofRibbon span{color:#5d695f}.proofRibbon span:last-child{color:var(--ink)}.proofRibbon i{background:linear-gradient(90deg,var(--acid),#b9c2b8)}
+.stats{border-left-color:var(--line)}.stats::before{color:#7b857c}.stat,.stat.acid{border-bottom-color:var(--line);color:var(--ink)}.stat .k{color:#748078}.stat .v{color:var(--deep);font-size:44px}.stat .s{color:#667168}
+.nav{border-bottom-color:var(--line);background:rgba(249,250,246,.94)}.tab{color:#737d74}.tab.active,.tab:hover{color:var(--ink)}.tab.active::after{height:2px;background:var(--deep)}
+.view{background:transparent}.panel,.card,.inject,.pipeline{border-color:#cfd7cd;box-shadow:0 14px 38px rgba(20,33,25,.055)}
+.panel.focus{box-shadow:0 18px 50px rgba(20,33,25,.075)}.focus::before{height:3px;background:var(--deep)}
+.hd{background:#f7f9f4}.hd .label::before{background:var(--acid);box-shadow:none}.rank{background:#e8ede5;color:#344239}
+.uri{background:#edf2e9;color:#24342a;border-color:#d8e0d5}.why{border-left-color:var(--deep);background:#f1f4ef}
+.btn.primary{border-color:var(--deep);background:var(--deep);color:#fff}.btn.primary:hover{background:#2a3d31;color:#fff}.btn.danger{border-color:#c8cfca;color:#4d5951}
+.item{background:#f8faf6}.item.active{background:#fff;box-shadow:inset 3px 0 0 var(--acid)}
+.pipeline{background:var(--deep)}.node.hot{background:var(--acid);color:var(--deep)}
+@media(max-width:1000px){.hero h1{font-size:58px}}
+@media(max-width:640px){.hero{padding-top:30px;background:#f9faf6}.hero h1{font-size:44px}.hero p{font-size:15px}.primaryTop{font-size:12px}}
 </style>
 </head>
 <body>
@@ -332,10 +358,10 @@ body{background:var(--bg);font-family:Inter,"Helvetica Neue",Arial,sans-serif;fo
 
 <section class="hero">
   <div>
-    <div class="eyebrow">machine → human → machine</div>
+    <div class="eyebrow">governed human decision infrastructure</div>
     <h1><b id="blocking">5</b> machines need you.</h1>
-    <p><strong>The approval is not the product. The exact return path is.</strong> This demo makes the human boundary, decision and resume path visible as separate steps instead of treating a button click as proof the right workflow continued.</p>
-    <div class="proofRibbon" aria-label="Return path proof"><span>machine waiting</span><i aria-hidden="true"></i><span>human decision</span><i aria-hidden="true"></i><span>exact resume</span></div>
+    <p><strong>Every decision returns to the exact waiting agent.</strong> HumanQueue preserves authority, context, audit evidence and resume identity across the human boundary.</p>
+    <div class="proofRibbon" aria-label="Return path proof"><span>request locked</span><i aria-hidden="true"></i><span>authority captured</span><i aria-hidden="true"></i><span>resume verified</span></div>
     <div class="journey" aria-label="Demo flow">
       <div class="journeyStep"><span class="n">01</span><strong>Choose</strong><small>Open the highest-value waiting boundary.</small></div>
       <div class="journeyStep"><span class="n">02</span><strong>Decide</strong><small>Approve, reject, clarify, or edit.</small></div>
