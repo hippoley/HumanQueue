@@ -81,8 +81,22 @@ body{
 .next-card.active{background:linear-gradient(90deg,rgba(217,255,87,.25),rgba(255,254,250,.92) 38%);box-shadow:inset 4px 0 0 var(--acid)}
 .btn.safe{box-shadow:0 12px 22px rgba(17,19,15,.12)}
 .proof{box-shadow:0 14px 28px rgba(17,19,15,.055)}
+
+/* Breakout pass: make the return path the memorable product proof. */
+.hero{position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;inset:auto 0 0;height:1px;background:linear-gradient(90deg,var(--acid) 0 18%,rgba(17,19,15,.18) 42%,transparent 78%);pointer-events:none}
+.hero h1 b{display:inline-block;min-width:1.15ch;color:var(--ink);text-shadow:0 10px 28px rgba(17,19,15,.10)}
+.proofRibbon{display:inline-grid;grid-auto-flow:column;grid-auto-columns:max-content;align-items:center;gap:10px;margin:24px 0 0;padding:9px 12px;border:1px solid rgba(17,19,15,.14);border-radius:999px;background:rgba(255,254,250,.84);box-shadow:0 14px 34px rgba(17,19,15,.06);backdrop-filter:blur(10px)}
+.proofRibbon span{font:760 10px/1 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
+.proofRibbon i{display:block;width:34px;height:1px;background:linear-gradient(90deg,var(--acid),rgba(17,19,15,.34))}
+.stats{align-self:center}
+.stat{position:relative;overflow:hidden}
+.stat::after{content:"";position:absolute;right:16px;bottom:13px;left:16px;height:2px;border-radius:999px;background:rgba(17,19,15,.44)}
+.stat.light::after{background:rgba(17,19,15,.72)}
+.focus h2{font-size:clamp(34px,3.2vw,46px);line-height:1.02}
+.panel.focus{box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 30px 90px rgba(17,19,15,.10)}
 @media(max-width:900px){.hero{gap:28px}.journey-step{padding-right:20px}.focus-body{padding:28px 24px}}
-@media(max-width:640px){body{background:linear-gradient(180deg,#fbfcf7 0,#f2f6eb 100%)}.hero{padding:32px 0 28px}.hero h1{font-size:42px;letter-spacing:-.02em}.journey-step{padding-top:28px}.journey-step::before{top:6px}.focus-body{padding:24px 20px}}
+@media(max-width:640px){body{background:linear-gradient(180deg,#fbfcf7 0,#f2f6eb 100%)}.hero{padding:32px 0 28px}.hero h1{font-size:42px;letter-spacing:-.02em}.proofRibbon{display:flex;max-width:100%;overflow-x:auto;border-radius:12px}.proofRibbon i{min-width:24px}.journey-step{padding-top:28px}.journey-step::before{top:6px}.focus-body{padding:24px 20px}}
 </style>
 </head>
 <body>
@@ -93,7 +107,8 @@ body{
     <div>
       <div class="eyebrow">machine → human → machine</div>
       <h1><b id="blocking">0</b> machines need you.</h1>
-      <div class="hero-copy"><strong>The approval is not the hard part. Getting the answer back to the exact paused agent is.</strong> human:// keeps the request, decision surface and resume identity tied together so a machine can continue from the boundary that actually stopped it.</div>
+      <div class="hero-copy"><strong>The approval is not the product. The exact return path is.</strong> human:// keeps the request, decision surface and resume identity tied together so a machine can continue from the boundary that actually stopped it.</div>
+      <div class="proofRibbon" aria-label="Return path proof"><span>machine waiting</span><i aria-hidden="true"></i><span>human decision</span><i aria-hidden="true"></i><span>exact resume</span></div>
       <div class="journey" aria-label="Decision flow">
         <div class="journey-step"><span>01</span><strong>Choose</strong><small>Open the highest-value boundary.</small></div>
         <div class="journey-step"><span>02</span><strong>Decide</strong><small>Approve, reject, clarify, or edit.</small></div>
