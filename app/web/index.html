@@ -48,6 +48,41 @@ body{background:linear-gradient(180deg,#fafbf6 0,#f3f6ee 56%,#eef2e9 100%);color
 .next-card.active{background:#f2f6ea;box-shadow:inset 3px 0 0 var(--acid)}.next-card:hover{background:#f7f9f2}
 .codehint{background:#f6f8f2;color:#4d554a;border-color:#dce4d4}.proof{background:#f2f6ea;border-color:#cfd8c7;color:var(--ink)}
 @media(max-width:640px){.topbar{min-height:62px}.hero h1{font-size:40px;line-height:1.05}.hero-copy{font-size:16px}}
+
+/* Editorial product pass: stronger visual path, softer surface craft. */
+body{
+  background:
+    linear-gradient(90deg,rgba(17,19,15,.025) 1px,transparent 1px) center/92px 92px,
+    linear-gradient(180deg,#fbfcf7 0,#f5f8ef 48%,#eef3e7 100%);
+}
+.app{max-width:1440px}
+.topbar{border-color:rgba(17,19,15,.10)}
+.brand span{box-shadow:0 12px 28px rgba(17,19,15,.12)}
+.hero{grid-template-columns:minmax(0,1fr) minmax(240px,300px);gap:58px;padding:46px 0 42px;border-bottom-color:rgba(17,19,15,.11)}
+.hero h1{max-width:850px;font-size:clamp(50px,5.2vw,82px);font-weight:780;letter-spacing:-.03em}
+.hero-copy{max-width:720px;color:#5f675b}
+.journey{position:relative;max-width:900px;margin-top:32px;border-top:0}
+.journey-step{position:relative;padding:34px 28px 0 0;min-height:86px}
+.journey-step::before{content:"";position:absolute;top:10px;left:0;width:11px;height:11px;border:1px solid var(--ink);border-radius:50%;background:var(--acid);box-shadow:0 0 0 6px rgba(217,255,87,.22)}
+.journey-step:not(:last-child)::after{top:15px;left:22px;right:28px;width:auto;background:linear-gradient(90deg,rgba(17,19,15,.70),rgba(17,19,15,.10))}
+.journey-step span{display:block;margin-bottom:4px;color:#5f675b}
+.stat{border-radius:10px;box-shadow:0 18px 40px rgba(17,19,15,.08)}
+.stat.light{background:linear-gradient(135deg,#edff8a 0,#d9ff57 100%)}
+.nav{border-bottom-color:rgba(17,19,15,.11)}
+.tab.active::after{box-shadow:none}
+.panel,.batch-card,.policy-card{border-color:rgba(17,19,15,.10);box-shadow:0 1px 0 rgba(255,255,255,.88) inset,0 24px 70px rgba(17,19,15,.075)}
+.focus{position:relative;border-top:0}
+.focus::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--acid),rgba(217,255,87,.12));z-index:2}
+.panel-hd{padding:17px 20px;background:rgba(255,254,250,.76)}
+.focus-body{padding:32px 36px 34px}
+.uri{display:inline-flex;align-items:center;padding:6px 9px;border-radius:7px;background:#edf3e4;border:1px solid rgba(17,19,15,.08)}
+.why{margin-top:24px;padding:16px 18px;border:1px solid #d8dfd0;background:rgba(238,243,230,.58);border-radius:10px}
+.next-card{transition:background .16s,box-shadow .16s}
+.next-card.active{background:linear-gradient(90deg,rgba(217,255,87,.25),rgba(255,254,250,.92) 38%);box-shadow:inset 4px 0 0 var(--acid)}
+.btn.safe{box-shadow:0 12px 22px rgba(17,19,15,.12)}
+.proof{box-shadow:0 14px 28px rgba(17,19,15,.055)}
+@media(max-width:900px){.hero{gap:28px}.journey-step{padding-right:20px}.focus-body{padding:28px 24px}}
+@media(max-width:640px){body{background:linear-gradient(180deg,#fbfcf7 0,#f2f6eb 100%)}.hero{padding:32px 0 28px}.hero h1{font-size:42px;letter-spacing:-.02em}.journey-step{padding-top:28px}.journey-step::before{top:6px}.focus-body{padding:24px 20px}}
 </style>
 </head>
 <body>
