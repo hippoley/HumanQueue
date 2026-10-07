@@ -183,6 +183,29 @@ html,body{background:var(--bg);color:var(--ink)}
 .hero::after{height:3px;background:linear-gradient(90deg,var(--deep) 0 10%,var(--acid) 10% 22%,transparent 22%)}
 @media(max-width:900px){.topbar{padding-right:28px;padding-left:28px}.hero{grid-template-columns:1fr;gap:34px;padding:48px 28px}.hero h1{grid-template-columns:100px minmax(0,1fr);font-size:60px}.hero h1 b{width:100px;height:100px;font-size:76px}.hero-copy,.hero .proofRibbon{margin-left:124px}.stats{grid-template-columns:1fr 1fr;min-height:0;padding:46px 26px 22px}.stats::before{left:26px}.stat+.stat{border-left-color:#34443a}}
 @media(max-width:640px){.topbar{min-height:72px;padding-right:14px;padding-left:14px}.brand{font-size:24px}.hero{padding:38px 14px 42px}.hero h1{grid-template-columns:76px minmax(0,1fr);gap:15px;margin-top:18px;font-size:43px;line-height:.92}.hero h1 b{width:76px;height:76px;font-size:58px}.hero-copy,.hero .proofRibbon{margin-left:0}.hero-copy{margin-top:24px}.proofRibbon{margin-top:22px}.stats{display:none}}
+
+/* Heritage pass: restore the warm paper, black stamp and soft human signal. */
+:root{--bg:#f6f8f1;--ink:#11130f;--muted:#687064;--line:#dfe5d8;--card:#fffefa;--acid:#d9ff57;--deep:#151811;--soft:#eef2e9}
+html{background:var(--bg)}
+body{background:linear-gradient(90deg,rgba(17,19,15,.024) 1px,transparent 1px) center/92px 92px,linear-gradient(180deg,#fbfcf7 0,#f5f8ef 48%,#eef3e7 100%);color:var(--ink)}
+.app{max-width:1440px;padding:0 34px 48px}.topbar{min-height:80px;margin:0;padding:0;border-bottom:1px solid rgba(17,19,15,.10);background:transparent;color:var(--ink)}
+.brand{font-size:22px}.brand::after{display:none}.brand span{padding:7px 10px;border-radius:8px;background:var(--ink);color:#fff;box-shadow:0 12px 28px rgba(17,19,15,.12)}
+.live{margin-right:4px;color:var(--muted)}.dot{background:#3ca467;box-shadow:0 0 0 4px rgba(60,164,103,.12)}
+.hero{grid-template-columns:minmax(0,1fr) minmax(240px,300px);gap:58px;margin:0;padding:46px 0 42px;border-bottom:1px solid rgba(17,19,15,.11);background:transparent;color:var(--ink)}
+.hero::after{display:none}.eyebrow{color:var(--ink)}.eyebrow::before{background:var(--acid)}
+.hero h1{display:block;max-width:880px;margin:14px 0 18px;color:var(--ink);font-size:72px;line-height:1;letter-spacing:-.03em}.hero h1 b{display:inline;width:auto;height:auto;background:transparent;color:var(--ink);font:inherit;letter-spacing:inherit}.hero h1 span{display:inline;max-width:none}
+.hero-copy{max-width:730px;margin:0;color:var(--muted);font-size:17px;line-height:1.62}.hero-copy strong{color:var(--ink)}
+.hero .proofRibbon{display:inline-flex;margin:24px 0 0;padding:9px 12px;border:1px solid rgba(17,19,15,.12);border-radius:999px;background:rgba(255,254,250,.78);box-shadow:0 14px 34px rgba(17,19,15,.055)}
+.proofRibbon span{color:var(--ink)}.proofRibbon span:last-child{color:var(--ink)}.proofRibbon i{background:linear-gradient(90deg,var(--acid),rgba(17,19,15,.28))}
+.stats{align-self:center;display:grid;grid-template-columns:1fr;gap:12px;min-height:0;padding:0;border:0;background:transparent}.stats::before{display:none}
+.stat,.stat.light{min-height:116px;padding:18px 20px;border:1px solid rgba(17,19,15,.10);border-radius:10px;background:var(--deep);color:#fff;box-shadow:0 18px 40px rgba(17,19,15,.08)}.stat.light{background:linear-gradient(135deg,#edff8a 0,#d9ff57 100%);color:var(--ink)}.stat .k{color:inherit;opacity:.62}.stat .v{color:inherit;font-size:42px}.stat .s{color:inherit;opacity:.68}
+.nav{margin:0;padding:0;min-height:64px;background:rgba(246,248,241,.90)}.tab.active::after{height:3px;border-radius:99px;background:var(--acid)}
+.panel,.batch-card,.policy-card{border-color:rgba(17,19,15,.10);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.85) inset,0 22px 64px rgba(17,19,15,.07)}
+.panel.focus{box-shadow:0 1px 0 rgba(255,255,255,.88) inset,0 26px 76px rgba(17,19,15,.09)}.focus::before{height:3px;background:linear-gradient(90deg,var(--acid),rgba(217,255,87,.14))}
+.panel-hd{background:rgba(251,252,247,.78)}.panel-hd .label::before{background:var(--acid)}
+.why{border-left-color:var(--acid);background:rgba(238,243,230,.60)}.btn.safe{background:var(--ink);color:#fff}.next-card.active{background:linear-gradient(90deg,rgba(217,255,87,.24),rgba(255,254,250,.94) 38%);box-shadow:inset 3px 0 0 var(--acid)}
+@media(max-width:900px){.app{padding:0 22px 42px}.hero{grid-template-columns:1fr;gap:28px}.hero h1{font-size:60px}.stats{grid-template-columns:1fr 1fr}.hero-copy,.hero .proofRibbon{margin-left:0}}
+@media(max-width:640px){body{background:linear-gradient(180deg,#fbfcf7 0,#f2f6eb 100%)}.app{padding:0 14px 32px}.topbar{min-height:66px}.hero{padding:32px 0 30px}.hero h1{font-size:44px;line-height:1.04}.hero-copy{margin-top:0;font-size:15px}.hero .proofRibbon{display:flex;max-width:100%;overflow-x:auto;border-radius:10px}.stats{display:none}.nav{margin:0}.panel{border-radius:9px}}
 </style>
 </head>
 <body>
@@ -191,10 +214,10 @@ html,body{background:var(--bg);color:var(--ink)}
 
   <section class="hero">
     <div>
-      <div class="eyebrow">governed human decision infrastructure</div>
+      <div class="eyebrow">machine → human → machine</div>
       <h1><b id="blocking">0</b><span>machines need you.</span></h1>
-      <div class="hero-copy"><strong>Every decision returns to the exact waiting agent.</strong> HumanQueue preserves authority, context, audit evidence and resume identity across the human boundary.</div>
-      <div class="proofRibbon" aria-label="Return path proof"><span>request locked</span><i aria-hidden="true"></i><span>authority captured</span><i aria-hidden="true"></i><span>resume verified</span></div>
+      <div class="hero-copy"><strong>The approval is not the product. The exact return path is.</strong> HumanQueue keeps authority, context and resume identity tied to the machine state that actually stopped.</div>
+      <div class="proofRibbon" aria-label="Return path proof"><span>machine waiting</span><i aria-hidden="true"></i><span>human decision</span><i aria-hidden="true"></i><span>exact resume</span></div>
       <div class="journey" aria-label="Decision flow">
         <div class="journey-step"><span>01</span><strong>Choose</strong><small>Open the highest-value boundary.</small></div>
         <div class="journey-step"><span>02</span><strong>Decide</strong><small>Approve, reject, clarify, or edit.</small></div>
