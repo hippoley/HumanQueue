@@ -300,6 +300,21 @@ body{background:var(--bg);font-family:Inter,"Helvetica Neue",Arial,sans-serif;fo
 @media(prefers-reduced-motion:reduce){.hero h1,.proofRibbon,.dot{animation:none}}
 @media(max-width:1000px){.hero{grid-template-columns:1fr;gap:28px}.stats{grid-template-columns:1fr 1fr;padding:28px 0 0;border-left:0;border-top:1px solid #30352e}.stats::before{top:10px;left:0}.stat{min-height:108px;padding:20px 20px 0 0;border-bottom:0}.stat+.stat{padding-left:22px;border-left:1px solid #30352e}.hero h1{font-size:64px}}
 @media(max-width:640px){.wrap{padding:0 14px 32px}.top{min-height:60px;margin:0 -14px;padding:0 14px}.hero{margin:0 -14px;padding:30px 14px 32px}.hero h1{font-size:48px;line-height:.95;letter-spacing:-.035em}.hero p{font-size:15px}.proofRibbon{gap:8px;overflow:visible;white-space:nowrap}.proofRibbon span{font-size:8px}.proofRibbon i{min-width:16px;width:20px}.stats{display:grid}.stat .v{font-size:40px}.stat .s{font-size:11px}.nav{margin:0 -14px;padding:0 14px}.tab{margin-right:20px}.badge{display:none}.view{padding-top:16px}.body{padding:26px 20px}.focus h2{font-size:36px}}
+
+/* Decision-flow pass: bring authority above the fold and tuck raw context away. */
+.hero{padding-top:30px;padding-bottom:34px;gap:58px}.hero h1{margin:13px 0 15px;font-size:70px}.hero p{line-height:1.5}.proofRibbon{margin-top:18px}
+.stats{padding-top:24px}.stats::before{left:30px}.stat,.stat.acid{min-height:112px;padding:14px 0}.stat .v{font-size:46px}
+.view{padding-top:18px}.grid{grid-template-columns:minmax(0,1.62fr) minmax(320px,.58fr);gap:14px}
+.hd{min-height:54px;padding:14px 18px}.hd .label{display:flex;align-items:center;gap:9px}.hd .label::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--acid);box-shadow:0 0 0 4px rgba(217,255,87,.18)}
+.body{padding:28px 32px 30px}.focus h2{margin:12px 0 10px;font-size:44px}.summary{font-size:16px;line-height:1.5}
+.why{margin:18px 0 13px;padding:13px 15px;border-left:3px solid var(--acid);background:#f1f4ed}
+.pills{gap:0;margin:0}.pill{border:0;border-right:1px solid var(--line);border-radius:0;padding:3px 13px 3px 0;margin-right:13px;background:transparent!important;color:var(--muted)!important;font-size:11px}.pill:last-child{border-right:0}
+.actions{gap:8px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}.actions .btn:first-child{min-width:118px}.btn.primary{border-color:var(--ink);background:var(--acid);color:var(--ink)}.btn.primary:hover{background:var(--ink);color:#fff}
+.contextDrawer{margin-top:18px;border-top:1px solid var(--line)}.contextDrawer summary{padding:13px 0;color:var(--muted);cursor:pointer;list-style:none;font:700 10px/1 ui-monospace,monospace;letter-spacing:.10em;text-transform:uppercase}.contextDrawer summary::-webkit-details-marker{display:none}.contextDrawer summary::after{content:"+";float:right;color:var(--ink);font-size:15px}.contextDrawer[open] summary::after{content:"−"}.contextDrawer .code{margin:0 0 4px;border-radius:6px;background:#f1f4ed;color:#4d554a}
+.focus h2{animation:focusEnter .28s cubic-bezier(.2,.75,.25,1) both}.item{transition:background .16s,box-shadow .16s,transform .16s}.item:hover{transform:translateX(2px)}
+@keyframes focusEnter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(max-width:1000px){.hero h1{font-size:60px}.grid{grid-template-columns:1fr}.stats{padding-top:28px}.stat{min-height:96px}}
+@media(max-width:640px){.hero{padding-top:26px;padding-bottom:28px}.hero h1{font-size:46px}.stats{display:none}.body{padding:23px 18px 25px}.focus h2{font-size:34px}.actions .btn{flex:1;justify-content:center}.contextDrawer{margin-top:14px}}
 </style>
 </head>
 <body>
@@ -347,12 +362,12 @@ body{background:var(--bg);font-family:Inter,"Helvetica Neue",Arial,sans-serif;fo
 <main id="view-now" class="view">
   <div class="grid">
     <section class="panel focus">
-      <div class="hd"><div class="label">human boundary</div><div id="focusRank" class="rank">#1</div></div>
+      <div class="hd"><div class="label">now / human boundary</div><div id="focusRank" class="rank">#1</div></div>
       <div class="body" id="focus"></div>
     </section>
 
     <aside class="panel">
-      <div class="hd"><div class="label">global queue</div><div id="count" class="rank">5 waiting</div></div>
+      <div class="hd"><div class="label">next / global queue</div><div id="count" class="rank">5 waiting</div></div>
       <div id="next"></div>
     </aside>
   </div>
@@ -579,7 +594,7 @@ humanq gateway status</div>
     $("focusRank").textContent="#"+rank+" · priority "+selected.priority;
     const input=selected.input?'<div class="formrow"><input id="humanInput" placeholder="Type your answer…" aria-label="Human answer"><button class="btn primary" data-decision="Submit">Send answer</button></div>':"";
     const buttons=selected.input?"":selected.actions.map((a,i)=>'<button class="btn'+(i===0?" primary":a==="Reject"?" danger":a==="Defer"?" soft":"")+'" data-decision="'+esc(a)+'">'+esc(a)+'</button>').join("");
-    el.innerHTML='<div class="uri">'+esc(selected.uri)+'</div><div class="source">'+esc(selected.source)+' / '+esc(selected.ref)+'</div><h2>'+esc(selected.title)+'</h2><div class="summary">'+esc(selected.summary)+'</div><div class="why"><strong>Why now:</strong> '+esc(selected.why)+'</div><div class="pills"><span class="pill '+(selected.risk==="high"?"danger":"")+'">'+esc(selected.risk)+' risk</span><span class="pill good">unblocks '+selected.unblocks+'</span><span class="pill blue">~'+selected.sec+'s human time</span></div>'+input+'<div class="actions">'+buttons+'</div><div class="code">'+esc(selected.context)+'</div>';
+    el.innerHTML='<div class="uri">'+esc(selected.uri)+'</div><div class="source">'+esc(selected.source)+' / '+esc(selected.ref)+'</div><h2>'+esc(selected.title)+'</h2><div class="summary">'+esc(selected.summary)+'</div><div class="why"><strong>Why now:</strong> '+esc(selected.why)+'</div><div class="pills"><span class="pill '+(selected.risk==="high"?"danger":"")+'">'+esc(selected.risk)+' risk</span><span class="pill good">unblocks '+selected.unblocks+'</span><span class="pill blue">~'+selected.sec+'s human time</span></div>'+input+'<div class="actions">'+buttons+'</div><details class="contextDrawer"><summary>Source context</summary><pre class="code">'+esc(selected.context)+'</pre></details>';
     el.querySelectorAll("[data-decision]").forEach((b)=>b.addEventListener("click",()=>decide(b.dataset.decision)));
   }
   function renderQueue(){
