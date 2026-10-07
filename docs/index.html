@@ -181,6 +181,25 @@ h2{font-size:36px;line-height:1.08;letter-spacing:0;margin:11px 0 12px;max-width
 .footer{padding:32px 0 2px}
 @media(max-width:1000px){.wrap{padding:0 22px 42px}.hero{grid-template-columns:1fr;gap:26px}.hero h1{font-size:58px}.stats{grid-template-columns:1fr 1fr}.nav{overflow-x:auto;flex-wrap:nowrap}.grid{grid-template-columns:1fr}.panel{border-radius:8px}}
 @media(max-width:640px){.wrap{padding:0 14px 32px;overflow-x:hidden}.top{min-height:58px}.hero{padding:28px 0 24px}.hero>div{min-width:0}.hero h1{max-width:100%;font-size:42px;overflow-wrap:anywhere}.hero p{font-size:15px}.journey{width:100%;max-width:100%;margin-top:22px}.nav{width:100%;min-height:52px;gap:18px}.tab{padding:18px 0 15px;font-size:12px}.view{padding-top:16px}.body{padding:23px 20px}h2{font-size:31px}.pipeline{padding:18px}.inject{padding:17px}.item{padding:15px 16px 15px 18px}}
+
+/* Aesthetic pass: calmer, more premium, fewer semantic colors. */
+:root{--bg:#f6f8f1;--ink:#11130f;--muted:#687064;--line:#dfe5d8;--card:#fffefa;--acid:#d9ff57;--signal:#11130f;--soft:#eef2e9;--deep:#151811}
+body{background:linear-gradient(180deg,#fafbf6 0,#f3f6ee 56%,#eef2e9 100%);color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.wrap{max-width:1420px}
+.top{min-height:76px}.brand span{border-radius:8px;box-shadow:0 8px 22px rgba(17,19,15,.10)}
+.ghost,.primaryTop{border-radius:8px}.primaryTop{box-shadow:0 8px 20px rgba(117,144,19,.14)}
+.live,.badge,.label,.eyebrow,.source,.itemuri,.score,.rank{letter-spacing:.08em}.eyebrow,.uri,.itemuri,.node.hot{color:var(--ink)}
+.hero{align-items:center;padding:36px 0 34px}.hero h1{font-size:clamp(48px,5vw,72px);font-weight:760;line-height:1.02;max-width:980px}.hero h1 b{font-variant-numeric:tabular-nums}.hero p{font-size:17px;color:var(--muted)}
+.journey{border-top-color:#cfd8c7}.journeyStep:not(:last-child)::after{background:#bcc8b3}.journeyStep strong{font-size:14px}.journeyStep small{color:var(--muted)}
+.stat{border:1px solid rgba(17,19,15,.10);box-shadow:0 14px 34px rgba(17,19,15,.06)}.stat.acid{background:linear-gradient(135deg,#e5ff75,#d8ff52)}
+.nav{background:rgba(246,248,241,.88);min-height:64px}.tab{font-weight:620}.tab.active::after{height:3px;border-radius:99px;background:var(--acid);box-shadow:0 0 0 1px rgba(17,19,15,.72)}
+.panel,.card,.inject,.pipeline{background:rgba(255,254,250,.92);border-color:rgba(17,19,15,.11);box-shadow:0 18px 48px rgba(17,19,15,.07)}
+.focus{border-top:1px solid rgba(17,19,15,.88)}.hd{background:rgba(251,252,247,.72)}.rank{background:#eef3e6}
+h2{font-weight:720}.summary{color:var(--muted)}.why{border-color:#d8dfd0}
+.btn{border-radius:8px}.btn.primary{background:var(--ink);color:white}.btn.primary:hover,.btn:hover{box-shadow:0 10px 24px rgba(17,19,15,.12)}
+.item.active{background:#f2f6ea;box-shadow:inset 3px 0 0 var(--acid)}.item:hover{background:#f7f9f2}
+.code{background:#f6f8f2;color:#4d554a;border-color:#dce4d4}.node.hot{background:var(--acid);border-color:var(--ink)}.arrow{color:var(--muted)}
+@media(max-width:640px){.hero h1{font-size:40px;line-height:1.05}.hero p{font-size:16px}.top{min-height:62px}}
 </style>
 </head>
 <body>
@@ -199,7 +218,7 @@ h2{font-size:36px;line-height:1.08;letter-spacing:0;margin:11px 0 12px;max-width
 <section class="hero">
   <div>
     <div class="eyebrow">machine → human → machine</div>
-    <h1><b id="blocking">5</b> MACHINES NEED YOU.</h1>
+    <h1><b id="blocking">5</b> machines need you.</h1>
     <p><strong>The approval is not the hard part. Getting the answer back to the exact paused agent is.</strong> This demo makes the human boundary, decision and resume path visible as separate steps instead of treating a button click as proof the right workflow continued.</p>
     <div class="journey" aria-label="Demo flow">
       <div class="journeyStep"><span class="n">01</span><strong>Choose</strong><small>Open the highest-value waiting boundary.</small></div>
