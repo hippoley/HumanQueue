@@ -241,7 +241,7 @@ For webhook-backed workflows, human:// then attempts the configured resume callb
 - HTTP 2xx means the callback transport accepted the request;
 - `{"request_id":"attn_...","resumed":true}` with the exact same request id confirms semantic resume;
 - otherwise the audit trail records `resume_delivered_unconfirmed`;
-- transport failure records `resume_undeliverable`.
+- a failure known to occur before dispatch may be `resume_undeliverable`; once a webhook attempt has been dispatched, transport failure or lost acknowledgement is `resume_delivery_uncertain` until authoritative reconciliation.
 
 Native blocking connectors such as Codex / Claude / Cursor / MCP do not use this webhook path; their audit outcome is `resume_not_applicable`.
 
