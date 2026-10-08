@@ -15,7 +15,7 @@ jobs:
       - name: Verify Agent Effect Authority v0.1 claim
         run: |
           set -euo pipefail
-          AEA_SHA="d01da0e2bdcd93760340dccabf8666fbf6f8407e"
+          AEA_SHA="6b055b7424096ed040612b6fcbc1a9c7571f3c43"
           curl -fsSL "https://raw.githubusercontent.com/hippoley/SpatialRuntime/$AEA_SHA/interop/agent-effect-authority/verify_claim.py" -o /tmp/verify_aea_claim.py
           curl -fsSL "https://raw.githubusercontent.com/hippoley/SpatialRuntime/$AEA_SHA/interop/agent-effect-authority/manifest.json" -o /tmp/aea-manifest.json
           python /tmp/verify_aea_claim.py interop/agent-effect-authority.claim.json --manifest /tmp/aea-manifest.json
