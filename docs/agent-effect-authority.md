@@ -19,7 +19,7 @@ This is a **cross-project adoption by the same maintainer**, not independent thi
 | AEA-005 ACK is not effect evidence | a receiver may execute once while its HTTP acknowledgement is lost; HumanQueue records the delivery as uncertain rather than assuming failure |
 | AEA-006 Unresolved is first-class | ambiguous resume delivery remains `uncertain` until operator reconciliation |
 | AEA-007 Retry identity prevents duplicate intent | retries reuse canonical identity/idempotency while delivery attempts remain distinct |
-| AEA-008 Compensation/recovery is distinct | reconciliation is an explicit recovery operation; confirming executed closes without replay, confirming not-executed authorizes a new audited attempt |
+| AEA-008 Compensation, when supported, is distinct | **NOT_APPLICABLE** — HumanQueue implements reconciliation, not compensation/saga rollback; an ambiguous delivery is reconciled to executed/not-executed without pretending a rollback occurred |
 | AEA-009 Fresh authority closes the loop | recovery requires receiver/operator evidence about whether the canonical request executed before a new attempt is authorized |
 
 ## Strongest case: lost acknowledgement after execution
