@@ -13,19 +13,8 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-
-@dataclass(frozen=True)
-class Counts:
-    total: int
-    correct: int
-    unnecessary_intervention: int
-    false_abstention: int
-    investigate: int
-    escalate: int
 
 
 def load(path: str | Path) -> Any:
