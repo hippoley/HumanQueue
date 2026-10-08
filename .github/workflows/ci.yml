@@ -12,6 +12,13 @@ jobs:
           python-version: "3.12"
       - run: pip install -e .[dev]
       - run: pytest -q
+      - name: Verify Agent Effect Authority v0.1 claim
+        run: |
+          set -euo pipefail
+          AEA_SHA="70b7e748dc262f638cdc0284f6407d3377e7ed9e"
+          curl -fsSL "https://raw.githubusercontent.com/hippoley/SpatialRuntime/$AEA_SHA/interop/agent-effect-authority/verify_claim.py" -o /tmp/verify_aea_claim.py
+          curl -fsSL "https://raw.githubusercontent.com/hippoley/SpatialRuntime/$AEA_SHA/interop/agent-effect-authority/manifest.json" -o /tmp/aea-manifest.json
+          python /tmp/verify_aea_claim.py interop/agent-effect-authority.claim.json --manifest /tmp/aea-manifest.json
       - run: humanq --help
       - run: humanq onboard --help
       - run: humanq connect --help
