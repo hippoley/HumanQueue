@@ -5,14 +5,122 @@
     "version": "main"
   },
   "requirements": [
-    {"id":"AEA-001","status":"PASS","evidence":[{"type":"test","ref":"scripts/codex_hook_e2e.py"},{"type":"doc","ref":"SECURITY.md"}]},
-    {"id":"AEA-002","status":"PASS","evidence":[{"type":"test","ref":"scripts/idempotent_retry_e2e.py"},{"type":"code","ref":"app/store.py"}]},
-    {"id":"AEA-003","status":"PASS","evidence":[{"type":"doc","ref":"docs/protocol.md"},{"type":"test","ref":"scripts/codex_hook_e2e.py"}]},
-    {"id":"AEA-004","status":"PASS","evidence":[{"type":"test","ref":"scripts/concurrent_terminal_e2e.py"},{"type":"doc","ref":"SECURITY.md"}]},
-    {"id":"AEA-005","status":"PASS","evidence":[{"type":"test","ref":"scripts/resume_ack_loss_e2e.py"},{"type":"test","ref":"scripts/resume_outbox_uncertain_e2e.py"}]},
-    {"id":"AEA-006","status":"PASS","evidence":[{"type":"test","ref":"scripts/resume_outbox_uncertain_e2e.py"},{"type":"test","ref":"scripts/resume_reconciliation_e2e.py"}]},
-    {"id":"AEA-007","status":"PASS","evidence":[{"type":"test","ref":"scripts/idempotent_retry_e2e.py"},{"type":"test","ref":"scripts/resume_outbox_multiworker_e2e.py"}]},
-    {"id":"AEA-008","status":"PASS","evidence":[{"type":"doc","ref":"docs/protocol.md"},{"type":"test","ref":"scripts/resume_reconciliation_e2e.py"}]},
-    {"id":"AEA-009","status":"PASS","evidence":[{"type":"test","ref":"scripts/resume_reconciliation_e2e.py"},{"type":"doc","ref":"README.md"}]}
+    {
+      "id": "AEA-001",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "test",
+          "ref": "scripts/codex_hook_e2e.py"
+        },
+        {
+          "type": "doc",
+          "ref": "SECURITY.md"
+        }
+      ]
+    },
+    {
+      "id": "AEA-002",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "test",
+          "ref": "scripts/idempotent_retry_e2e.py"
+        },
+        {
+          "type": "code",
+          "ref": "app/store.py"
+        }
+      ]
+    },
+    {
+      "id": "AEA-003",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "doc",
+          "ref": "docs/protocol.md"
+        },
+        {
+          "type": "test",
+          "ref": "scripts/codex_hook_e2e.py"
+        }
+      ]
+    },
+    {
+      "id": "AEA-004",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "test",
+          "ref": "scripts/concurrent_terminal_e2e.py"
+        },
+        {
+          "type": "doc",
+          "ref": "SECURITY.md"
+        }
+      ]
+    },
+    {
+      "id": "AEA-005",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "test",
+          "ref": "scripts/resume_ack_loss_e2e.py"
+        },
+        {
+          "type": "test",
+          "ref": "scripts/resume_outbox_uncertain_e2e.py"
+        }
+      ]
+    },
+    {
+      "id": "AEA-006",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "test",
+          "ref": "scripts/resume_outbox_uncertain_e2e.py"
+        },
+        {
+          "type": "test",
+          "ref": "scripts/resume_reconciliation_e2e.py"
+        }
+      ]
+    },
+    {
+      "id": "AEA-007",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "test",
+          "ref": "scripts/idempotent_retry_e2e.py"
+        },
+        {
+          "type": "test",
+          "ref": "scripts/resume_outbox_multiworker_e2e.py"
+        }
+      ]
+    },
+    {
+      "id": "AEA-008",
+      "status": "NOT_APPLICABLE",
+      "rationale": "HumanQueue implements explicit reconciliation after ambiguous resume delivery but does not implement compensation or saga rollback; reconciliation is not presented as compensation."
+    },
+    {
+      "id": "AEA-009",
+      "status": "PASS",
+      "evidence": [
+        {
+          "type": "test",
+          "ref": "scripts/resume_reconciliation_e2e.py"
+        },
+        {
+          "type": "doc",
+          "ref": "README.md"
+        }
+      ]
+    }
   ]
 }
