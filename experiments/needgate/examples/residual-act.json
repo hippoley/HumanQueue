@@ -1,0 +1,35 @@
+{
+  "schema_version": "0.1",
+  "intervention": {
+    "id": "patch-residual-issue-42",
+    "kind": "modify_code",
+    "description": "Patch only the residual failure remaining after a partial fix"
+  },
+  "target": {
+    "identity": "repo:example/project",
+    "revision": "main@partial789"
+  },
+  "predicates": [
+    {"id": "residual_failure_exists", "required": true, "kind": "reality"},
+    {"id": "target_is_current", "required": true, "kind": "freshness"},
+    {"id": "residual_scope_is_unambiguous", "required": true, "kind": "scope"},
+    {"id": "historical_failure_still_reproduces", "required": false, "kind": "reality"}
+  ],
+  "observations": {
+    "residual_failure_exists": {
+      "status": "TRUE",
+      "source": "test:residual-repro-42",
+      "details": {"violated_property": "P2"}
+    },
+    "target_is_current": {"status": "TRUE", "source": "git:partial789"},
+    "residual_scope_is_unambiguous": {
+      "status": "TRUE",
+      "source": "diagnostic:residual-P2"
+    },
+    "historical_failure_still_reproduces": {
+      "status": "FALSE",
+      "source": "test:historical-repro-42",
+      "details": {"note": "Original P1 failure is fixed; P2 remains violated."}
+    }
+  }
+}
