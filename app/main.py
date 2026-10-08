@@ -191,10 +191,15 @@ async def _process_resume_outbox_request(rid: str) -> dict:
         # does not prove the receiver failed to execute. Preserve uncertainty
         # until authoritative receiver/operator reconciliation instead of
         # rewriting an acknowledgement loss as "undeliverable".
-        store.fail_resume_outbox(
+        uncertainty_reason = str(
+            result.get("error")
+            or result.get("reason")
+            or "resume outcome uncertain after dispatch"
+        )
+        store.mark_resume_outbox_uncertain(
             rid,
             result=result,
-            event_type="resume_delivery_uncertain",
+            reason=uncertainty_reason,
         )
     return result
 
