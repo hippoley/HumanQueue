@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hippoley/HumanQueue/experiments/needgate/necessity.schema.json",
+  "title": "Intervention Necessity Receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "intervention",
+    "target",
+    "predicates",
+    "observations"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "intervention": {
+      "type": "object",
+      "required": ["id", "kind", "description"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "target": {
+      "type": "object",
+      "required": ["identity"],
+      "properties": {
+        "identity": {"type": "string", "minLength": 1},
+        "revision": {"type": "string"},
+        "environment": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "predicates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "required", "kind"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "required": {"type": "boolean"},
+          "kind": {
+            "enum": ["reality", "freshness", "scope", "authority"]
+          },
+          "human_only": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": true
+      }
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {"enum": ["TRUE", "FALSE", "UNKNOWN", "CONFLICTED", "STALE"]},
+          "source": {"type": "string"},
+          "observed_at": {"type": "string"},
+          "details": {}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
