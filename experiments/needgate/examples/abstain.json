@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1",
+  "intervention": {
+    "id": "patch-issue-42",
+    "kind": "modify_code",
+    "description": "Patch issue #42 on current main"
+  },
+  "target": {
+    "identity": "repo:example/project",
+    "revision": "main@def456"
+  },
+  "predicates": [
+    {"id": "issue_reproduces", "required": true, "kind": "reality"},
+    {"id": "target_is_current", "required": true, "kind": "freshness"}
+  ],
+  "observations": {
+    "issue_reproduces": {"status": "FALSE", "source": "test:repro-42"},
+    "target_is_current": {"status": "TRUE", "source": "git:def456"}
+  }
+}
