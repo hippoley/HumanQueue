@@ -711,7 +711,7 @@ class Store:
         result: dict[str, Any],
         event_type: str = "resume_undeliverable",
     ) -> None:
-        """Record one failed or ambiguous automatic attempt without scheduling replay."""
+        """Record a definite non-ambiguous resume failure without scheduling replay."""
 
         now = self._now().isoformat()
         encoded = json.dumps(result, default=str)
