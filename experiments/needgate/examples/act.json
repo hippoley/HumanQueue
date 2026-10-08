@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1",
+  "intervention": {
+    "id": "patch-issue-42",
+    "kind": "modify_code",
+    "description": "Patch issue #42 on current main"
+  },
+  "target": {
+    "identity": "repo:example/project",
+    "revision": "main@abc123"
+  },
+  "predicates": [
+    {"id": "issue_reproduces", "required": true, "kind": "reality"},
+    {"id": "target_is_current", "required": true, "kind": "freshness"},
+    {"id": "scope_is_unambiguous", "required": true, "kind": "scope"}
+  ],
+  "observations": {
+    "issue_reproduces": {"status": "TRUE", "source": "test:repro-42"},
+    "target_is_current": {"status": "TRUE", "source": "git:abc123"},
+    "scope_is_unambiguous": {"status": "TRUE", "source": "issue:42"}
+  }
+}
