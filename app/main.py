@@ -187,12 +187,19 @@ async def _process_resume_outbox_request(rid: str) -> dict:
             event_type="resume_delivered_unconfirmed",
         )
     else:
-        # A failed or acknowledgement-lost attempt is intentionally not retried.
-        # The receiver may already have executed the side effect.
-        store.fail_resume_outbox(
+        # Once a webhook resume attempt has been dispatched, transport failure
+        # does not prove the receiver failed to execute. Preserve uncertainty
+        # until authoritative receiver/operator reconciliation instead of
+        # rewriting an acknowledgement loss as "undeliverable".
+        uncertainty_reason = str(
+            result.get("error")
+            or result.get("reason")
+            or "resume outcome uncertain after dispatch"
+        )
+        store.mark_resume_outbox_uncertain(
             rid,
             result=result,
-            event_type="resume_undeliverable",
+            reason=uncertainty_reason,
         )
     return result
 
