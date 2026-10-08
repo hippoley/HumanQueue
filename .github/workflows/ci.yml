@@ -17,6 +17,11 @@ jobs:
         with:
           mode: claim
           file: interop/agent-effect-authority.claim.json
+      - name: Verify same claim through neutral SpatialRuntime conformance Action
+        uses: hippoley/SpatialRuntime/interop/conformance@732704ec39128e87e4b37e91f8591f16bf05d226
+        with:
+          mode: claim
+          file: interop/agent-effect-authority.claim.json
       - run: humanq --help
       - run: humanq onboard --help
       - run: humanq connect --help
