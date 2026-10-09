@@ -1,12 +1,12 @@
 # Agent Effect Authority v0.1 mapping
 
-HumanQueue consumes the public `agent-effect-authority.v0.1` contract published by SpatialRuntime.
+HumanQueue consumes the public `agent-effect-authority.v0.1` contract through SpatialRuntime's neutral `interop/conformance` entry point.
 
 Source contract:
 
-https://github.com/hippoley/SpatialRuntime/tree/main/interop/agent-effect-authority
+https://github.com/hippoley/SpatialRuntime/tree/main/interop/conformance
 
-This is a **cross-project adoption by the same maintainer**, not independent third-party adoption. It exists to prove that the contract can be consumed by a non-physical, approval-gated runtime without importing SpatialRuntime itself.
+This is a **cross-project adoption by the same maintainer**, not independent third-party adoption. It now exercises the same neutral consumption surface recommended to outside repositories, while HumanQueue remains a non-physical, approval-gated runtime that does not import SpatialRuntime runtime code.
 
 ## Mapping
 
