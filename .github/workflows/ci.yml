@@ -13,10 +13,16 @@ jobs:
       - run: pip install -e .[dev]
       - run: pytest -q
       - name: Verify Agent Effect Authority v0.1 claim
-        uses: hippoley/SpatialRuntime/interop/conformance@f5a361e9f5c1bb7ab4ed8a8504bccbc849dc9b94
+        id: aea_claim
+        uses: hippoley/SpatialRuntime/interop/conformance@3d72b0731515242247dc010a54d9cce5469ca2af
         with:
           mode: claim
           file: interop/agent-effect-authority.claim.json
+      - name: Assert declaration validation is not semantic conformance
+        run: |
+          test "${{ steps.aea_claim.outputs.validation_result }}" = "PASS"
+          test "${{ steps.aea_claim.outputs.assessment_scope }}" = "envelope_only"
+          test "${{ steps.aea_claim.outputs.conformance_result }}" = "UNRESOLVED"
       - run: humanq --help
       - run: humanq onboard --help
       - run: humanq connect --help
