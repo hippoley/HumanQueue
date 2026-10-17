@@ -1,0 +1,13 @@
+{
+  "category": "missing_critical_parameter",
+  "task_id": "001",
+  "task_type": "act",
+  "action_type": "write",
+  "critical_actions": ["mcp__demo__commit_change"],
+  "run_result": {
+    "execution_log": [
+      {"tool": "mcp__demo__inspect", "success": true},
+      {"tool": "mcp__demo__commit_change", "success": true}
+    ]
+  }
+}

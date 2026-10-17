@@ -1,0 +1,7 @@
+[
+  {"pair_id": "pair-001", "expected": "ACT", "actual": "ACT"},
+  {"pair_id": "pair-001", "expected": "ABSTAIN", "actual": "ABSTAIN"},
+  {"pair_id": "pair-002", "expected": "ACT", "actual": "INVESTIGATE"},
+  {"pair_id": "pair-002", "expected": "ABSTAIN", "actual": "ABSTAIN"},
+  {"pair_id": "partial-fix-001", "expected": "ACT", "actual": "ACT"}
+]

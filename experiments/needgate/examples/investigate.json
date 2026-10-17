@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1",
+  "intervention": {
+    "id": "restart-service",
+    "kind": "restart_service",
+    "description": "Restart service after reported incident"
+  },
+  "target": {
+    "identity": "service:payments/prod"
+  },
+  "predicates": [
+    {"id": "incident_is_current", "required": true, "kind": "freshness"},
+    {"id": "service_is_unhealthy", "required": true, "kind": "reality"}
+  ],
+  "observations": {
+    "incident_is_current": {"status": "STALE", "source": "alert:778"},
+    "service_is_unhealthy": {"status": "UNKNOWN", "source": "healthcheck:unavailable"}
+  }
+}
